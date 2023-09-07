@@ -113,20 +113,20 @@ struct map_data_type
     float obstacle_fused_velocity_x;
     float obstacle_fused_velocity_y;
     float obstacle_fused_velocity_z;
-    float road_z
-}
+    float road_z;
+};
 
 int n = 1000;
 int m = 2000;
-std::vector<std::ector<map_data_type>>2d_map(n, std::ector<map_data_type>(m));
+std::vector <std::vector<map_data_type>> map_2d (n, std::vector<map_data_type>(m));
 
 //map initialization
 
-bool 2d_map_init(std::vector<std::vector<map_data_type>> 2d_map){
-    for (int i = 0; i <2d_map.size();i++)
+bool map_2d_init(std::vector < std::vector<map_data_type>> map_2d) {
+    for (int i = 0; i < map_2d.size();i++)
     {
-        for(int j=0; i < 2d_map[i].size(); j++)
-            2d_map[i][j] = {0};      
+        for (int j = 0; j < map_2d[i].size(); j++)
+            map_2d[i][j] = { 0 };
     }
     return true;
 }
@@ -141,7 +141,7 @@ void ThreadAct1()
     adcm::HubData_Subscriber hubData_subscriber;
     INFO("DataFusion .init()");
 #ifdef MAP_GENERATION
-    2d_map_init(2d_map);
+    map_2d_init(map_2d);
 #endif
     mapData_provider.init("DataFusion/DataFusion/PPort_map_data");
     buildPath_subscriber.init("DataFusion/DataFusion/RPort_build_path");
@@ -305,22 +305,23 @@ void ThreadAct1()
 //어떤 셀에 해당하는 obstacle 데이터인지 식별
 //which cell(s) does this obstacle belong to?
 
-int fused_cuboid_x_start = static_cast<int> mapData.obstacle.fused_Position_x - (mapData.obstacle.fused_cuboid_x)/2
-int fused_cuboid_x_end = static_cast<int> mapData.obstacle.fused_Position_x + (mapData.obstacle.fused_cuboid_x)/2
+            int fused_cuboid_x_start = static_cast<int> (mapData.obstacle.fused_Position_x - (mapData.obstacle.fused_cuboid_x/2));
+            int fused_cuboid_x_end = static_cast<int> (mapData.obstacle.fused_Position_x + (mapData.obstacle.fused_cuboid_x/2));
 
-int fused_cuboid_y_start = static_cast<int> mapData.obstacle.fused_Position_y - (mapData.obstacle.fused_cuboid_y)/2
-int fused_cuboid_y_end = static_cast<int> mapData.obstacle.fused_Position_y + (mapData.obstacle.fused_cuboid_y)/2
+            int fused_cuboid_y_start = static_cast<int> (mapData.obstacle.fused_Position_y - (mapData.obstacle.fused_cuboid_y/2));
+            int fused_cuboid_y_end = static_cast<int> (mapData.obstacle.fused_Position_y + (mapData.obstacle.fused_cuboid_y/2));
 
 //해당 map cell 에다 데이터 집어 넣기
 
-for (int i=fused_cuboid_y_start; i<fused_cuboid_y_end; i++)
-    for (int j=fused_cuboid_x_start; j< fused_cuboid_x_end; j++)
-    {
-        2d_map[i][j].obstacle = true;
-        2d_map[i][j].obstacle
-
-    }
-
+            for (int i=fused_cuboid_y_start; i<fused_cuboid_y_end; i++)
+            {
+                for (int j=fused_cuboid_x_start; j< fused_cuboid_x_end; j++)
+                {
+                    map_2d[i][j].obstacle = true;
+                    map_2d[i][j].obstacle_fused_cuboid_x = mapData.obstacle.fused_cuboid_x; 
+                    //등의 데이터 assignment 
+                }
+            }
 
 #endif
         }     
