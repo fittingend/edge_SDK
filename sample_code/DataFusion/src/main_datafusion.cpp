@@ -312,13 +312,18 @@ void ThreadAct1()
             int fused_cuboid_y_end = static_cast<int> (mapData.obstacle.fused_Position_y + (mapData.obstacle.fused_cuboid_y/2));
 
 //해당 map cell 에다 데이터 집어 넣기
-
-            for (int i=fused_cuboid_y_start; i<fused_cuboid_y_end; i++)
+            
+            int count = 0;
+            adcm::Log::Info() << "i is from  " << fused_cuboid_y_start << " to " << fused_cuboid_y_end;
+            adcm::Log::Info() << "j is from " <<  fused_cuboid_x_start << " to "<< fused_cuboid_x_end;
+            for (int i=fused_cuboid_y_start; i<fused_cuboid_y_end+1; i++)
             {
-                for (int j=fused_cuboid_x_start; j< fused_cuboid_x_end; j++)
+                for (int j=fused_cuboid_x_start; j< fused_cuboid_x_end+1; j++)
                 {
                     map_2d[i][j].obstacle = true;
                     map_2d[i][j].obstacle_fused_cuboid_x = mapData.obstacle.fused_cuboid_x; 
+                    count++;
+                    adcm::Log::Info() << "Map_2d is updated with "  << count << " times";
                     //등의 데이터 assignment 
                 }
             }
