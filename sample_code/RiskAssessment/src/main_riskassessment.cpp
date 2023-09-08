@@ -171,7 +171,48 @@ void ThreadAct1()
             riskAssessment.confidence.push_back(m_ud_100_100(m_rand_eng));
 
             riskAssessment_provider.send(riskAssessment);
-        }
+            
+
+/*1. obstacle table 확인해 obstacle (이미 알고있는 hazard) 
+2. 2d_map 값 확인해서 현재 vehicle 의 위치와 비교
+3. 상대속도 및 angle 계산해 충돌이 일정시간 이내에 일어날 경우 confidence 값 지정 
+
+float collision_angle (ego_vehicle's angle, obstacle's angle)
+{
+    calcualte collision confidernce
+    ...
+    return collusion_angle_confidernce_value;
+}
+
+if (collusion_confidernce_value > certain_value)
+그러면 collision speed function 불러서 충돌 시간 계산
+float collision_time (ego_vehicle's speed, obstacle's speed)
+{
+    distance_between_ego_obstacle 구하고
+    speed 비교해서 
+    expected collision time 에 따라
+    return collision_time_confidence_value;
+
+}
+두개 값 합산해 confidence 계산 
+
+
+4. obstacle 종류에 따른 위험 요소 예) 사각지대 => 에 따른 후속 action 이 취해져야 함
+if obstacle.index == "장애물"
+if (obstacle.zvalue > certain value)
+    bool obstacle.blindspot = TRUE;
+
+
+==========사람이 등장! map_2d 및 obstacle table 값이 업데이트됨============
+
+if(obstable_table_updated)
+
+1. 사람 obstacle 추가된것을 확인 (새로운 hazard)
+2. 위와 마찬가지로 상대속도 및 angle 계산해 충돌이 일정시간 이내에 일어날 경우 confidence 값 지정 
+if (obstacle.index == "사람")
+    bool obstacle.warning = TRUE;
+3. 후속 action 을 결정할 수 있게 됨 
+*/            
     }
 }
 

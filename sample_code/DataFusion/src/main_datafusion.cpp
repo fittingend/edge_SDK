@@ -65,7 +65,7 @@
 #include "build_path_subscriber.h"
 #include "hub_data_subscriber.h"
 
-#define MAP_GENERATION
+
 namespace
 {
 
@@ -99,38 +99,7 @@ bool RegisterSigTermHandler()
     return true;
 }
 
-#ifdef MAP_GENERATION
-struct map_data_type
-{
-    bool obstacle; // 해당 cell 에 obstacle 존재 여부
-    float obstacle_fused_cuboid_x;
-    float obstacle_fused_cuboid_y;
-    float obstacle_fused_cuboid_z;
-    float obstacle_fused_heading_angle;
-    float obstacle_fused_Position_x;
-    float obstacle_fused_Position_y;
-    float obstacle_fused_Position_z;
-    float obstacle_fused_velocity_x;
-    float obstacle_fused_velocity_y;
-    float obstacle_fused_velocity_z;
-    float road_z;
-};
 
-int n = 1000;
-int m = 2000;
-std::vector <std::vector<map_data_type>> map_2d (n, std::vector<map_data_type>(m));
-
-//map initialization
-
-bool map_2d_init(std::vector < std::vector<map_data_type>> map_2d) {
-    for (int i = 0; i < map_2d.size();i++)
-    {
-        for (int j = 0; j < map_2d[i].size(); j++)
-            map_2d[i][j] = { 0 };
-    }
-    return true;
-}
-#endif
 }  // namespace
 
 void ThreadAct1()
@@ -141,7 +110,7 @@ void ThreadAct1()
     adcm::HubData_Subscriber hubData_subscriber;
     INFO("DataFusion .init()");
 #ifdef MAP_GENERATION
-    map_2d_init(map_2d);
+    map_2d_init(map_2d); //map_2d 값 전체 initialization 
 #endif
     mapData_provider.init("DataFusion/DataFusion/PPort_map_data");
     buildPath_subscriber.init("DataFusion/DataFusion/RPort_build_path");
@@ -315,6 +284,7 @@ void ThreadAct1()
 */ 
 //현재 값들이 random 이라 i 와 j 값이 음수가 나오기 때문에 임의로 value assign 해서 테스트
 //================테스트용=====================
+// obstacle 발생시
             float fused_Position_x = 108.6;
             float fused_cuboid_x = 8.64;
             float fused_Position_y = 543.5;
@@ -328,7 +298,7 @@ void ThreadAct1()
             int fused_cuboid_y_end = static_cast<int> (fused_Position_y + (fused_cuboid_y/2));
 
 //해당 map cell 에다 데이터 집어 넣기
-            
+//TO DO: 노면 데이터도 이후에 추가? (노면이 높은 것도 위험상황이 될수있으니)            
             int count = 0;
             adcm::Log::Info() << "i is from  " << fused_cuboid_y_start << " to " << fused_cuboid_y_end;
             adcm::Log::Info() << "j is from " <<  fused_cuboid_x_start << " to "<< fused_cuboid_x_end;
@@ -343,6 +313,20 @@ void ThreadAct1()
                     //등의 데이터 assignment 
                 }
             }
+//TO DO: map_2d 이외에도 hazard (obstacle) 만 따로 관리하는 vector 가 있으면 어떨까?
+
+//이 vector 에는
+//1. obstacle index
+//2. map2d 의 해당 cell
+//3. obstacle 의 각종 정보 - 예를 들어 높이가 있는 obstacle 일 경우 사각지대 발생 => 추후 보조차량 보내서 사각지대를 없애야 함
+
+//나중에 새로운 obstacle 정보가 수신 되었을때 지금 있는 obstacle 과 동일한 장애물이란걸 알아내는 알고리즘이 추가로 필요
+
+//map2d 의 member variable 중에 하나를 pointer로 해서 해당 obstacle 이 저장된 memory location 을 포인트 하는 것 
+// obstacle 을 봤을때 해당 map2d cell 들을 다시 reference back 할수도 있게 만듦?
+//그럴경우 map2d 나 obstacle list 는 send 로 다른모듈에 주기 보다 external variable 로 모든 모듈에서 access 가 가능하게 만드는것이 더욱 효율적?
+// 
+
 
 #endif
         }     
