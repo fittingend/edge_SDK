@@ -305,11 +305,27 @@ void ThreadAct1()
 //어떤 셀에 해당하는 obstacle 데이터인지 식별
 //which cell(s) does this obstacle belong to?
 
+/* 
+===============실제코드=====================
             int fused_cuboid_x_start = static_cast<int> (mapData.obstacle.fused_Position_x - (mapData.obstacle.fused_cuboid_x/2));
             int fused_cuboid_x_end = static_cast<int> (mapData.obstacle.fused_Position_x + (mapData.obstacle.fused_cuboid_x/2));
 
             int fused_cuboid_y_start = static_cast<int> (mapData.obstacle.fused_Position_y - (mapData.obstacle.fused_cuboid_y/2));
             int fused_cuboid_y_end = static_cast<int> (mapData.obstacle.fused_Position_y + (mapData.obstacle.fused_cuboid_y/2));
+*/ 
+//현재 값들이 random 이라 i 와 j 값이 음수가 나오기 때문에 임의로 value assign 해서 테스트
+//================테스트용=====================
+            float fused_Position_x = 108.6;
+            float fused_cuboid_x = 8.64;
+            float fused_Position_y = 543.5;
+            float fused_cuboid_y = 12.7;
+
+
+            int fused_cuboid_x_start = static_cast<int> (fused_Position_x - (fused_cuboid_x/2));
+            int fused_cuboid_x_end = static_cast<int> (fused_Position_x + (fused_cuboid_x/2));
+
+            int fused_cuboid_y_start = static_cast<int> (fused_Position_y - (fused_cuboid_y/2));
+            int fused_cuboid_y_end = static_cast<int> (fused_Position_y + (fused_cuboid_y/2));
 
 //해당 map cell 에다 데이터 집어 넣기
             
