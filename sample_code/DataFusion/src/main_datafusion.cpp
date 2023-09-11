@@ -231,40 +231,79 @@ void ThreadAct1()
                 adcm::Log::Verbose() << "vehicle.Velocity_long : "<< vehicle.Velocity_long;
                 adcm::Log::Verbose() << "vehicle.Velocity_lat : "<< vehicle.Velocity_lat;
                 adcm::Log::Verbose() << "vehicle.Velocity_ang : "<< vehicle.Velocity_ang;
+
+                // ControlHub에서 받자마자 바로 전송
+                {
+                    adcm::map_data_Objects mapData;
+
+                    mapData.obstacle.Time_stamp = obstacle.Time_stamp;
+                    mapData.obstacle.fused_index = obstacle.index;
+                    mapData.obstacle.fused_cuboid_x = obstacle.cuboid_x;
+                    mapData.obstacle.fused_cuboid_y = obstacle.cuboid_y;
+                    mapData.obstacle.fused_cuboid_z = obstacle.cuboid_z;
+                    mapData.obstacle.fused_heading_angle = obstacle.heading_angle;
+                    mapData.obstacle.fused_Position_x = obstacle.Position_x;
+                    mapData.obstacle.fused_Position_y = obstacle.Position_y;
+                    mapData.obstacle.fused_Position_z = obstacle.Position_z;
+                    mapData.obstacle.fused_velocity_x = obstacle.Velocity_x;
+                    mapData.obstacle.fused_velocity_y = obstacle.Velocity_y;
+                    mapData.obstacle.fused_velocity_z = obstacle.Velocity_z;
+
+                    mapData.environment.road_z = environment.road_z;
+                    // Test log
+                    adcm::Log::Info() << "mapData.environment.road_z : " << environment.road_z;
+
+                    mapData.vehicle.Vehicle_id = vehicle.Vehicle_id;
+                    mapData.vehicle.Position_lat = vehicle.Position_lat;
+                    mapData.vehicle.Position_long = vehicle.Position_long;
+                    mapData.vehicle.Position_Height = vehicle.Position_Height;
+                    mapData.vehicle.Yaw = vehicle.Yaw;
+                    mapData.vehicle.Roll = vehicle.Roll;
+                    mapData.vehicle.Pitch = vehicle.Pitch;
+                    mapData.vehicle.Velocity_long = vehicle.Velocity_long;
+                    mapData.vehicle.Velocity_lat = vehicle.Velocity_lat;
+                    mapData.vehicle.Velocity_ang = vehicle.Velocity_ang;
+                    // Test log
+                    adcm::Log::Info() << "mapData.vehicle.Velocity_long : " << vehicle.Velocity_long;
+                    adcm::Log::Info() << "mapData.vehicle.Velocity_lat : " << vehicle.Velocity_lat;
+                    adcm::Log::Info() << "mapData.vehicle.Velocity_ang : " << vehicle.Velocity_ang;
+
+                    mapData_provider.send(mapData);
+                }
             }
         }
 
-        {
-            adcm::map_data_Objects mapData;
+        // {
+        //     adcm::map_data_Objects mapData;
 
-            mapData.obstacle.Time_stamp = "Time_stamp";
-            mapData.obstacle.fused_index = "fused_index";
-            mapData.obstacle.fused_cuboid_x = m_ud_10000_10000(m_rand_eng);
-            mapData.obstacle.fused_cuboid_y = m_ud_10000_10000(m_rand_eng);
-            mapData.obstacle.fused_cuboid_z = m_ud_10000_10000(m_rand_eng);
-            mapData.obstacle.fused_heading_angle = m_ud_10000_10000(m_rand_eng);
-            mapData.obstacle.fused_Position_x = m_ud_10000_10000(m_rand_eng);
-            mapData.obstacle.fused_Position_y = m_ud_10000_10000(m_rand_eng);
-            mapData.obstacle.fused_Position_z = m_ud_10000_10000(m_rand_eng);
-            mapData.obstacle.fused_velocity_x = m_ud_10000_10000(m_rand_eng);
-            mapData.obstacle.fused_velocity_y = m_ud_10000_10000(m_rand_eng);
-            mapData.obstacle.fused_velocity_z = m_ud_10000_10000(m_rand_eng);
+        //     mapData.obstacle.Time_stamp = "Time_stamp";
+        //     mapData.obstacle.fused_index = "fused_index";
+        //     mapData.obstacle.fused_cuboid_x = m_ud_10000_10000(m_rand_eng);
+        //     mapData.obstacle.fused_cuboid_y = m_ud_10000_10000(m_rand_eng);
+        //     mapData.obstacle.fused_cuboid_z = m_ud_10000_10000(m_rand_eng);
+        //     mapData.obstacle.fused_heading_angle = m_ud_10000_10000(m_rand_eng);
+        //     mapData.obstacle.fused_Position_x = m_ud_10000_10000(m_rand_eng);
+        //     mapData.obstacle.fused_Position_y = m_ud_10000_10000(m_rand_eng);
+        //     mapData.obstacle.fused_Position_z = m_ud_10000_10000(m_rand_eng);
+        //     mapData.obstacle.fused_velocity_x = m_ud_10000_10000(m_rand_eng);
+        //     mapData.obstacle.fused_velocity_y = m_ud_10000_10000(m_rand_eng);
+        //     mapData.obstacle.fused_velocity_z = m_ud_10000_10000(m_rand_eng);
 
-            mapData.environment.road_z = m_ud_10000_10000(m_rand_eng);
+        //     mapData.environment.road_z = m_ud_10000_10000(m_rand_eng);
 
-            mapData.vehicle.Vehicle_id = m_ud_0_10000(m_rand_eng);
-            mapData.vehicle.Position_lat = m_ud_10000_10000(m_rand_eng);
-            mapData.vehicle.Position_long = m_ud_10000_10000(m_rand_eng);
-            mapData.vehicle.Position_Height = m_ud_10000_10000(m_rand_eng);
-            mapData.vehicle.Yaw = m_ud_10000_10000(m_rand_eng);
-            mapData.vehicle.Roll = m_ud_10000_10000(m_rand_eng);
-            mapData.vehicle.Pitch = m_ud_10000_10000(m_rand_eng);
-            mapData.vehicle.Velocity_long = m_ud_10000_10000(m_rand_eng);
-            mapData.vehicle.Velocity_lat = m_ud_10000_10000(m_rand_eng);
-            mapData.vehicle.Velocity_ang = m_ud_10000_10000(m_rand_eng);
+        //     mapData.vehicle.Vehicle_id = m_ud_0_10000(m_rand_eng);
+        //     mapData.vehicle.Position_lat = m_ud_10000_10000(m_rand_eng);
+        //     mapData.vehicle.Position_long = m_ud_10000_10000(m_rand_eng);
+        //     mapData.vehicle.Position_Height = m_ud_10000_10000(m_rand_eng);
+        //     mapData.vehicle.Yaw = m_ud_10000_10000(m_rand_eng);
+        //     mapData.vehicle.Roll = m_ud_10000_10000(m_rand_eng);
+        //     mapData.vehicle.Pitch = m_ud_10000_10000(m_rand_eng);
+        //     mapData.vehicle.Velocity_long = m_ud_10000_10000(m_rand_eng);
+        //     mapData.vehicle.Velocity_lat = m_ud_10000_10000(m_rand_eng);
+        //     mapData.vehicle.Velocity_ang = m_ud_10000_10000(m_rand_eng);
 
-            mapData_provider.send(mapData);
-        }
+        //     mapData_provider.send(mapData);
+        // }
     }
 }
 
