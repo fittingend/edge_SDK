@@ -251,7 +251,7 @@ void ThreadAct1()
 
                     mapData.environment.road_z = environment.road_z;
                     // Test log
-                    adcm::Log::Info() << "mapData.environment.road_z : " << environment.road_z;
+                    adcm::Log::Info() << "mapData.environment.road_z : " << environment.road_z[1];
 
                     mapData.vehicle.Vehicle_id = vehicle.Vehicle_id;
                     mapData.vehicle.Position_lat = vehicle.Position_lat;

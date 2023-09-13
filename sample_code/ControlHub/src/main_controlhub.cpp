@@ -200,6 +200,8 @@ void ThreadAct1()
             hubData.environment.road_z.clear();
             hubData.environment.road_z.push_back(m_ud_10000_10000(m_rand_eng));
             hubData.environment.road_z.push_back(m_ud_10000_10000(m_rand_eng));
+            // Test log
+            adcm::Log::Info() << "hubData.environment.road_z : " << hubData.environment.road_z[1];
 
             hubData.vehicle.Vehicle_id = m_ud_0_10000(m_rand_eng);
             hubData.vehicle.Position_lat = m_ud_10000_10000(m_rand_eng);
@@ -211,6 +213,10 @@ void ThreadAct1()
             hubData.vehicle.Velocity_long = m_ud_10000_10000(m_rand_eng);
             hubData.vehicle.Velocity_lat = m_ud_10000_10000(m_rand_eng);
             hubData.vehicle.Velocity_ang = m_ud_10000_10000(m_rand_eng);
+            // Test log
+            adcm::Log::Info() << "hubData.vehicle.Velocity_long : " << hubData.vehicle.Velocity_long;
+            adcm::Log::Info() << "hubData.vehicle.Velocity_lat : " << hubData.vehicle.Velocity_lat;
+            adcm::Log::Info() << "hubData.vehicle.Velocity_ang : " << hubData.vehicle.Velocity_ang;
 
             hubData_provider.send(hubData);
         }
