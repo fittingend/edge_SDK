@@ -212,6 +212,66 @@ if(obstable_table_updated)
 if (obstacle.index == "사람")
     bool obstacle.warning = TRUE;
 3. 후속 action 을 결정할 수 있게 됨 
+
+
+
+
+================= kimnh =================
+> 보조차량 선행 -> map 제작
+> Condition : 속도 30km/h, 정지 장애물, 사각지대, 사람
+> map 실시간 업데이트
+
+1. 초기 map 제작
+1-1) 보조차량 2대가 목적지까지 직진 -> 정지 장애물 발견
+    if(index == 4){ // 구조물 = 4
+        boolean blindSpotFlag = FALSE;
+        map_2d_location = int array[1000, 500] ?
+        action_required = 2; // 접근해제 = 2
+        fused_cuboid_x = 20;
+        fused_Position_x = 1000; // cm 기준
+        fused_Position_y = 500; // cm 기준
+        fused_velocity_x = 0;
+        fused_velocity_y = 0;
+        fused_velocity_z = 0;
+    }
+    // 보조차량과 구조물 사이 거리가 2~5m 이내면 선회, 구조물과의 거리는 1~3m 유지
+1-2) 정지 장애물 선회 후 목적지(1800, 500)까지 이동
+1-3) 보조차량 2대 복귀
+1-4) 초기 map 생성
+
+2. 편대 출발 및 보조차량 사각지대 진입
+2-1) 편대 출발
+2-2) 정지 장애물과의 거리, 각도, 속도(?) 가 어떤 조건이 되면 편대 정지 -> confidence 증가
+    if(distance between vehicle and obstacle < 1~3m || angle difference between vehicle and obstacle < degree){
+        vehicle velocity = 0;
+        confidence++;
+    }
+2-3) 보조차량 사각지대 진입 -> 사각지대 flag on
+        blindSpotFlag = TRUE;
+2-4) 보조차량 사각지대 제거 후 위치 고정 (사각지대와 거리는 1~3m) -> 사각지대 flag off -> confidence 감소
+        blindSpotFlag = FALSE;
+        confidence--;
+        vehicle velocity = 0; // 보조차량 속도 0
+
+3. 편대 다시 출발 및 사람 등장
+3-1) 편대 출발 -> 사각지대에 있는 2번 보조차량과 합류
+        vehicle velocity = 30;
+3-2) 사람 등장 -> map, obstacle list 업데이트 -> 특장차와 사람 사이 거리가 20m 이내면 위험 -> confidence 증가
+    if(distance between vehicle and pedestrian < 10~20m){
+        index = 3; // 보행자 = 3
+        confidence++;
+        warningFlag = TRUE;
+    }
+3-3) 2번 보조차량 사람 앞으로 이동 및 경고 warning flag on, 나머지 차량 목적지까지 이동
+        warningFlag = TRUE;
+3-4) 사람이 안전한 곳으로 이동 (2번 보조차량 사람과 함께 이동) -> warning flag off, obstacle list 업데이트
+        warningFlag = FALSE;
+
+4. 사람 이동 및 편대 목적지까지 이동
+4-1) 특장차 및 나머지 보조차량 편대 목적지까지 도착
+4-2) 2번 보조차량은 사람이 안전구역에 간 것을 확인한 뒤 목적지에 있는 편대로 합류
+        vehicle velocity = 30;
+
 */            
     }
 }
