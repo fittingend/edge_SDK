@@ -65,6 +65,7 @@
 #include "build_path_subscriber.h"
 #include "hub_data_subscriber.h"
 
+#include "main_datafusion.hpp"
 
 namespace
 {
@@ -109,9 +110,7 @@ void ThreadAct1()
     adcm::BuildPath_Subscriber buildPath_subscriber;
     adcm::HubData_Subscriber hubData_subscriber;
     INFO("DataFusion .init()");
-#ifdef MAP_GENERATION
-    map_2d_init(map_2d); //map_2d 값 전체 initialization 
-#endif
+
     mapData_provider.init("DataFusion/DataFusion/PPort_map_data");
     buildPath_subscriber.init("DataFusion/DataFusion/RPort_build_path");
     hubData_subscriber.init("DataFusion/DataFusion/RPort_hub_data");
@@ -271,25 +270,36 @@ void ThreadAct1()
             mapData_provider.send(mapData);
 #ifdef MAP_GENERATION
 
+
 //어떤 셀에 해당하는 obstacle 데이터인지 식별
 //which cell(s) does this obstacle belong to?
 
 /* 
-===============실제코드=====================
+==============1.데이터 융합=================
+메인/보조 차량에서 오는 데이터 융합
+9월 워크샵때는 차량 1대만 고려하기 때문에 융합 부분은 구현 X 
+받은 데이터 그대로 전달하면 OK 
+*/
+
+//==============2.map_2d 생성 =================
+map_data_type map_data; 
+
+/*<실제코드>========================
             int fused_cuboid_x_start = static_cast<int> (mapData.obstacle.fused_Position_x - (mapData.obstacle.fused_cuboid_x/2));
             int fused_cuboid_x_end = static_cast<int> (mapData.obstacle.fused_Position_x + (mapData.obstacle.fused_cuboid_x/2));
 
             int fused_cuboid_y_start = static_cast<int> (mapData.obstacle.fused_Position_y - (mapData.obstacle.fused_cuboid_y/2));
             int fused_cuboid_y_end = static_cast<int> (mapData.obstacle.fused_Position_y + (mapData.obstacle.fused_cuboid_y/2));
 */ 
-//현재 값들이 random 이라 i 와 j 값이 음수가 나오기 때문에 임의로 value assign 해서 테스트
-//================테스트용=====================
-// obstacle 발생시
-            float fused_Position_x = 108.6;
-            float fused_cuboid_x = 8.64;
-            float fused_Position_y = 543.5;
-            float fused_cuboid_y = 12.7;
-
+//<테스트용 코드 - obstacle 있는 cell 만 업데이트>=======================
+// obstacle_type이 구조물이고 +  fused_cuboid_z 가 1m 이상(현재 임의로 지정)이여서 사각지대 가능성 발생 시나리오
+            double fused_Position_x = 500; //50m
+            double fused_Position_y = 1000; //100m
+            double fused_cuboid_x = 200; //200m
+            double fused_cuboid_y = 100; //임의지정 10m
+            double fused_cuboid_z = 10;  //임의지정 1m
+//10cm 가 1일때 
+//1m 는 10 의 값을 지님 
 
             int fused_cuboid_x_start = static_cast<int> (fused_Position_x - (fused_cuboid_x/2));
             int fused_cuboid_x_end = static_cast<int> (fused_Position_x + (fused_cuboid_x/2));
@@ -297,8 +307,7 @@ void ThreadAct1()
             int fused_cuboid_y_start = static_cast<int> (fused_Position_y - (fused_cuboid_y/2));
             int fused_cuboid_y_end = static_cast<int> (fused_Position_y + (fused_cuboid_y/2));
 
-//해당 map cell 에다 데이터 집어 넣기
-//TO DO: 노면 데이터도 이후에 추가? (노면이 높은 것도 위험상황이 될수있으니)            
+//해당 map cell 에다 데이터 집어 넣기      
             int count = 0;
             adcm::Log::Info() << "i is from  " << fused_cuboid_y_start << " to " << fused_cuboid_y_end;
             adcm::Log::Info() << "j is from " <<  fused_cuboid_x_start << " to "<< fused_cuboid_x_end;
@@ -306,13 +315,50 @@ void ThreadAct1()
             {
                 for (int j=fused_cuboid_x_start; j< fused_cuboid_x_end+1; j++)
                 {
-                    map_2d[i][j].obstacle = true;
-                    map_2d[i][j].obstacle_fused_cuboid_x = mapData.obstacle.fused_cuboid_x; 
+//                    map_data.map_2d[i][j].timestamp = ""; //이미 정의된 string 을 = 로 다시 지정 불가능. 베이리스 기다리기
+                    map_data.map_2d[i][j].fused_index = {STRUCTURE};
+                    map_data.map_2d[i][j].fused_cuboid_x = fused_cuboid_x; 
+                    map_data.map_2d[i][j].fused_cuboid_y = fused_cuboid_y;
+                    map_data.map_2d[i][j].fused_cuboid_z = fused_cuboid_z;
+                    map_data.map_2d[i][j].fused_Position_x = fused_Position_x;
+                    map_data.map_2d[i][j].fused_Position_x = fused_Position_y;
                     count++;
                     adcm::Log::Info() << "Map_2d is updated with "  << count << " times";
                     //등의 데이터 assignment 
                 }
             }
+
+//==============3.메인/보조차량 정보 업데이트=================
+
+            map_data.vehicle_list[0].vehicle_id={EGO_VEHICLE};
+ //....등등 1. 융합데이터에서 받은 정보 그대로 assign           
+   
+
+
+
+//            mapData_provider.send(map_data);//다른 모듈로 map_data 오브젝트 전달
+
+//=============4.obstacle list 생성 및 업데이트=============
+//최초 map generation 이 끝난후 map 을 스캔하면서 obstacle list 생성
+
+int obstacle_total_count = 0;
+for (int i=0; i<n;i++)
+{
+    for (int j=0; j<m; j++)
+    {
+        if(map_data.map_2d[i][j].fused_index != NO_OBSTACLE)
+        {
+            //장애물 존재
+            obstacle_total_count++;
+        }
+    }
+}
+
+
+
+
+
+
 //TO DO: map_2d 이외에도 hazard (obstacle) 만 따로 관리하는 vector 가 있으면 어떨까?
 
 //이 vector 에는
