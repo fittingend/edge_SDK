@@ -25,6 +25,7 @@ enum vehicle_ID
 struct map_2d_data_type
 {
     char timestamp[10];
+    int obstacle_id; //추가됨 obstacle tracking 및 고유 id 부여가 필요 
     obstacle_type fused_index;
     double fused_cuboid_x;
     double fused_cuboid_y;
@@ -38,6 +39,15 @@ struct map_2d_data_type
     double fused_velocity_z;
     double road_z[3];//TO DO: to define later 
 };
+
+//obstacle list 중복 확인을 위한 operator overload
+bool operator == (const map_2d_data_type &m1, const map_2d_data_type &m2)
+{
+   if(m1.obstacle_id == m2.obstacle_id)
+     return true;
+   else
+     return false;
+}
 
 struct vehicle_list_data_type
 {
@@ -56,8 +66,9 @@ struct vehicle_list_data_type
 
 class obstacle_list_data_type
 {
-    char timestamp[10];
+    int obstacle_id; //추가됨 obstacle tracking 및 고유 id 부여가 필요 
     obstacle_type obstacle_index;
+    char timestamp[10];
 //    std::vector<int> map_2d_location; 
     enum action_type{
         NO_ACTION,
@@ -81,7 +92,7 @@ class map_data_type
 {
     public:
     map_2d_data_type map_2d[n][m];
-    vehicle_list_data_type vehicle_list[5]; 
+    std::vector <vehicle_list_data_type> vehicle_list; 
     //vehicle 개수가 가변적이라 vector 로 변경 필요
 
  //member function declaration   

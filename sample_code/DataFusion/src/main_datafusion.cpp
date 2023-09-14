@@ -54,6 +54,10 @@
 #include <stdio.h>
 #include <random>
 
+#include <set>
+#include <vector>
+
+
 #include <ara/com/e2exf/status_handler.h>
 #include <ara/exec/execution_client.h>
 
@@ -338,22 +342,43 @@ map_data_type map_data;
 
 //            mapData_provider.send(map_data);//다른 모듈로 map_data 오브젝트 전달
 
-//=============4.obstacle list 생성 및 업데이트=============
-//최초 map generation 이 끝난후 map 을 스캔하면서 obstacle list 생성
+//=============4.obstacle list 생성 =============
+std::vector<obstacle_list_data_type> obstacle_list;
+std::vector<map_2d_data_type> unique_map;
 
-int obstacle_total_count = 0;
 for (int i=0; i<n;i++)
 {
     for (int j=0; j<m; j++)
     {
-        if(map_data.map_2d[i][j].fused_index != NO_OBSTACLE)
-        {
-            //장애물 존재
-            obstacle_total_count++;
-        }
+        unique_map.push_back(map_data.map_2d[i][j]); //2d map 스캔하면서 1d 인 unique_map 에 저장
     }
 }
 
+//TO DO: obstacle_id 로 장애물 별 2d array 인덱스 값 구분해서 값도 저장해야함
+
+unique_map.erase(std::unique(unique_map.begin(), unique_map.end()), unique_map.end());
+//중복되는 값은 제거 
+
+
+
+
+//         // if (map_data.map_2d[i][j].fused_index != NO_OBSTACLE) //obstacle 있는 셀만 비교
+        // {
+        //     for (int count = 0; count < obstacle_count_track+1; count++)
+        //     {
+        //         if (obstacle_track[count].fused_Position_x != map_data.map_2d[i][j].fused_Position_x \
+        //     && obstacle_track[count].fused_Position_y != map_data.map_2d[i][j].fused_Position_y \
+        //     && obstacle_track[count].fused_Position_z != map_data.map_2d[i][j].fused_Position_z)
+        //     //xyz 값 불일치 => 새로운 장애물 발견!
+        //     //obstacle_track 에다 저장
+        //         {
+        //             obstacle_track[obstacle_count_track] = map_data.map_2d[i][j];
+        //             obstacle_count_track++;
+        //         }
+        //         else break;
+
+
+//=============4.1. obstacle list 업데이트 =============
 
 
 
