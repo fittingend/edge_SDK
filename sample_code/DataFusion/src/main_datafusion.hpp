@@ -26,11 +26,11 @@ enum action_type{
     REMOVE_BLIND_SPOT,
     ALERT_OBSTACLE
 };
-struct map_2d_data_type
+struct fused_obstacle_env_data_type
 {
-    std::array<int, 10> timestamp;
     int obstacle_id; //추가됨 obstacle tracking 및 고유 id 부여가 필요 
     obstacle_type fused_index;
+    std::string timestamp;
     double fused_cuboid_x;
     double fused_cuboid_y;
     double fused_cuboid_z;
@@ -45,7 +45,7 @@ struct map_2d_data_type
 };
 
 //obstacle list 중복 확인을 위한 operator overload
-bool operator == (const map_2d_data_type &m1, const map_2d_data_type &m2)
+bool operator == (const fused_obstacle_env_data_type &m1, const fused_obstacle_env_data_type &m2)
 {
    if(m1.obstacle_id == m2.obstacle_id)
      return true;
@@ -53,7 +53,7 @@ bool operator == (const map_2d_data_type &m1, const map_2d_data_type &m2)
      return false;
 }
 
-struct vehicle_list_data_type
+struct fused_vehicle_data_type
 {
     vehicle_ID vehicle_id;
     double Position_lat;
@@ -72,7 +72,7 @@ struct obstacle_list_data_type
 {
     int obstacle_id; //추가됨 obstacle tracking 및 고유 id 부여가 필요 
     obstacle_type obstacle_index;
-    std::array<int, 10> timestamp;
+    std::string timestamp;
 //    std::vector<int> map_2d_location; 
     action_type action_required;
     double fused_cuboid_x;
@@ -86,7 +86,7 @@ struct obstacle_list_data_type
     double fused_velocity_y;
     double fused_velocity_z;
 
-    obstacle_list_data_type(const int obstacle_id, const obstacle_type obstacle_index, const std::array<int, 10> timestamp,\
+    obstacle_list_data_type(const int obstacle_id, const obstacle_type obstacle_index, const std::string timestamp,\
     const action_type action_required, const double fused_cuboid_x, const double fused_cuboid_y, const double fused_cuboid_z,\
     const double fused_heading_angle, const double fused_Position_x,const double fused_Position_y, const double fused_Position_z,\
     const double fused_velocity_x, const double fused_velocity_y, const double fused_velocity_z)
@@ -99,19 +99,20 @@ struct obstacle_list_data_type
 class map_data_type
 {
     public:
-    map_2d_data_type map_2d[n][m];
-    std::vector <vehicle_list_data_type> vehicle_list; 
+    fused_obstacle_env_data_type map_2d[n][m];
+    std::vector <fused_vehicle_data_type> vehicle_list; 
     //vehicle 개수가 가변적이라 vector 로 변경 필요
 
  //member function declaration   
-    bool map_2d_init(map_2d_data_type map_2d[n][m]) {
-    for (int i = 0; i < n; i++)
+    bool map_2d_init(fused_obstacle_env_data_type map_2d[n][m]) 
     {
-        for (int j = 0; j < m; j++)
-        map_2d[i][j] = {NO_OBSTACLE}; // initize rest of members to 0 
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < m; j++)
+            map_2d[i][j] = {0}; // initize rest of members to 0 
+        }
+        return true;
     }
-    return true;
-}
 
 
 };

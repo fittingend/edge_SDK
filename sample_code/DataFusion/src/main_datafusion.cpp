@@ -239,98 +239,117 @@ void ThreadAct1()
                 adcm::Log::Verbose() << "vehicle.Velocity_long : "<< vehicle.Velocity_long;
                 adcm::Log::Verbose() << "vehicle.Velocity_lat : "<< vehicle.Velocity_lat;
                 adcm::Log::Verbose() << "vehicle.Velocity_ang : "<< vehicle.Velocity_ang;
-            }
-        }
 
-        {
-            adcm::map_data_Objects mapData;
 
-            mapData.obstacle.Time_stamp = "Time_stamp";
-            mapData.obstacle.fused_index = "fused_index";
-            mapData.obstacle.fused_cuboid_x = m_ud_10000_10000(m_rand_eng);
-            mapData.obstacle.fused_cuboid_y = m_ud_10000_10000(m_rand_eng);
-            mapData.obstacle.fused_cuboid_z = m_ud_10000_10000(m_rand_eng);
-            mapData.obstacle.fused_heading_angle = m_ud_10000_10000(m_rand_eng);
-            mapData.obstacle.fused_Position_x = m_ud_10000_10000(m_rand_eng);
-            mapData.obstacle.fused_Position_y = m_ud_10000_10000(m_rand_eng);
-            mapData.obstacle.fused_Position_z = m_ud_10000_10000(m_rand_eng);
-            mapData.obstacle.fused_velocity_x = m_ud_10000_10000(m_rand_eng);
-            mapData.obstacle.fused_velocity_y = m_ud_10000_10000(m_rand_eng);
-            mapData.obstacle.fused_velocity_z = m_ud_10000_10000(m_rand_eng);
+                //{
+                    // adcm::map_data_Objects mapData;
 
-            mapData.environment.road_z = m_ud_10000_10000(m_rand_eng);
+                    // mapData.obstacle.Time_stamp = "Time_stamp";
+                    // mapData.obstacle.fused_index = "fused_index";
+                    // mapData.obstacle.fused_cuboid_x = m_ud_10000_10000(m_rand_eng);
+                    // mapData.obstacle.fused_cuboid_y = m_ud_10000_10000(m_rand_eng);
+                    // mapData.obstacle.fused_cuboid_z = m_ud_10000_10000(m_rand_eng);
+                    // mapData.obstacle.fused_heading_angle = m_ud_10000_10000(m_rand_eng);
+                    // mapData.obstacle.fused_Position_x = m_ud_10000_10000(m_rand_eng);
+                    // mapData.obstacle.fused_Position_y = m_ud_10000_10000(m_rand_eng);
+                    // mapData.obstacle.fused_Position_z = m_ud_10000_10000(m_rand_eng);
+                    // mapData.obstacle.fused_velocity_x = m_ud_10000_10000(m_rand_eng);
+                    // mapData.obstacle.fused_velocity_y = m_ud_10000_10000(m_rand_eng);
+                    // mapData.obstacle.fused_velocity_z = m_ud_10000_10000(m_rand_eng);
 
-            mapData.vehicle.Vehicle_id = m_ud_0_10000(m_rand_eng);
-            mapData.vehicle.Position_lat = m_ud_10000_10000(m_rand_eng);
-            mapData.vehicle.Position_long = m_ud_10000_10000(m_rand_eng);
-            mapData.vehicle.Position_Height = m_ud_10000_10000(m_rand_eng);
-            mapData.vehicle.Yaw = m_ud_10000_10000(m_rand_eng);
-            mapData.vehicle.Roll = m_ud_10000_10000(m_rand_eng);
-            mapData.vehicle.Pitch = m_ud_10000_10000(m_rand_eng);
-            mapData.vehicle.Velocity_long = m_ud_10000_10000(m_rand_eng);
-            mapData.vehicle.Velocity_lat = m_ud_10000_10000(m_rand_eng);
-            mapData.vehicle.Velocity_ang = m_ud_10000_10000(m_rand_eng);
+                    // mapData.environment.road_z = m_ud_10000_10000(m_rand_eng);
 
-            mapData_provider.send(mapData);
+                    // mapData.vehicle.Vehicle_id = m_ud_0_10000(m_rand_eng);
+                    // mapData.vehicle.Position_lat = m_ud_10000_10000(m_rand_eng);
+                    // mapData.vehicle.Position_long = m_ud_10000_10000(m_rand_eng);
+                    // mapData.vehicle.Position_Height = m_ud_10000_10000(m_rand_eng);
+                    // mapData.vehicle.Yaw = m_ud_10000_10000(m_rand_eng);
+                    // mapData.vehicle.Roll = m_ud_10000_10000(m_rand_eng);
+                    // mapData.vehicle.Pitch = m_ud_10000_10000(m_rand_eng);
+                    // mapData.vehicle.Velocity_long = m_ud_10000_10000(m_rand_eng);
+                    // mapData.vehicle.Velocity_lat = m_ud_10000_10000(m_rand_eng);
+                    // mapData.vehicle.Velocity_ang = m_ud_10000_10000(m_rand_eng);
+
+                    // mapData_provider.send(mapData);
 #ifdef MAP_GENERATION
 
 
 //어떤 셀에 해당하는 obstacle 데이터인지 식별
 //which cell(s) does this obstacle belong to?
 
-/* 
-==============1.데이터 융합=================
-메인/보조 차량에서 오는 데이터 융합
+ 
+//==============1.데이터 융합=================
+                fused_obstacle_env_data_type fused_obstacle_env_data;
+                fused_vehicle_data_type fused_vehicle_data;
+
+//                fused_obstacle_env_data.timestamp = obstacle.Time_stamp;
+//                fused_obstacle_env_data.fused_index = obstacle.index;
+//....등 받은 데이터 단순 assignment 진행
+
+/*메인/보조 차량에서 오는 데이터 융합
 9월 워크샵때는 차량 1대만 고려하기 때문에 융합 부분은 구현 X 
 받은 데이터 그대로 전달하면 OK 
 */
 
 //==============2.map_2d 생성 =================
-            map_data_type map_data; 
+                map_data_type map_data; 
 
-/*<실제코드>========================
+//<테스트용 코드 - obstacle 있는 cell 만 업데이트>=======================
+// obstacle_type이 구조물이고 +  fused_cuboid_z 가 1m 이상(현재 임의로 지정)이여서 사각지대 가능성 발생 시나리오
+                double fused_Position_x = 500; //50m
+                double fused_Position_y = 1000; //100m
+                double fused_cuboid_x = 200; //200m
+                double fused_cuboid_y = 100; //임의지정 10m
+                double fused_cuboid_z = 10;  //임의지정 1m
+
+
+//장애물이 없는 경우에는 차량의 위치 기준으로 반경 1m 노면 데이터를 업데이트 한다고 가정한다  
+            if(fused_obstacle_env_data.fused_index == NO_OBSTACLE)
+            {
+
+            }
+            else //장애물이 있는 경우에는 장애물 사이즈를 구하고 
+
+            {
+                /*<실제코드>========================
             int fused_cuboid_x_start = static_cast<int> (mapData.obstacle.fused_Position_x - (mapData.obstacle.fused_cuboid_x/2));
             int fused_cuboid_x_end = static_cast<int> (mapData.obstacle.fused_Position_x + (mapData.obstacle.fused_cuboid_x/2));
 
             int fused_cuboid_y_start = static_cast<int> (mapData.obstacle.fused_Position_y - (mapData.obstacle.fused_cuboid_y/2));
             int fused_cuboid_y_end = static_cast<int> (mapData.obstacle.fused_Position_y + (mapData.obstacle.fused_cuboid_y/2));
-*/ 
-//<테스트용 코드 - obstacle 있는 cell 만 업데이트>=======================
-// obstacle_type이 구조물이고 +  fused_cuboid_z 가 1m 이상(현재 임의로 지정)이여서 사각지대 가능성 발생 시나리오
-            double fused_Position_x = 500; //50m
-            double fused_Position_y = 1000; //100m
-            double fused_cuboid_x = 200; //200m
-            double fused_cuboid_y = 100; //임의지정 10m
-            double fused_cuboid_z = 10;  //임의지정 1m
+*/
 //10cm 가 1일때 
 //1m 는 10 의 값을 지님 
 
-            int fused_cuboid_x_start = static_cast<int> (fused_Position_x - (fused_cuboid_x/2));
-            int fused_cuboid_x_end = static_cast<int> (fused_Position_x + (fused_cuboid_x/2));
+                int fused_cuboid_x_start = static_cast<int> (fused_Position_x - (fused_cuboid_x/2));
+                int fused_cuboid_x_end = static_cast<int> (fused_Position_x + (fused_cuboid_x/2));
 
-            int fused_cuboid_y_start = static_cast<int> (fused_Position_y - (fused_cuboid_y/2));
-            int fused_cuboid_y_end = static_cast<int> (fused_Position_y + (fused_cuboid_y/2));
+                int fused_cuboid_y_start = static_cast<int> (fused_Position_y - (fused_cuboid_y/2));
+                int fused_cuboid_y_end = static_cast<int> (fused_Position_y + (fused_cuboid_y/2));
 
 //해당 map cell 에다 데이터 집어 넣기      
-            int count = 0;
-            adcm::Log::Info() << "i is from  " << fused_cuboid_y_start << " to " << fused_cuboid_y_end;
-            adcm::Log::Info() << "j is from " <<  fused_cuboid_x_start << " to "<< fused_cuboid_x_end;
-            for (int i=fused_cuboid_y_start; i<fused_cuboid_y_end+1; i++)
-            {
-                for (int j=fused_cuboid_x_start; j< fused_cuboid_x_end+1; j++)
+                int count = 0;
+                adcm::Log::Info() << "i is from  " << fused_cuboid_y_start << " to " << fused_cuboid_y_end;
+                adcm::Log::Info() << "j is from " <<  fused_cuboid_x_start << " to "<< fused_cuboid_x_end;
+                for (int i=fused_cuboid_y_start; i<fused_cuboid_y_end+1; i++)
                 {
-//                    map_data.map_2d[i][j].timestamp = ""; //이미 정의된 string 을 = 로 다시 지정 불가능. 베이리스 기다리기
-                    map_data.map_2d[i][j].fused_index = {STRUCTURE};
-                    map_data.map_2d[i][j].fused_cuboid_x = fused_cuboid_x; 
-                    map_data.map_2d[i][j].fused_cuboid_y = fused_cuboid_y;
-                    map_data.map_2d[i][j].fused_cuboid_z = fused_cuboid_z;
-                    map_data.map_2d[i][j].fused_Position_x = fused_Position_x;
-                    map_data.map_2d[i][j].fused_Position_x = fused_Position_y;
-                    count++;
-                    adcm::Log::Info() << "Map_2d is updated with "  << count << " times";
-                    //등의 데이터 assignment 
+                    for (int j=fused_cuboid_x_start; j< fused_cuboid_x_end+1; j++)
+                    {
+                        map_data.map_2d[i][j].timestamp = '2234'; 
+                        map_data.map_2d[i][j].fused_index = fused_obstacle_env_data.fused_index;
+                        map_data.map_2d[i][j].fused_cuboid_x = fused_cuboid_x; 
+                        map_data.map_2d[i][j].fused_cuboid_y = fused_cuboid_y;
+                        map_data.map_2d[i][j].fused_cuboid_z = fused_cuboid_z;
+                        map_data.map_2d[i][j].fused_Position_x = fused_Position_x;
+                        map_data.map_2d[i][j].fused_Position_x = fused_Position_y;
+                        count++;
+                        adcm::Log::Info() << "Map_2d is updated with "  << count << " times";
+                        //등의 데이터 assignment 
+                    }
                 }
             }
+
+        
 
 //==============3.메인/보조차량 정보 업데이트=================
 
@@ -346,7 +365,7 @@ void ThreadAct1()
 // 생성된 2d-map 을 기반으로 obstacle list 를 생성
 
             std::vector<obstacle_list_data_type> obstacle_list;
-            std::vector<map_2d_data_type> unique_map;
+            std::vector<fused_obstacle_env_data_type> unique_map;
 
             for (int i=0; i<n;i++)
             {
@@ -387,7 +406,9 @@ void ThreadAct1()
 //나중에 새로운 obstacle 정보가 수신 되었을때 지금 있는 obstacle 과 동일한 장애물이란걸 알아내는 알고리즘이 추가로 필요
 
 #endif
-        }     
+                }
+        }
+
     }
 }
 
