@@ -21,10 +21,14 @@ enum vehicle_ID
     SUB_VEHICLE_3,
     SUB_VEHICLE_4
 };
-
+enum action_type{
+    NO_ACTION,
+    REMOVE_BLIND_SPOT,
+    ALERT_OBSTACLE
+};
 struct map_2d_data_type
 {
-    char timestamp[10];
+    std::array<int, 10> timestamp;
     int obstacle_id; //추가됨 obstacle tracking 및 고유 id 부여가 필요 
     obstacle_type fused_index;
     double fused_cuboid_x;
@@ -64,17 +68,12 @@ struct vehicle_list_data_type
 };
 
 
-class obstacle_list_data_type
+struct obstacle_list_data_type
 {
     int obstacle_id; //추가됨 obstacle tracking 및 고유 id 부여가 필요 
     obstacle_type obstacle_index;
-    char timestamp[10];
+    std::array<int, 10> timestamp;
 //    std::vector<int> map_2d_location; 
-    enum action_type{
-        NO_ACTION,
-        REMOVE_BLIND_SPOT,
-        ALERT_OBSTACEL
-    };
     action_type action_required;
     double fused_cuboid_x;
     double fused_cuboid_y;
@@ -86,6 +85,15 @@ class obstacle_list_data_type
     double fused_velocity_x;
     double fused_velocity_y;
     double fused_velocity_z;
+
+    obstacle_list_data_type(const int obstacle_id, const obstacle_type obstacle_index, const std::array<int, 10> timestamp,\
+    const action_type action_required, const double fused_cuboid_x, const double fused_cuboid_y, const double fused_cuboid_z,\
+    const double fused_heading_angle, const double fused_Position_x,const double fused_Position_y, const double fused_Position_z,\
+    const double fused_velocity_x, const double fused_velocity_y, const double fused_velocity_z)
+    :obstacle_id(obstacle_id), obstacle_index(obstacle_index), timestamp(timestamp), action_required(action_required),\
+    fused_cuboid_x(fused_cuboid_x),fused_cuboid_y(fused_cuboid_y),fused_cuboid_z(fused_cuboid_z),fused_heading_angle(fused_heading_angle),\
+    fused_Position_x(fused_Position_x),fused_Position_y(fused_Position_y),fused_Position_z(fused_Position_z),fused_velocity_x(fused_velocity_x),\
+    fused_velocity_y(fused_velocity_y),fused_velocity_z(fused_velocity_z) {}
 };
 
 class map_data_type

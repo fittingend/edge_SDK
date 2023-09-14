@@ -56,7 +56,7 @@
 
 #include <set>
 #include <vector>
-
+#include <array>
 
 #include <ara/com/e2exf/status_handler.h>
 #include <ara/exec/execution_client.h>
@@ -286,7 +286,7 @@ void ThreadAct1()
 */
 
 //==============2.map_2d 생성 =================
-map_data_type map_data; 
+            map_data_type map_data; 
 
 /*<실제코드>========================
             int fused_cuboid_x_start = static_cast<int> (mapData.obstacle.fused_Position_x - (mapData.obstacle.fused_cuboid_x/2));
@@ -343,61 +343,48 @@ map_data_type map_data;
 //            mapData_provider.send(map_data);//다른 모듈로 map_data 오브젝트 전달
 
 //=============4.obstacle list 생성 =============
-std::vector<obstacle_list_data_type> obstacle_list;
-std::vector<map_2d_data_type> unique_map;
+// 생성된 2d-map 을 기반으로 obstacle list 를 생성
 
-for (int i=0; i<n;i++)
-{
-    for (int j=0; j<m; j++)
-    {
-        unique_map.push_back(map_data.map_2d[i][j]); //2d map 스캔하면서 1d 인 unique_map 에 저장
-    }
-}
+            std::vector<obstacle_list_data_type> obstacle_list;
+            std::vector<map_2d_data_type> unique_map;
 
-//TO DO: obstacle_id 로 장애물 별 2d array 인덱스 값 구분해서 값도 저장해야함
+            for (int i=0; i<n;i++)
+            {
+                for (int j=0; j<m; j++)
+                {
+                    if (map_data.map_2d[i][j].fused_index != NO_OBSTACLE) //obstacle 있는 지도 값인 경우에 unique_map 에 저장
+                        unique_map.push_back(map_data.map_2d[i][j]); 
+                }
+            }
 
-unique_map.erase(std::unique(unique_map.begin(), unique_map.end()), unique_map.end());
-//중복되는 값은 제거 
+            //TO DO: obstacle_id 로 장애물 별 2d array 인덱스 값 구분해서 값도 저장해야함
+            unique_map.erase(std::unique(unique_map.begin(), unique_map.end()), unique_map.end());
+            //중복되는 값을 제거 
+
+            for (auto iter = unique_map.begin(); iter!= unique_map.end();iter++)
+            {
+                switch(iter->fused_index){
+
+                    case STRUCTURE: 
+                        obstacle_list.emplace_back(obstacle_list_data_type(iter->obstacle_id, iter->fused_index, iter->timestamp, REMOVE_BLIND_SPOT,\
+                        iter->fused_cuboid_x, iter->fused_cuboid_y, iter->fused_cuboid_z, iter->fused_heading_angle, iter->fused_Position_x,\
+                        iter->fused_Position_y, iter->fused_Position_z, iter->fused_velocity_x, iter->fused_velocity_y, iter->fused_velocity_z));
+                        break;
+
+                    case PEDESTRIAN:
+                        obstacle_list.emplace_back(obstacle_list_data_type(iter->obstacle_id, iter->fused_index, iter->timestamp, ALERT_OBSTACLE,\
+                        iter->fused_cuboid_x, iter->fused_cuboid_y, iter->fused_cuboid_z, iter->fused_heading_angle, iter->fused_Position_x,\
+                        iter->fused_Position_y, iter->fused_Position_z, iter->fused_velocity_x, iter->fused_velocity_y, iter->fused_velocity_z));
+                        break;
+                }
+            }
+
+//            xx_provider.send(obstacle_list);
+//위험 판단 모듈로 리스트 전달
 
 
-
-
-//         // if (map_data.map_2d[i][j].fused_index != NO_OBSTACLE) //obstacle 있는 셀만 비교
-        // {
-        //     for (int count = 0; count < obstacle_count_track+1; count++)
-        //     {
-        //         if (obstacle_track[count].fused_Position_x != map_data.map_2d[i][j].fused_Position_x \
-        //     && obstacle_track[count].fused_Position_y != map_data.map_2d[i][j].fused_Position_y \
-        //     && obstacle_track[count].fused_Position_z != map_data.map_2d[i][j].fused_Position_z)
-        //     //xyz 값 불일치 => 새로운 장애물 발견!
-        //     //obstacle_track 에다 저장
-        //         {
-        //             obstacle_track[obstacle_count_track] = map_data.map_2d[i][j];
-        //             obstacle_count_track++;
-        //         }
-        //         else break;
-
-
-//=============4.1. obstacle list 업데이트 =============
-
-
-
-
-
-//TO DO: map_2d 이외에도 hazard (obstacle) 만 따로 관리하는 vector 가 있으면 어떨까?
-
-//이 vector 에는
-//1. obstacle index
-//2. map2d 의 해당 cell
-//3. obstacle 의 각종 정보 - 예를 들어 높이가 있는 obstacle 일 경우 사각지대 발생 => 추후 보조차량 보내서 사각지대를 없애야 함
-
+//TO DO:
 //나중에 새로운 obstacle 정보가 수신 되었을때 지금 있는 obstacle 과 동일한 장애물이란걸 알아내는 알고리즘이 추가로 필요
-
-//map2d 의 member variable 중에 하나를 pointer로 해서 해당 obstacle 이 저장된 memory location 을 포인트 하는 것 
-// obstacle 을 봤을때 해당 map2d cell 들을 다시 reference back 할수도 있게 만듦?
-//그럴경우 map2d 나 obstacle list 는 send 로 다른모듈에 주기 보다 external variable 로 모든 모듈에서 access 가 가능하게 만드는것이 더욱 효율적?
-// 
-
 
 #endif
         }     
