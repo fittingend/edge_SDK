@@ -69,6 +69,8 @@
 
 #include "main_riskassessment.hpp"
 
+
+    
 namespace
 {
 
@@ -100,7 +102,38 @@ bool RegisterSigTermHandler()
 
     return true;
 }
+double getDistance(obstacle_list_data_type obstacle, fused_vehicle_data_type vehicle)
+{
+    return sqrt(pow(obstacle.fused_Position_x -vehicle.Position_lat,2)+ pow(obstacle.fused_Position_y -vehicle.Position_long, 2));
+}
+double getDistance(double a_x, double a_y, double b_x, double b_y)
+{
+    return sqrt(pow(a_x-b_x,2)+ pow(a_y-b_y, 2));
 
+}
+
+
+double getTTC(obstacle_list_data_type obstacle, fused_vehicle_data_type vehicle)
+{
+    double ttc;
+    double obstacle_final_pos_x = obstacle.fused_Position_x + obstacle.fused_velocity_x*ttc;
+    double obstacle_final_pos_y = obstacle.fused_Position_y + obstacle.fused_velocity_y*ttc;
+    double vehicle_final_pos_x = vehicle.Position_long + vehicle.Velocity_long*ttc;
+    double vehicle_final_pos_y = vehicle.Position_lat + vehicle.Velocity_lat*ttc;
+
+    sqrt(pow(vehicle.Position_long+vehicle.Velocity_long*ttc ,2) + pow(vehicle.Position_lat+vehicle.Velocity_lat*ttc,2));
+    for (int t=0; t < 10; t=t+0.1)
+    {
+        if (getDistance(obstacle_final_pos_x,obstacle_final_pos_y,vehicle_final_pos_x,vehicle_final_pos_y) < COLLISION_DISTANCE)
+//            "COLLISION HAZARD!"; 
+        {    
+            ttc = t;
+            break;
+        }
+    }
+
+
+}
 }  // namespace
 
 void ThreadAct1()
@@ -167,23 +200,55 @@ void ThreadAct1()
 //================1. obstacle list 확인================
 
                 std::vector<obstacle_list_data_type> obstacle_list;
-// osbtacle_list 를 데이터 융합에서 받음
+                MapData map_data; 
+// osbtacle_list 와 map_data 를 데이터 융합에서 받음
+                fused_vehicle_data_type ego_vehicle, sub_vehicle_1, sub_vehicle_2,sub_vehicle_3,sub_vehicle_4;
+
+                for (auto iter = map_data.vehicle_list.begin(); iter!=map_data.vehicle_list.end(); iter++)
+                {
+                    switch(iter->vehicle_id)
+                    {
+                        case EGO_VEHICLE:
+                            ego_vehicle = *iter;
+                            break;
+                        case SUB_VEHICLE_1:
+                            sub_vehicle_1 = *iter;
+                            break;
+                        case SUB_VEHICLE_2:
+                            sub_vehicle_2 = *iter;
+                            break;
+                        case SUB_VEHICLE_3:
+                            sub_vehicle_3 = *iter;
+                            break;
+                        case SUB_VEHICLE_4:
+                            sub_vehicle_4 = *iter;
+                            break;
+                    }
+                }
 
                 for (auto iter = obstacle_list.begin(); iter!= obstacle_list.end();iter++)
                 {
                     switch(iter->action_required){
 
-                    case REMOVE_BLIND_SPOT:
-                    //블라인드 스팟 제거  - 남훈씨 작성
+                        case REMOVE_BLIND_SPOT:
+                        //블라인드 스팟 제거  - 남훈씨 작성
 
-                    case ALERT_OBSTACLE:
-                    // 
-                    confidence = 15 / distnace * 0.7
+                        case ALERT_OBSTACLE: 
+                        //동적 장애물일 경우
+                            obstacle_list_data_type current_obstacle = *iter;
+                            double final_confidence;
+                            double xy_distance = getDistance(current_obstacle, ego_vehicle);
+                            double xy_ttc = getTTC(current_obstacle, ego_vehicle);
+                            double dist_confidence = PEDESTRIAN_DISTANCE/xy_distance*0.7; 
+                            double ttc_confidence =  PEDESTRIAN_TTC/xy_ttc*0.7;
+                            if(ttc_confidence > dist_confidence)
+                                final_confidence = ttc_confidence;
+                            else    
+                                final_confidence = dist_confidence;
+                        
 
-                    7/ttc * 0.7 
+                    }
 
-
-                }
 
 
 
@@ -201,6 +266,8 @@ void ThreadAct1()
                         // riskAssessment.confidence.push_back(m_ud_100_100(m_rand_eng));
 
                         // riskAssessment_provider.send(riskAssessment);
+                }
+            }
 
         }
 

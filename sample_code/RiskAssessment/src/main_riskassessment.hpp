@@ -1,9 +1,13 @@
 #define MAP_GENERATION
 #define n 1000 
 #define m 2000
+#define PEDESTRIAN_DISTANCE 15
+#define PEDESTRIAN_TTC 7
+#define COLLISION_DISTANCE 3
 #ifdef MAP_GENERATION
 
-enum obstacle_type
+
+enum ObstacleClass
 {
     NO_OBSTACLE,
     VEHICLE_LARGE,
@@ -12,7 +16,7 @@ enum obstacle_type
     STRUCTURE
 };
 
-enum vehicle_ID
+enum VehicleClass
 {
     NO_VEHICLE,
     EGO_VEHICLE,
@@ -21,15 +25,17 @@ enum vehicle_ID
     SUB_VEHICLE_3,
     SUB_VEHICLE_4
 };
-enum action_type{
+enum ActionClass
+{
     NO_ACTION,
     REMOVE_BLIND_SPOT,
     ALERT_OBSTACLE
 };
+
 struct fused_obstacle_env_data_type
 {
     int obstacle_id; //추가됨 obstacle tracking 및 고유 id 부여가 필요 
-    obstacle_type fused_index;
+    ObstacleClass fused_index;
     std::string timestamp;
     double fused_cuboid_x;
     double fused_cuboid_y;
@@ -55,7 +61,7 @@ bool operator == (const fused_obstacle_env_data_type &m1, const fused_obstacle_e
 
 struct fused_vehicle_data_type
 {
-    vehicle_ID vehicle_id;
+    VehicleClass vehicle_id;
     double Position_lat;
     double Position_long;
     double Position_height;
@@ -71,10 +77,10 @@ struct fused_vehicle_data_type
 struct obstacle_list_data_type
 {
     int obstacle_id; //추가됨 obstacle tracking 및 고유 id 부여가 필요 
-    obstacle_type obstacle_index;
+    ObstacleClass obstacle_index;
     std::string timestamp;
 //    std::vector<int> map_2d_location; 
-    action_type action_required;
+    ActionClass action_required;
     double fused_cuboid_x;
     double fused_cuboid_y;
     double fused_cuboid_z;
@@ -86,8 +92,8 @@ struct obstacle_list_data_type
     double fused_velocity_y;
     double fused_velocity_z;
 
-    obstacle_list_data_type(const int obstacle_id, const obstacle_type obstacle_index, const std::string timestamp,\
-    const action_type action_required, const double fused_cuboid_x, const double fused_cuboid_y, const double fused_cuboid_z,\
+    obstacle_list_data_type(const int obstacle_id, const ObstacleClass obstacle_index, const std::string timestamp,\
+    const ActionClass action_required, const double fused_cuboid_x, const double fused_cuboid_y, const double fused_cuboid_z,\
     const double fused_heading_angle, const double fused_Position_x,const double fused_Position_y, const double fused_Position_z,\
     const double fused_velocity_x, const double fused_velocity_y, const double fused_velocity_z)
     :obstacle_id(obstacle_id), obstacle_index(obstacle_index), timestamp(timestamp), action_required(action_required),\
@@ -96,12 +102,12 @@ struct obstacle_list_data_type
     fused_velocity_y(fused_velocity_y),fused_velocity_z(fused_velocity_z) {}
 };
 
-class map_data_type
+class MapData
 {
     public:
     fused_obstacle_env_data_type map_2d[n][m];
     std::vector <fused_vehicle_data_type> vehicle_list; 
-    //vehicle 개수가 가변적이라 vector 로 변경 필요
+    //vehicle 개수가 가변적이라 vector 로 변경 필요 -> 그것보다는 array가 나아서?
 
  //member function declaration   
     bool map_2d_init(fused_obstacle_env_data_type map_2d[n][m]) 
@@ -116,5 +122,24 @@ class map_data_type
 
 
 };
+
+//=====main_riskassessment specific definitions=======
+enum HazardClass
+{
+    NO_HAZARD,
+    BLIND_SPOT,
+    PEDESTRIAN_HAZARD
+};
+
+class RiskAssessment 
+{
+    int obstacle_id; //obstacle 고유 id
+    HazardClass hazard_class;
+
+};
+
+
+
+
 
 #endif
