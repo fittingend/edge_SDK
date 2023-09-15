@@ -54,6 +54,9 @@
 #include <stdio.h>
 #include <random>
 
+#include <array>
+#include <vector> 
+
 #include <ara/com/e2exf/status_handler.h>
 #include <ara/exec/execution_client.h>
 
@@ -63,6 +66,8 @@
 
 #include "risk_assessment_provider.h"
 #include "map_data_subscriber.h"
+
+#include "main_riskassessment.hpp"
 
 namespace
 {
@@ -157,20 +162,51 @@ void ThreadAct1()
                 adcm::Log::Verbose() << "vehicle.Velocity_long : "<< vehicle.Velocity_long;
                 adcm::Log::Verbose() << "vehicle.Velocity_lat : "<< vehicle.Velocity_lat;
                 adcm::Log::Verbose() << "vehicle.Velocity_ang : "<< vehicle.Velocity_ang;
-            }
+
+
+//================1. obstacle list 확인================
+
+                std::vector<obstacle_list_data_type> obstacle_list;
+// osbtacle_list 를 데이터 융합에서 받음
+
+                for (auto iter = obstacle_list.begin(); iter!= obstacle_list.end();iter++)
+                {
+                    switch(iter->action_required){
+
+                    case REMOVE_BLIND_SPOT:
+                    //블라인드 스팟 제거  - 남훈씨 작성
+
+                    case ALERT_OBSTACLE:
+                    // 
+                    confidence = 15 / distnace * 0.7
+
+                    7/ttc * 0.7 
+
+
+                }
+
+
+
+
+
+
+    
+                        // adcm::risk_assessment_Objects riskAssessment;
+
+                        // riskAssessment.hazard_index.clear();
+                        // riskAssessment.hazard_index.push_back("hazard_index_1");
+                        // riskAssessment.hazard_index.push_back("hazard_index_2");
+                        // riskAssessment.confidence.clear();
+                        // riskAssessment.confidence.push_back(m_ud_100_100(m_rand_eng));
+                        // riskAssessment.confidence.push_back(m_ud_100_100(m_rand_eng));
+
+                        // riskAssessment_provider.send(riskAssessment);
+
         }
 
-        {
-            adcm::risk_assessment_Objects riskAssessment;
 
-            riskAssessment.hazard_index.clear();
-            riskAssessment.hazard_index.push_back("hazard_index_1");
-            riskAssessment.hazard_index.push_back("hazard_index_2");
-            riskAssessment.confidence.clear();
-            riskAssessment.confidence.push_back(m_ud_100_100(m_rand_eng));
-            riskAssessment.confidence.push_back(m_ud_100_100(m_rand_eng));
 
-            riskAssessment_provider.send(riskAssessment);
+
             
 
 /*1. obstacle table 확인해 obstacle (이미 알고있는 hazard) 
