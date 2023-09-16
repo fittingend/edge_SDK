@@ -235,9 +235,17 @@ void ThreadAct1()
                     switch(iter->action_required){
 
                         case REMOVE_BLIND_SPOT:
+                        {
                         //블라인드 스팟 제거  - 남훈씨 작성
+                            risk_assessment.obstacle_id.push_back(iter->obstacle_id);
+                            risk_assessment.hazard_class.push_back(BLIND_SPOT);
+                            risk_assessment.isHazard.push_back(1);
+
+                            break;
+                        }
 
                         case ALERT_OBSTACLE: 
+                        {
                         //동적 장애물일 경우
                             risk_assessment.obstacle_id.push_back(iter->obstacle_id);
                             risk_assessment.hazard_class.push_back(PEDESTRIAN_HAZARD);
@@ -256,7 +264,9 @@ void ThreadAct1()
                             if (final_confidence > CONFIDENCE_THRESHOLD || final_confidence == CONFIDENCE_THRESHOLD)
                                 risk_assessment.isHazard.push_back(1);
                             else    
-                                risk_assessment.isHazard.push_back(1);
+                                risk_assessment.isHazard.push_back(0);
+                            break;
+                        }
                     }
                 }
 
