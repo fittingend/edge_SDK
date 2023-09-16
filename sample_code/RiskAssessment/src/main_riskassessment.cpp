@@ -174,7 +174,7 @@ void ThreadAct1()
                 auto vehicle = data->vehicle;
 
                 adcm::Log::Verbose() << "obstacle.Time_stamp : "<< obstacle.Time_stamp;
-                adcm::Log::Verbose() << "obstacle.obstacle_class : "<< obstacle.obstacle_class;
+                adcm::Log::Verbose() << "obstacle.fused_index : "<< obstacle.fused_index;
                 adcm::Log::Verbose() << "obstacle.fused_cuboid_x : "<< obstacle.fused_cuboid_x;
                 adcm::Log::Verbose() << "obstacle.fused_cuboid_y : "<< obstacle.fused_cuboid_y;
                 adcm::Log::Verbose() << "obstacle.fused_cuboid_z : "<< obstacle.fused_cuboid_z;
@@ -205,7 +205,7 @@ void ThreadAct1()
                 std::vector<ObstacleDataList> obstacle_list;
                 MapData map_data; 
                 // osbtacle_list 와 map_data 를 데이터 융합에서 받음
-                RiskAssessment risk_assessment;
+                std::vector<RiskAssessment> risk_assessment;
                 VehicleData ego_vehicle, sub_vehicle_1, sub_vehicle_2,sub_vehicle_3,sub_vehicle_4;
 
                 for (auto iter = map_data.vehicle_list.begin(); iter!=map_data.vehicle_list.end(); iter++)
@@ -239,20 +239,19 @@ void ThreadAct1()
 
                             float final_confidence = 0;
                             ObstacleEnvData current_obstacle = iter->obstacle_data;
-                            risk_assessment.obstacle_id.push_back(current_obstacle.obstacle_id);
-                            risk_assessment.hazard_class.push_back(BLIND_SPOT);
+                            // risk_assessment.obstacle_id.push_back(current_obstacle.obstacle_id);
+                            // risk_assessment.hazard_class.push_back(BLIND_SPOT);
                             // angle 포함 안시킨 경우
                             double xy_distance = getDistance(current_obstacle, ego_vehicle);
                             final_confidence = STRUCTURE_DISTANCE / xy_distance * 0.7;
                             if (final_confidence > CONFIDENCE_THRESHOLD || final_confidence == CONFIDENCE_THRESHOLD)
                             {
-                                risk_assessment.isHazard.push_back(1);
+                                risk_assessment.emplace_back(RiskAssessment(current_obstacle.obstacle_id, BLIND_SPOT, 1, final_confidence));
                             }
                             else
                             {
-                                risk_assessment.isHazard.push_back(0);
+                                risk_assessment.emplace_back(RiskAssessment(current_obstacle.obstacle_id, BLIND_SPOT, 0, final_confidence));
                             }
-                            risk_assessment.confidence.push_back(final_confidence);
                         } break;
 
                         case ALERT_OBSTACLE: 
@@ -260,8 +259,8 @@ void ThreadAct1()
                             //동적 장애물일 경우
                             float final_confidence = 0;
                             ObstacleEnvData current_obstacle = iter->obstacle_data;
-                            risk_assessment.obstacle_id.push_back(current_obstacle.obstacle_id);
-                            risk_assessment.hazard_class.push_back(PEDESTRIAN_HAZARD);
+                            // risk_assessment.obstacle_id.push_back(current_obstacle.obstacle_id);
+                            // risk_assessment.hazard_class.push_back(PEDESTRIAN_HAZARD);
 
                             double xy_distance = getDistance(current_obstacle, ego_vehicle);
                             double xy_ttc = getTTC(current_obstacle, ego_vehicle);
@@ -273,11 +272,11 @@ void ThreadAct1()
                                 final_confidence = dist_confidence;
 
                             if (final_confidence > CONFIDENCE_THRESHOLD || final_confidence == CONFIDENCE_THRESHOLD)
-                                risk_assessment.isHazard.push_back(1);
+                                risk_assessment.emplace_back(RiskAssessment(current_obstacle.obstacle_id, PEDESTRIAN_HAZARD, 1, final_confidence));
                             else
-                                risk_assessment.isHazard.push_back(0);
+                                risk_assessment.emplace_back(RiskAssessment(current_obstacle.obstacle_id, PEDESTRIAN_HAZARD, 0, final_confidence));
 
-                            risk_assessment.confidence.push_back(final_confidence);
+                            // risk_assessment.confidence.push_back(final_confidence);
                         } break;
                     }
                 }

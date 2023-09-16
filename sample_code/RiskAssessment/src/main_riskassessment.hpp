@@ -115,10 +115,11 @@ enum HazardClass
 class RiskAssessment 
 {
     public:
-        std::vector<int> obstacle_id; //obstacle 고유 id
-        std::vector<HazardClass> hazard_class;
-        std::vector<bool> isHazard;
-        std::vector<float> confidence;
-
+        int obstacle_id; //obstacle 고유 id
+        HazardClass hazard_class;
+        bool isHazard;
+        float confidence;
+        
+        RiskAssessment(const int obstacle_id, const HazardClass hazard_class, const bool isHazard, const float confidence):\
+        obstacle_id(obstacle_id), hazard_class(hazard_class), isHazard(isHazard), confidence(confidence) {}
 };
-//TODO 수정필요!
