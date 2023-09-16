@@ -115,26 +115,29 @@ double getDistance(double a_x, double a_y, double b_x, double b_y)
 
 double getTTC(obstacle_list_data_type obstacle, fused_vehicle_data_type vehicle)
 {
-    double ttc;
-    double obstacle_final_pos_x = obstacle.fused_Position_x + obstacle.fused_velocity_x*ttc;
-    double obstacle_final_pos_y = obstacle.fused_Position_y + obstacle.fused_velocity_y*ttc;
-    double vehicle_final_pos_x = vehicle.Position_long + vehicle.Velocity_long*ttc;
-    double vehicle_final_pos_y = vehicle.Position_lat + vehicle.Velocity_lat*ttc;
-
-    sqrt(pow(vehicle.Position_long+vehicle.Velocity_long*ttc ,2) + pow(vehicle.Position_lat+vehicle.Velocity_lat*ttc,2));
-    for (int t=0; t < 10; t=t+0.1)
+    double ttc=0;
+    double distance=0;
+    float t = 0.1;
+    double obstacle_final_pos_x, obstacle_final_pos_y, vehicle_final_pos_x, vehicle_final_pos_y;
+    
+    for (t; t < 10; t=t+0.05)
     {
-        if (getDistance(obstacle_final_pos_x,obstacle_final_pos_y,vehicle_final_pos_x,vehicle_final_pos_y) < COLLISION_DISTANCE)
-//            "COLLISION HAZARD!"; 
-        {    
-            ttc = t;
-            break;
+        obstacle_final_pos_x = obstacle.fused_Position_x + obstacle.fused_velocity_x*t;
+        obstacle_final_pos_y = obstacle.fused_Position_y + obstacle.fused_velocity_y*t;
+        vehicle_final_pos_x = vehicle.Position_long + vehicle.Velocity_long*t;
+        vehicle_final_pos_y = vehicle.Position_lat + vehicle.Velocity_lat*t;
+        distance=getDistance(obstacle_final_pos_x,obstacle_final_pos_y,vehicle_final_pos_x,vehicle_final_pos_y);
+
+        if (distance < COLLISION_DISTANCE)
+        {    //현재 상대 거리가 3m 인 경우 충돌이 일어났다고 가정-이 시간을 ttc로 정의
+            break; 
         }
     }
-
-
-}
-}  // namespace
+    ttc = t;
+//현재 ttc가 10초가 넘어가면 그냥 10초로 정의한다 
+    return ttc;
+}  
+// namespace
 
 void ThreadAct1()
 {
@@ -202,6 +205,7 @@ void ThreadAct1()
                 std::vector<obstacle_list_data_type> obstacle_list;
                 MapData map_data; 
 // osbtacle_list 와 map_data 를 데이터 융합에서 받음
+                RiskAssessment risk_assessment;
                 fused_vehicle_data_type ego_vehicle, sub_vehicle_1, sub_vehicle_2,sub_vehicle_3,sub_vehicle_4;
 
                 for (auto iter = map_data.vehicle_list.begin(); iter!=map_data.vehicle_list.end(); iter++)
@@ -235,19 +239,26 @@ void ThreadAct1()
 
                         case ALERT_OBSTACLE: 
                         //동적 장애물일 경우
+                            risk_assessment.obstacle_id.push_back(iter->obstacle_id);
+                            risk_assessment.hazard_class.push_back(PEDESTRIAN_HAZARD);
+
                             obstacle_list_data_type current_obstacle = *iter;
                             double final_confidence;
                             double xy_distance = getDistance(current_obstacle, ego_vehicle);
                             double xy_ttc = getTTC(current_obstacle, ego_vehicle);
                             double dist_confidence = PEDESTRIAN_DISTANCE/xy_distance*0.7; 
                             double ttc_confidence =  PEDESTRIAN_TTC/xy_ttc*0.7;
-                            if(ttc_confidence > dist_confidence)
+                            if (ttc_confidence > dist_confidence)
                                 final_confidence = ttc_confidence;
                             else    
                                 final_confidence = dist_confidence;
-                        
 
+                            if (final_confidence > CONFIDENCE_THRESHOLD || final_confidence == CONFIDENCE_THRESHOLD)
+                                risk_assessment.isHazard.push_back(1);
+                            else    
+                                risk_assessment.isHazard.push_back(1);
                     }
+                }
 
 
 
@@ -270,6 +281,7 @@ void ThreadAct1()
             }
 
         }
+    }
 
 
 
@@ -316,7 +328,7 @@ if (obstacle.index == "사람")
     bool obstacle.warning = TRUE;
 3. 후속 action 을 결정할 수 있게 됨 
 */            
-    }
+    
 }
 
 

@@ -1,10 +1,9 @@
-#define MAP_GENERATION
 #define n 1000 
 #define m 2000
 #define PEDESTRIAN_DISTANCE 15
 #define PEDESTRIAN_TTC 7
 #define COLLISION_DISTANCE 3
-#ifdef MAP_GENERATION
+#define CONFIDENCE_THRESHOLD 0.7
 
 
 enum ObstacleClass
@@ -133,13 +132,9 @@ enum HazardClass
 
 class RiskAssessment 
 {
-    int obstacle_id; //obstacle 고유 id
-    HazardClass hazard_class;
+    public:
+        std::vector<int> obstacle_id; //obstacle 고유 id
+        std::vector<HazardClass> hazard_class;
+        std::vector<bool> isHazard;
 
 };
-
-
-
-
-
-#endif
