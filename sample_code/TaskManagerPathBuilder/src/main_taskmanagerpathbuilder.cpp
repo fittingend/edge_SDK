@@ -148,7 +148,7 @@ void ThreadAct1()
                 auto vehicle = data->vehicle;
 
                 adcm::Log::Verbose() << "obstacle.Time_stamp : "<< obstacle.Time_stamp;
-                adcm::Log::Verbose() << "obstacle.fused_index : "<< obstacle.fused_index;
+                adcm::Log::Verbose() << "obstacle.obstacle_class : "<< obstacle.obstacle_class;
                 adcm::Log::Verbose() << "obstacle.fused_cuboid_x : "<< obstacle.fused_cuboid_x;
                 adcm::Log::Verbose() << "obstacle.fused_cuboid_y : "<< obstacle.fused_cuboid_y;
                 adcm::Log::Verbose() << "obstacle.fused_cuboid_z : "<< obstacle.fused_cuboid_z;

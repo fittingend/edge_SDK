@@ -102,7 +102,7 @@ bool RegisterSigTermHandler()
 
     return true;
 }
-double getDistance(obstacle_list_data_type obstacle, fused_vehicle_data_type vehicle)
+double getDistance(ObstacleEnvData obstacle, VehicleData vehicle)
 {
     return sqrt(pow(obstacle.fused_Position_x -vehicle.Position_lat,2)+ pow(obstacle.fused_Position_y -vehicle.Position_long, 2));
 }
@@ -113,7 +113,7 @@ double getDistance(double a_x, double a_y, double b_x, double b_y)
 }
 
 
-double getTTC(obstacle_list_data_type obstacle, fused_vehicle_data_type vehicle)
+double getTTC(ObstacleEnvData obstacle, VehicleData vehicle)
 {
     double ttc=0;
     double distance=0;
@@ -174,7 +174,7 @@ void ThreadAct1()
                 auto vehicle = data->vehicle;
 
                 adcm::Log::Verbose() << "obstacle.Time_stamp : "<< obstacle.Time_stamp;
-                adcm::Log::Verbose() << "obstacle.fused_index : "<< obstacle.fused_index;
+                adcm::Log::Verbose() << "obstacle.obstacle_class : "<< obstacle.obstacle_class;
                 adcm::Log::Verbose() << "obstacle.fused_cuboid_x : "<< obstacle.fused_cuboid_x;
                 adcm::Log::Verbose() << "obstacle.fused_cuboid_y : "<< obstacle.fused_cuboid_y;
                 adcm::Log::Verbose() << "obstacle.fused_cuboid_z : "<< obstacle.fused_cuboid_z;
@@ -200,13 +200,13 @@ void ThreadAct1()
                 adcm::Log::Verbose() << "vehicle.Velocity_ang : "<< vehicle.Velocity_ang;
 
 
-//================1. obstacle list 확인================
+                //================1. obstacle list 확인================
 
-                std::vector<obstacle_list_data_type> obstacle_list;
+                std::vector<ObstacleDataList> obstacle_list;
                 MapData map_data; 
-// osbtacle_list 와 map_data 를 데이터 융합에서 받음
+                // osbtacle_list 와 map_data 를 데이터 융합에서 받음
                 RiskAssessment risk_assessment;
-                fused_vehicle_data_type ego_vehicle, sub_vehicle_1, sub_vehicle_2,sub_vehicle_3,sub_vehicle_4;
+                VehicleData ego_vehicle, sub_vehicle_1, sub_vehicle_2,sub_vehicle_3,sub_vehicle_4;
 
                 for (auto iter = map_data.vehicle_list.begin(); iter!=map_data.vehicle_list.end(); iter++)
                 {
@@ -232,26 +232,37 @@ void ThreadAct1()
 
                 for (auto iter = obstacle_list.begin(); iter!= obstacle_list.end();iter++)
                 {
-                    switch(iter->action_required){
-
+                    switch(iter->action_required)
+                    {
                         case REMOVE_BLIND_SPOT:
                         {
-                        //블라인드 스팟 제거  - 남훈씨 작성
-                            risk_assessment.obstacle_id.push_back(iter->obstacle_id);
-                            risk_assessment.hazard_class.push_back(BLIND_SPOT);
-                            risk_assessment.isHazard.push_back(1);
 
-                            break;
-                        }
+                            float final_confidence = 0;
+                            ObstacleEnvData current_obstacle = iter->obstacle_data;
+                            risk_assessment.obstacle_id.push_back(current_obstacle.obstacle_id);
+                            risk_assessment.hazard_class.push_back(BLIND_SPOT);
+                            // angle 포함 안시킨 경우
+                            double xy_distance = getDistance(current_obstacle, ego_vehicle);
+                            final_confidence = STRUCTURE_DISTANCE / xy_distance * 0.7;
+                            if (final_confidence > CONFIDENCE_THRESHOLD || final_confidence == CONFIDENCE_THRESHOLD)
+                            {
+                                risk_assessment.isHazard.push_back(1);
+                            }
+                            else
+                            {
+                                risk_assessment.isHazard.push_back(0);
+                            }
+                            risk_assessment.confidence.push_back(final_confidence);
+                        } break;
 
                         case ALERT_OBSTACLE: 
                         {
-                        //동적 장애물일 경우
-                            risk_assessment.obstacle_id.push_back(iter->obstacle_id);
+                            //동적 장애물일 경우
+                            float final_confidence = 0;
+                            ObstacleEnvData current_obstacle = iter->obstacle_data;
+                            risk_assessment.obstacle_id.push_back(current_obstacle.obstacle_id);
                             risk_assessment.hazard_class.push_back(PEDESTRIAN_HAZARD);
 
-                            obstacle_list_data_type current_obstacle = *iter;
-                            double final_confidence;
                             double xy_distance = getDistance(current_obstacle, ego_vehicle);
                             double xy_ttc = getTTC(current_obstacle, ego_vehicle);
                             double dist_confidence = PEDESTRIAN_DISTANCE/xy_distance*0.7; 
@@ -263,81 +274,20 @@ void ThreadAct1()
 
                             if (final_confidence > CONFIDENCE_THRESHOLD || final_confidence == CONFIDENCE_THRESHOLD)
                                 risk_assessment.isHazard.push_back(1);
-                            else    
+                            else
                                 risk_assessment.isHazard.push_back(0);
-                            break;
-                        }
+
+                            risk_assessment.confidence.push_back(final_confidence);
+                        } break;
                     }
                 }
-
-
-
-
-
-
-
-    
-                        // adcm::risk_assessment_Objects riskAssessment;
-
-                        // riskAssessment.hazard_index.clear();
-                        // riskAssessment.hazard_index.push_back("hazard_index_1");
-                        // riskAssessment.hazard_index.push_back("hazard_index_2");
-                        // riskAssessment.confidence.clear();
-                        // riskAssessment.confidence.push_back(m_ud_100_100(m_rand_eng));
-                        // riskAssessment.confidence.push_back(m_ud_100_100(m_rand_eng));
-
-                        // riskAssessment_provider.send(riskAssessment);
+                // riskAssessment_provider.send(risk_assessment);
+                //risk_assessment 오브젝트 다음 모듈로 넘기기
                 }
             }
 
         }
     }
-
-
-
-
-            
-
-/*1. obstacle table 확인해 obstacle (이미 알고있는 hazard) 
-2. 2d_map 값 확인해서 현재 vehicle 의 위치와 비교
-3. 상대속도 및 angle 계산해 충돌이 일정시간 이내에 일어날 경우 confidence 값 지정 
-
-float collision_angle (ego_vehicle's angle, obstacle's angle)
-{
-    calcualte collision confidernce
-    ...
-    return collusion_angle_confidernce_value;
-}
-
-if (collusion_confidernce_value > certain_value)
-그러면 collision speed function 불러서 충돌 시간 계산
-float collision_time (ego_vehicle's speed, obstacle's speed)
-{
-    distance_between_ego_obstacle 구하고
-    speed 비교해서 
-    expected collision time 에 따라
-    return collision_time_confidence_value;
-
-}
-두개 값 합산해 confidence 계산 
-
-
-4. obstacle 종류에 따른 위험 요소 예) 사각지대 => 에 따른 후속 action 이 취해져야 함
-if obstacle.index == "장애물"
-if (obstacle.zvalue > certain value)
-    bool obstacle.blindspot = TRUE;
-
-
-==========사람이 등장! map_2d 및 obstacle table 값이 업데이트됨============
-
-if(obstable_table_updated)
-
-1. 사람 obstacle 추가된것을 확인 (새로운 hazard)
-2. 위와 마찬가지로 상대속도 및 angle 계산해 충돌이 일정시간 이내에 일어날 경우 confidence 값 지정 
-if (obstacle.index == "사람")
-    bool obstacle.warning = TRUE;
-3. 후속 action 을 결정할 수 있게 됨 
-*/            
     
 }
 
