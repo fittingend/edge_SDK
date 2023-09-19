@@ -271,8 +271,6 @@ void ThreadAct1()
                     // mapData.vehicle.Velocity_ang = m_ud_10000_10000(m_rand_eng);
 
                     // mapData_provider.send(mapData);
-#ifdef MAP_GENERATION
-
 
 //어떤 셀에 해당하는 obstacle 데이터인지 식별
 //which cell(s) does this obstacle belong to?
@@ -405,7 +403,6 @@ void ThreadAct1()
 //TO DO:
 //나중에 새로운 obstacle 정보가 수신 되었을때 지금 있는 obstacle 과 동일한 장애물이란걸 알아내는 알고리즘이 추가로 필요
 
-#endif
                 }
         }
 

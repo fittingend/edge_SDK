@@ -1,7 +1,5 @@
-#define MAP_GENERATION
-#define n 1000 
-#define m 2000
-#ifdef MAP_GENERATION
+#define n 4000 
+#define m 5000
 
 enum obstacle_type
 {
@@ -116,5 +114,3 @@ class map_data_type
 
 
 };
-
-#endif
