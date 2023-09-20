@@ -1,6 +1,6 @@
-#define n 4000 
-#define m 5000
-
+#define n 40
+#define m 50
+#define EDGE_WORKSHOP
 enum obstacle_type
 {
     NO_OBSTACLE,
