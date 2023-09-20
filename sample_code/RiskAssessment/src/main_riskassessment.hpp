@@ -1,5 +1,6 @@
-#define n 1000 
-#define m 2000
+#define n 40
+#define m 50
+#define EDGE_WORKSHOP
 #define STRUCTURE_DISTANCE 20
 #define PEDESTRIAN_DISTANCE 15
 #define PEDESTRIAN_TTC 7
