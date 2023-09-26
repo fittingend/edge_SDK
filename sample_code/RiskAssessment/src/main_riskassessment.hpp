@@ -48,7 +48,7 @@ struct ObstacleEnvData
     double fused_velocity_x;
     double fused_velocity_y;
     double fused_velocity_z;
-    double road_z[3];//TO DO: to define later 
+    double road_z;//TO DO: to define later 
 };
 
 //obstacle list 중복 확인을 위한 operator overload

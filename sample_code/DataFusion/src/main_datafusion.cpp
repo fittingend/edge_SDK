@@ -259,7 +259,7 @@ void ThreadAct1()
 
                     // mapData.environment.road_z = m_ud_10000_10000(m_rand_eng);
 
-                    // mapData.vehicle.Vehicle_id = m_ud_0_10000(m_rand_eng);
+                    // mapData.vehicle.VehicleClass = m_ud_0_10000(m_rand_eng);
                     // mapData.vehicle.Position_lat = m_ud_10000_10000(m_rand_eng);
                     // mapData.vehicle.Position_long = m_ud_10000_10000(m_rand_eng);
                     // mapData.vehicle.Position_Height = m_ud_10000_10000(m_rand_eng);
@@ -273,12 +273,12 @@ void ThreadAct1()
                     // mapData_provider.send(mapData);
  
     //==============1.데이터 융합=================
-                    fused_obstacle_env_data_type fused_obstacle_env_data = {0};
-                    fused_obstacle_env_data.fused_index=PEDESTRIAN;
-                    fused_vehicle_data_type fused_vehicle_data;
+                    ObstacleEnvData fused_obstacle_env_data = {0};
+                    fused_obstacle_env_data.obstacle_class=PEDESTRIAN;
+                    VehicleData fused_vehicle_data;
 
     //                fused_obstacle_env_data.timestamp = obstacle.Time_stamp;
-    //                fused_obstacle_env_data.fused_index = obstacle.index;
+    //                fused_obstacle_env_data.obstacle_class = obstacle.index;
     //....등 받은 데이터 단순 assignment 진행
 
     /*메인/보조 차량에서 오는 데이터 융합
@@ -287,10 +287,10 @@ void ThreadAct1()
     */
 
     //==============2.map_2d 생성 =================
-                    map_data_type map_data; 
+                    MapData map_data; 
 
     //<테스트용 코드 - obstacle 있는 cell 만 업데이트>=======================
-    // obstacle_type이 구조물이고 +  fused_cuboid_z 가 1m 이상(현재 임의로 지정)이여서 사각지대 가능성 발생 시나리오
+    // ObstacleClass이 구조물이고 +  fused_cuboid_z 가 1m 이상(현재 임의로 지정)이여서 사각지대 가능성 발생 시나리오
                     double fused_Position_x = 20; 
                     double fused_Position_y = 10; 
                     double fused_cuboid_x = 4; 
@@ -299,7 +299,7 @@ void ThreadAct1()
 
 
         //장애물이 없는 경우에는 차량의 위치 기준으로 반경 1m 노면 데이터를 업데이트 한다고 가정한다  
-                    if(fused_obstacle_env_data.fused_index == NO_OBSTACLE)
+                    if(fused_obstacle_env_data.obstacle_class == NO_OBSTACLE)
                     {
 
                     }
@@ -328,7 +328,7 @@ void ThreadAct1()
                             for (int j=fused_cuboid_x_start; j< fused_cuboid_x_end+1; j++)
                             {
                                 map_data.map_2d[i][j].timestamp = count; 
-                                map_data.map_2d[i][j].fused_index = fused_obstacle_env_data.fused_index;
+                                map_data.map_2d[i][j].obstacle_class = fused_obstacle_env_data.obstacle_class;
                                 map_data.map_2d[i][j].fused_cuboid_x = fused_cuboid_x; 
                                 map_data.map_2d[i][j].fused_cuboid_y = fused_cuboid_y;
                                 map_data.map_2d[i][j].fused_cuboid_z = fused_cuboid_z;
@@ -355,7 +355,7 @@ void ThreadAct1()
 
         //==============3.메인/보조차량 정보 업데이트=================
 
-//                    map_data.vehicle_list[0].vehicle_id={EGO_VEHICLE}; //현재 target 에 올리면 문제됨
+//                    map_data.vehicle_list[0].VehicleClass={EGO_VEHICLE}; //현재 target 에 올리면 문제됨
         // //....등등 1. 융합데이터에서 받은 정보 그대로 assign           
         
         // //            mapData_provider.send(map_data);//다른 모듈로 map_data 오브젝트 전달
@@ -363,14 +363,14 @@ void ThreadAct1()
         // //=============4.obstacle list 생성 =============
         // // 생성된 2d-map 을 기반으로 obstacle list 를 생성
 
-                    std::vector<obstacle_list_data_type> obstacle_list;
-                    std::vector<fused_obstacle_env_data_type> unique_map;
+                    std::vector<ObstacleList> obstacle_list;
+                    std::vector<ObstacleEnvData> unique_map;
 
                     for (int i=0; i<n;i++)
                     {
                         for (int j=0; j<m; j++)
                         {
-                            if (map_data.map_2d[i][j].fused_index != NO_OBSTACLE) //obstacle 있는 지도 값인 경우에 unique_map 에 저장
+                            if (map_data.map_2d[i][j].obstacle_class != NO_OBSTACLE) //obstacle 있는 지도 값인 경우에 unique_map 에 저장
                                 unique_map.push_back(map_data.map_2d[i][j]); 
                         }
                     }
@@ -381,16 +381,16 @@ void ThreadAct1()
 
                     for (auto iter = unique_map.begin(); iter!= unique_map.end();iter++)
                     {
-                        switch(iter->fused_index){
+                        switch(iter->obstacle_class){
 
                             case STRUCTURE: 
-                                obstacle_list.emplace_back(obstacle_list_data_type(iter->obstacle_id, iter->fused_index, iter->timestamp, REMOVE_BLIND_SPOT,\
+                                obstacle_list.emplace_back(ObstacleList(iter->obstacle_id, iter->obstacle_class, iter->timestamp, REMOVE_BLIND_SPOT,\
                                 iter->fused_cuboid_x, iter->fused_cuboid_y, iter->fused_cuboid_z, iter->fused_heading_angle, iter->fused_Position_x,\
                                 iter->fused_Position_y, iter->fused_Position_z, iter->fused_velocity_x, iter->fused_velocity_y, iter->fused_velocity_z));
                                 break;
 
                             case PEDESTRIAN:
-                                obstacle_list.emplace_back(obstacle_list_data_type(iter->obstacle_id, iter->fused_index, iter->timestamp, ALERT_OBSTACLE,\
+                                obstacle_list.emplace_back(ObstacleList(iter->obstacle_id, iter->obstacle_class, iter->timestamp, ALERT_OBSTACLE,\
                                 iter->fused_cuboid_x, iter->fused_cuboid_y, iter->fused_cuboid_z, iter->fused_heading_angle, iter->fused_Position_x,\
                                 iter->fused_Position_y, iter->fused_Position_z, iter->fused_velocity_x, iter->fused_velocity_y, iter->fused_velocity_z));
                                 break;
