@@ -1,4 +1,4 @@
-#define n 400
+#define n 4000
 #define m 5000
 
 enum ObstacleClass
@@ -45,35 +45,16 @@ struct ObstacleData
     unsigned short int fused_velocity_z;
 
     ObstacleData()
-    {
+    {}
 
-    }
-
-    ObstacleData(const int obstacle_id, const ObstacleClass obstacle_class, const std::string timestamp,
-                            const ActionClass action_required, const unsigned short int fused_cuboid_x, const unsigned short int fused_cuboid_y, const unsigned short int fused_cuboid_z,
-                            const unsigned short int fused_heading_angle, const unsigned short int fused_Position_x, const unsigned short int fused_Position_y, const unsigned short int fused_Position_z,
-                            const unsigned short int fused_velocity_x, const unsigned short int fused_velocity_y, const unsigned short int fused_velocity_z)
-        : obstacle_id(obstacle_id), obstacle_class(obstacle_class), timestamp(timestamp), action_required(action_required),
-          fused_cuboid_x(fused_cuboid_x), fused_cuboid_y(fused_cuboid_y), fused_cuboid_z(fused_cuboid_z), fused_heading_angle(fused_heading_angle),
-          fused_Position_x(fused_Position_x), fused_Position_y(fused_Position_y), fused_Position_z(fused_Position_z), fused_velocity_x(fused_velocity_x),
-          fused_velocity_y(fused_velocity_y), fused_velocity_z(fused_velocity_z) {}
 };
 
 struct ObstacleEnvData
 {
-    ObstacleData *obstacle_data; //8bytes
+    ObstacleData *obstacle_data; //8 bytes
     short int road_z; //2 bytes
     //패딩때문에 토탈 16 bytes
 };
-
-// // obstacle list 중복 확인을 위한 operator overload
-// bool operator==(const ObstacleEnvData &m1, const ObstacleEnvData &m2)
-// {
-//     if (m1.obstacle_id == m2.obstacle_id)
-//         return true;
-//     else
-//         return false;
-// }
 
 struct VehicleData
 {
@@ -94,14 +75,4 @@ struct MapData
     ObstacleEnvData map_2d[n][m]; //16bytes
     std::vector<VehicleData> vehicle_list; //32bytes
 
-    // member function declaration
-    bool map_2d_init(ObstacleEnvData map_2d[n][m])
-    {
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < m; j++)
-                map_2d[i][j] = {0}; // initize rest of members to 0
-        }
-        return true;
-    }
 };

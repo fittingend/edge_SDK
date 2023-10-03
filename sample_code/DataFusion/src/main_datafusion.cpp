@@ -107,6 +107,12 @@ bool RegisterSigTermHandler()
 
 }  // namespace
 
+//==============1.MapData 생성 =================
+
+MapData map_data;
+
+//=============================================
+
 void ThreadAct1()
 {
     adcm::Log::Info() << "DataFusion ThreadAct1";
@@ -272,16 +278,13 @@ void ThreadAct1()
 
                     // mapData_provider.send(mapData);
  
-//==============1.데이터 융합=================
+//==============2.데이터 융합=================
 // i)차량 정보 ii) 노면 정보 iii)장애물 정보를 융합
 
                     VehicleData fused_vehicle_data;
                     ObstacleData fused_obstacle_data;
-
-//==============2.MapData 생성 =================
-                    MapData map_data;
-
-//==============2.1 MapData에 노면데이터 추가 =================
+                   
+//==============3.1. MapData에 노면데이터 추가 =================
                     //TO DO:차량이 작업공간을 정찰할 동안 해당 그리드에 맞는 노면데이터 업데이트 
                     //해당 차량의 위치 정보로 업데이트 그리드의 인덱스를 찾아내는 수식 만들어야 함 
                     map_data.map_2d[23][4142].road_z= 132;
@@ -290,7 +293,7 @@ void ThreadAct1()
                     adcm::Log::Info() << "road info is " << map_data.map_2d[0][0].road_z;
 
 
-//==============2.2 장애물 리스트 생성 ================
+//==============3.2. 장애물 리스트 생성 ================
                     //융합 장애물 정보를 받은 후 장애물의 정보 리스트 생성
                     std::vector<ObstacleData> obstacle_list;
 
@@ -356,7 +359,7 @@ void ThreadAct1()
                         obstacle_list.push_back(current_obstacle);
                     }
 
-//==============2.3 2d MapData가 해당 장애물 정보를 point 하도록 설정================
+//==============3.3. 2d MapData가 해당 장애물 정보를 point 하도록 설정================
                     //작업환경내 최초 장애물 리스트가 완성되면 MapData의 해당 내용을 업데이트
                     //가능하다면 보조차량의 작업환경 이동이 끝난 후 실행
 
@@ -367,10 +370,12 @@ void ThreadAct1()
                         for (auto iter1 = iter->map_2d_location.begin(); iter1!= iter->map_2d_location.end(); iter1++)
                         {
                             map_data.map_2d[iter1->first][iter1->second].obstacle_data = &(*iter);
+                            //map_data.map_2d[iter1->first][iter1->second].obstacle_id = iter->obstacle_id;
+
                         }
                     }
 
-//==============3. MapData에 메인/보조차량 정보 업데이트==============================
+//==============3.4. MapData에 메인/보조차량 정보 업데이트==============================
 
                     // 융합데이터에서 받은 정보 그대로 assign       
                     map_data.vehicle_list.push_back(fused_vehicle_data);
@@ -384,6 +389,7 @@ void ThreadAct1()
 
                     // mapData_provider.send(mapData); //원본
                     adcm::Log::Info() << "obstacle id saved in [9][20] is  " << map_data.map_2d[9][20].obstacle_data->obstacle_id;
+                    adcm::Log::Info() << "size of MapData is  " << sizeof(map_data);
 
                 }
             }
