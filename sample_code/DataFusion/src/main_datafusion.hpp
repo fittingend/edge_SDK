@@ -44,9 +44,6 @@ struct ObstacleData
     unsigned short int fused_velocity_y;
     unsigned short int fused_velocity_z;
 
-    ObstacleData()
-    {}
-
 };
 
 struct ObstacleEnvData
@@ -58,7 +55,7 @@ struct ObstacleEnvData
 
 struct VehicleData
 {
-    VehicleClass vehicle_id;
+    VehicleClass vehicle_class;
     unsigned short int Position_lat;
     unsigned short int Position_long;
     unsigned short int Position_height;

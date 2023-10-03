@@ -250,40 +250,40 @@ void ThreadAct1()
                 {
                     adcm::map_data_Objects mapData;
 
-                    // mapData.obstacle.Time_stamp = "Time_stamp";
-                    // mapData.obstacle.fused_index = "fused_index";
-                    // mapData.obstacle.fused_cuboid_x = m_ud_10000_10000(m_rand_eng);
-                    // mapData.obstacle.fused_cuboid_y = m_ud_10000_10000(m_rand_eng);
-                    // mapData.obstacle.fused_cuboid_z = m_ud_10000_10000(m_rand_eng);
-                    // mapData.obstacle.fused_heading_angle = m_ud_10000_10000(m_rand_eng);
-                    // mapData.obstacle.fused_Position_x = m_ud_10000_10000(m_rand_eng);
-                    // mapData.obstacle.fused_Position_y = m_ud_10000_10000(m_rand_eng);
-                    // mapData.obstacle.fused_Position_z = m_ud_10000_10000(m_rand_eng);
-                    // mapData.obstacle.fused_velocity_x = m_ud_10000_10000(m_rand_eng);
-                    // mapData.obstacle.fused_velocity_y = m_ud_10000_10000(m_rand_eng);
-                    // mapData.obstacle.fused_velocity_z = m_ud_10000_10000(m_rand_eng);
+                    mapData.obstacle.Time_stamp = "Time_stamp";
+                    mapData.obstacle.fused_index = "fused_index";
+                    mapData.obstacle.fused_cuboid_x = m_ud_10000_10000(m_rand_eng);
+                    mapData.obstacle.fused_cuboid_y = m_ud_10000_10000(m_rand_eng);
+                    mapData.obstacle.fused_cuboid_z = m_ud_10000_10000(m_rand_eng);
+                    mapData.obstacle.fused_heading_angle = m_ud_10000_10000(m_rand_eng);
+                    mapData.obstacle.fused_Position_x = m_ud_10000_10000(m_rand_eng);
+                    mapData.obstacle.fused_Position_y = m_ud_10000_10000(m_rand_eng);
+                    mapData.obstacle.fused_Position_z = m_ud_10000_10000(m_rand_eng);
+                    mapData.obstacle.fused_velocity_x = m_ud_10000_10000(m_rand_eng);
+                    mapData.obstacle.fused_velocity_y = m_ud_10000_10000(m_rand_eng);
+                    mapData.obstacle.fused_velocity_z = m_ud_10000_10000(m_rand_eng);
 
-                    // mapData.environment.road_z = m_ud_10000_10000(m_rand_eng);
+                    mapData.environment.road_z = m_ud_10000_10000(m_rand_eng);
 
-                    // mapData.vehicle.VehicleClass = m_ud_0_10000(m_rand_eng);
-                    // mapData.vehicle.Position_lat = m_ud_10000_10000(m_rand_eng);
-                    // mapData.vehicle.Position_long = m_ud_10000_10000(m_rand_eng);
-                    // mapData.vehicle.Position_Height = m_ud_10000_10000(m_rand_eng);
-                    // mapData.vehicle.Yaw = m_ud_10000_10000(m_rand_eng);
-                    // mapData.vehicle.Roll = m_ud_10000_10000(m_rand_eng);
-                    // mapData.vehicle.Pitch = m_ud_10000_10000(m_rand_eng);
-                    // mapData.vehicle.Velocity_long = m_ud_10000_10000(m_rand_eng);
-                    // mapData.vehicle.Velocity_lat = m_ud_10000_10000(m_rand_eng);
-                    // mapData.vehicle.Velocity_ang = m_ud_10000_10000(m_rand_eng);
+                    mapData.vehicle.Vehicle_id = m_ud_0_10000(m_rand_eng);
+                    mapData.vehicle.Position_lat = m_ud_10000_10000(m_rand_eng);
+                    mapData.vehicle.Position_long = m_ud_10000_10000(m_rand_eng);
+                    mapData.vehicle.Position_Height = m_ud_10000_10000(m_rand_eng);
+                    mapData.vehicle.Yaw = m_ud_10000_10000(m_rand_eng);
+                    mapData.vehicle.Roll = m_ud_10000_10000(m_rand_eng);
+                    mapData.vehicle.Pitch = m_ud_10000_10000(m_rand_eng);
+                    mapData.vehicle.Velocity_long = m_ud_10000_10000(m_rand_eng);
+                    mapData.vehicle.Velocity_lat = m_ud_10000_10000(m_rand_eng);
+                    mapData.vehicle.Velocity_ang = m_ud_10000_10000(m_rand_eng);
 
                     // mapData_provider.send(mapData);
  
 //==============2.데이터 융합=================
 // i)차량 정보 ii) 노면 정보 iii)장애물 정보를 융합
 
-                    VehicleData fused_vehicle_data;
-                    ObstacleData fused_obstacle_data;
-                   
+                    VehicleData current_vehicle;
+                    ObstacleData current_obstacle;
+
 //==============3.1. MapData에 노면데이터 추가 =================
                     //TO DO:차량이 작업공간을 정찰할 동안 해당 그리드에 맞는 노면데이터 업데이트 
                     //해당 차량의 위치 정보로 업데이트 그리드의 인덱스를 찾아내는 수식 만들어야 함 
@@ -300,7 +300,6 @@ void ThreadAct1()
     //============== i) 장애물의 2d 그리드 맵 인덱스 페어 찾아서 저장 ================
 
                     //테스트용 코드
-                    ObstacleData current_obstacle;
                     current_obstacle.fused_Position_x = 20; 
                     current_obstacle.fused_Position_y = 10; 
                     current_obstacle.fused_cuboid_x = 4; 
@@ -335,8 +334,7 @@ void ThreadAct1()
                     second_obstacle.obstacle_id = 123;
                     obstacle_list.push_back(first_obstacle); 
                     obstacle_list.push_back(second_obstacle);
-                    obstacle_list.push_back(fused_obstacle_data);
-                    bool isNew = 1;
+                    bool isNewObstacle = 1;
 
                     //장애물 리스트상의 장애물 중복 확인
                     for (auto iter = obstacle_list.begin(); iter != obstacle_list.end(); iter++)
@@ -344,7 +342,7 @@ void ThreadAct1()
                         if (current_obstacle.obstacle_id == iter->obstacle_id)
                         { //obstacle info already on the list; update the outdated information 
                             *iter = current_obstacle;
-                            isNew = 0;
+                            isNewObstacle = 0;
                             break;
                         }
                         else
@@ -353,7 +351,7 @@ void ThreadAct1()
                         }
                     }
 
-                    if (isNew == true)
+                    if (isNewObstacle == true)
                     {
                         //new obstacle found; add it to the obstacle list
                         obstacle_list.push_back(current_obstacle);
@@ -378,7 +376,29 @@ void ThreadAct1()
 //==============3.4. MapData에 메인/보조차량 정보 업데이트==============================
 
                     // 융합데이터에서 받은 정보 그대로 assign       
-                    map_data.vehicle_list.push_back(fused_vehicle_data);
+                   //map_data.vehicle_list.push_back(fused_vehicle_data);
+                    
+                    bool isNewVehicle = 1;
+                    //메인 및 보조차량 정보 중복 확인 후 업데이트 
+                    for (auto iter = map_data.vehicle_list.begin(); iter != map_data.vehicle_list.end(); iter++)
+                    {
+                        if (current_vehicle.vehicle_class == iter->vehicle_class)
+                        { //vehicle info already on the list; update the outdated information 
+                            *iter = current_vehicle;
+                            isNewVehicle = 0;
+                            break;
+                        }
+                        else
+                        {
+                            continue;
+                        }
+                    }
+
+                    if (isNewVehicle == true)
+                    {
+                        //new vehicle found; add it to the vehicle list
+                        map_data.vehicle_list.push_back(current_vehicle);
+                    }
 
 //==============4. 다른 모듈로 데이터 전달=======================================
 
@@ -387,7 +407,7 @@ void ThreadAct1()
                     // mapData_provider.send(obstacle_list); 
                     // obstacle_list 도 전달
 
-                    // mapData_provider.send(mapData); //원본
+                    mapData_provider.send(mapData); //원본
                     adcm::Log::Info() << "obstacle id saved in [9][20] is  " << map_data.map_2d[9][20].obstacle_data->obstacle_id;
                     adcm::Log::Info() << "size of MapData is  " << sizeof(map_data);
 

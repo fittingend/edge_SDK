@@ -1,12 +1,10 @@
-#define n 40
-#define m 50
-#define EDGE_WORKSHOP
+#define n 4000
+#define m 5000
 #define STRUCTURE_DISTANCE 20
 #define PEDESTRIAN_DISTANCE 15
 #define PEDESTRIAN_TTC 7
 #define COLLISION_DISTANCE 3
 #define CONFIDENCE_THRESHOLD 0.7
-
 
 enum ObstacleClass
 {
@@ -33,79 +31,56 @@ enum ActionClass
     ALERT_OBSTACLE
 };
 
-struct ObstacleEnvData
+struct ObstacleData
 {
-    int obstacle_id; //추가됨 obstacle tracking 및 고유 id 부여가 필요 
+    unsigned short int obstacle_id;
     ObstacleClass obstacle_class;
     std::string timestamp;
-    double fused_cuboid_x;
-    double fused_cuboid_y;
-    double fused_cuboid_z;
-    double fused_heading_angle;
-    double fused_Position_x;
-    double fused_Position_y;
-    double fused_Position_z;
-    double fused_velocity_x;
-    double fused_velocity_y;
-    double fused_velocity_z;
-    double road_z;//TO DO: to define later 
+    std::vector<std::pair<unsigned short int,unsigned short int>> map_2d_location; //장애물이 위치한 2d 그리드 맵의 index 페어를 저장
+    ActionClass action_required;
+    unsigned short int fused_cuboid_x;
+    unsigned short int fused_cuboid_y;
+    unsigned short int fused_cuboid_z;
+    unsigned short int fused_heading_angle;
+    unsigned short int fused_Position_x;
+    unsigned short int fused_Position_y;
+    unsigned short int fused_Position_z;
+    unsigned short int fused_velocity_x;
+    unsigned short int fused_velocity_y;
+    unsigned short int fused_velocity_z;
+
 };
 
-//obstacle list 중복 확인을 위한 operator overload
-bool operator == (const ObstacleEnvData &m1, const ObstacleEnvData &m2)
+struct ObstacleEnvData
 {
-   if(m1.obstacle_id == m2.obstacle_id)
-     return true;
-   else
-     return false;
-}
+    ObstacleData *obstacle_data; //8 bytes
+    short int road_z; //2 bytes
+    //패딩때문에 토탈 16 bytes
+};
 
 struct VehicleData
 {
-    VehicleClass vehicle_id;
-    double Position_lat;
-    double Position_long;
-    double Position_height;
-    double Yaw;
-    double Roll;
-    double Pitch;
-    double Velocity_long;
-    double Velocity_lat;
-    double Velocity_ang;
+    VehicleClass vehicle_class;
+    unsigned short int Position_lat;
+    unsigned short int Position_long;
+    unsigned short int Position_height;
+    unsigned short int Yaw;
+    unsigned short int Roll;
+    unsigned short int Pitch;
+    unsigned short int Velocity_long;
+    unsigned short int Velocity_lat;
+    unsigned short int Velocity_ang;
 };
 
-class MapData
+struct MapData
 {
-    public:
-    ObstacleEnvData map_2d[n][m];
-    std::vector <VehicleData> vehicle_list; 
-    //vehicle 개수가 가변적이라 vector 로 변경 필요 -> 그것보다는 array가 나아서?
-
- //member function declaration   
-    bool map_2d_init(ObstacleEnvData map_2d[n][m]) 
-    {
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < m; j++)
-            map_2d[i][j] = {0}; // initize rest of members to 0 
-        }
-        return true;
-    }
-};
-class ObstacleDataList
-{
-    public:
-        ObstacleEnvData obstacle_data;
-        std::vector<std::pair<int,int>> map_2d_location; 
-        ActionClass action_required;
-
-        ObstacleDataList(ObstacleEnvData obstacle_data, const std::vector<std::pair<int,int>> map_2d_location, const ActionClass action_required):\
-        obstacle_data(obstacle_data), map_2d_location(map_2d_location),action_required(action_required) {}
+    ObstacleEnvData map_2d[n][m]; //16bytes
+    std::vector<VehicleData> vehicle_list; //32bytes
 
 };
-
 
 //=====main_riskassessment specific definitions=======
+
 enum HazardClass
 {
     NO_HAZARD,
@@ -113,14 +88,13 @@ enum HazardClass
     PEDESTRIAN_HAZARD
 };
 
-class RiskAssessment 
+struct RiskAssessment 
 {
-    public:
-        int obstacle_id; //obstacle 고유 id
-        HazardClass hazard_class;
-        bool isHazard;
-        float confidence;
+    unsigned short int obstacle_id; //obstacle 고유 id
+    HazardClass hazard_class;
+    bool isHazard;
+    float confidence;
         
-        RiskAssessment(const int obstacle_id, const HazardClass hazard_class, const bool isHazard, const float confidence):\
-        obstacle_id(obstacle_id), hazard_class(hazard_class), isHazard(isHazard), confidence(confidence) {}
+    RiskAssessment(const unsigned short int obstacle_id, const HazardClass hazard_class, const bool isHazard, const float confidence):\
+    obstacle_id(obstacle_id), hazard_class(hazard_class), isHazard(isHazard), confidence(confidence) {}
 };

@@ -102,7 +102,11 @@ bool RegisterSigTermHandler()
 
     return true;
 }
-double getDistance(ObstacleEnvData obstacle, VehicleData vehicle)
+
+
+//============== 함수 definition =================
+
+double getDistance(ObstacleData obstacle, VehicleData vehicle)
 {
     return sqrt(pow(obstacle.fused_Position_x -vehicle.Position_lat,2)+ pow(obstacle.fused_Position_y -vehicle.Position_long, 2));
 }
@@ -111,7 +115,7 @@ double getDistance(double a_x, double a_y, double b_x, double b_y)
     return sqrt(pow(a_x-b_x,2)+ pow(a_y-b_y, 2));
 
 }
-double getTTC(ObstacleEnvData obstacle, VehicleData vehicle)
+double getTTC(ObstacleData obstacle, VehicleData vehicle)
 {
     double ttc=0;
     double distance=0;
@@ -136,9 +140,16 @@ double getTTC(ObstacleEnvData obstacle, VehicleData vehicle)
     return ttc;
 }  
 
+//===============================
 
 }  // namespace
 
+
+//==============1. MapData 생성 =================
+//TO DO: Datafusion 에서 제대로 받아오면 삭제
+//현재 테스트용
+MapData map_data;
+//=============================================
 
 void ThreadAct1()
 {
@@ -207,109 +218,106 @@ void ThreadAct1()
 
                 //================1. obstacle list 확인================
 
-                std::vector<ObstacleDataList> obstacle_list;
+                std::vector<ObstacleData> obstacle_list;
                 std::vector<RiskAssessment> risk_assessment;
-                // MapData map_data; 
-                // obstacle_list[0].action_required = REMOVE_BLIND_SPOT;
-                // obstacle_list[0].obstacle_data.fused_Position_x = 20;
-                // obstacle_list[0].obstacle_data.fused_Position_y = 10;
-                // map_data.vehicle_list[0].vehicle_id = EGO_VEHICLE;
-                // map_data.vehicle_list[0].Position_long = 5;
-                // map_data.vehicle_list[0].Position_lat = 3;
 
-                //osbtacle_list 와 map_data 를 데이터 융합에서 받음
+                //테스트용 코드
+                //실제로는 obstacle list 는 Datafusion 에서 받음
+                ObstacleData current_obstacle;
+                current_obstacle.obstacle_id = 142;
+                current_obstacle.action_required = REMOVE_BLIND_SPOT;
+                current_obstacle.fused_Position_x = 20; 
+                current_obstacle.fused_Position_y = 10; 
+                current_obstacle.fused_cuboid_x = 4; 
+                current_obstacle.fused_cuboid_y = 2;
+                current_obstacle.fused_cuboid_z = 10;
+                obstacle_list.push_back(current_obstacle);
+                
+                VehicleData current_vehicle;
+                current_vehicle.vehicle_class = EGO_VEHICLE;
+                current_vehicle.Position_lat = 5;
+                current_vehicle.Position_lat = 3;
+                map_data.vehicle_list.push_back(current_vehicle);
 
                 VehicleData ego_vehicle, sub_vehicle_1, sub_vehicle_2,sub_vehicle_3,sub_vehicle_4;
 
-                // for (auto iter = map_data.vehicle_list.begin(); iter!=map_data.vehicle_list.end(); iter++)
-                // {
-                //     switch(iter->vehicle_id)
-                //     {
-                //         case EGO_VEHICLE:
-                //             ego_vehicle = *iter;
-                //             break;
-                //         case SUB_VEHICLE_1:
-                //             sub_vehicle_1 = *iter;
-                //             break;
-                //         case SUB_VEHICLE_2:
-                //             sub_vehicle_2 = *iter;
-                //             break;
-                //         case SUB_VEHICLE_3:
-                //             sub_vehicle_3 = *iter;
-                //             break;
-                //         case SUB_VEHICLE_4:
-                //             sub_vehicle_4 = *iter;
-                //             break;
-                //     }
-                // }
+                for (auto iter = map_data.vehicle_list.begin(); iter!=map_data.vehicle_list.end(); iter++)
+                {
+                    switch(iter->vehicle_class)
+                    {
+                        case EGO_VEHICLE:
+                            ego_vehicle = *iter;
+                            break;
+                        case SUB_VEHICLE_1:
+                            sub_vehicle_1 = *iter;
+                            break;
+                        case SUB_VEHICLE_2:
+                            sub_vehicle_2 = *iter;
+                            break;
+                        case SUB_VEHICLE_3:
+                            sub_vehicle_3 = *iter;
+                            break;
+                        case SUB_VEHICLE_4:
+                            sub_vehicle_4 = *iter;
+                            break;
+                    }
+                }
 
+                for (auto iter = obstacle_list.begin(); iter!= obstacle_list.end();iter++)
+                {
+                    switch(iter->action_required)
+                    {
+                        case REMOVE_BLIND_SPOT:
+                        {
+                            float final_confidence = 0;
+                            // risk_assessment.obstacle_id.push_back(current_obstacle.obstacle_id);
+                            // risk_assessment.hazard_class.push_back(BLIND_SPOT);
+                            // angle 포함 안시킨 경우
+                            double xy_distance = getDistance(*iter, ego_vehicle);
+                            final_confidence = STRUCTURE_DISTANCE / xy_distance * 0.7;
+                            if (final_confidence > CONFIDENCE_THRESHOLD || final_confidence == CONFIDENCE_THRESHOLD)
+                            {
+                                risk_assessment.emplace_back(RiskAssessment(iter->obstacle_id, BLIND_SPOT, 1, final_confidence));
+                            }
+                            else
+                            {
+                                risk_assessment.emplace_back(RiskAssessment(iter->obstacle_id, BLIND_SPOT, 0, final_confidence));
+                            }
+                            adcm::Log::Info() << "confident for blindspot is " << final_confidence;
+                            adcm::Log::Info() << "obstalce id is " << risk_assessment[0].obstacle_id;
+
+                        } break;
+
+                        case ALERT_OBSTACLE: 
+                        {
+                            //동적 장애물일 경우
+                            float final_confidence = 0;
+                            double xy_distance = getDistance(*iter, ego_vehicle);
+                            double xy_ttc = getTTC(*iter, ego_vehicle);
+                            double dist_confidence = PEDESTRIAN_DISTANCE/xy_distance*0.7; 
+                            double ttc_confidence =  PEDESTRIAN_TTC/xy_ttc*0.7;
+                            if (ttc_confidence > dist_confidence)
+                                final_confidence = ttc_confidence;
+                            else    
+                                final_confidence = dist_confidence;
+
+                            if (final_confidence > CONFIDENCE_THRESHOLD || final_confidence == CONFIDENCE_THRESHOLD)
+                                risk_assessment.emplace_back(RiskAssessment(iter->obstacle_id, PEDESTRIAN_HAZARD, 1, final_confidence));
+                            else
+                                risk_assessment.emplace_back(RiskAssessment(iter->obstacle_id, PEDESTRIAN_HAZARD, 0, final_confidence));
+                        } break;
+                    }
+                }
+
+                //dummy output 
                 riskAssessment.hazard_index.clear();
                 riskAssessment.hazard_index.push_back("BLIND_SPOT");
 
                 riskAssessment.confidence.clear();
                 riskAssessment.confidence.push_back(0.9);
                 // adcm::Log::Info() << "Data sent (hazard index):  " << riskAssessment.hazard_index[0];
-                adcm::Log::Info() << "Data sent (confidence):  " << 0.9;
-
                 riskAssessment_provider.send(riskAssessment);
             }
-
-
-//                 risk_assessment[0].confidence = 0.9;
-//                 // risk_assessment[1].confidence = 0.7;
-
-
-                // for (auto iter = obstacle_list.begin(); iter!= obstacle_list.end();iter++)
-                // {
-                //     switch(iter->action_required)
-                //     {
-                //         case REMOVE_BLIND_SPOT:
-                //         {
-
-                //             float final_confidence = 0;
-                //             ObstacleEnvData current_obstacle = iter->obstacle_data;
-                //             // risk_assessment.obstacle_id.push_back(current_obstacle.obstacle_id);
-                //             // risk_assessment.hazard_class.push_back(BLIND_SPOT);
-                //             // angle 포함 안시킨 경우
-                //             double xy_distance = getDistance(current_obstacle, ego_vehicle);
-                //             final_confidence = STRUCTURE_DISTANCE / xy_distance * 0.7;
-                //             if (final_confidence > CONFIDENCE_THRESHOLD || final_confidence == CONFIDENCE_THRESHOLD)
-                //             {
-                //                 risk_assessment.emplace_back(RiskAssessment(current_obstacle.obstacle_id, BLIND_SPOT, 1, final_confidence));
-                //             }
-                //             else
-                //             {
-                //                 risk_assessment.emplace_back(RiskAssessment(current_obstacle.obstacle_id, BLIND_SPOT, 0, final_confidence));
-                //             }
-                //         } break;
-
-                //         case ALERT_OBSTACLE: 
-                //         {
-                //             //동적 장애물일 경우
-                //             float final_confidence = 0;
-                //             ObstacleEnvData current_obstacle = iter->obstacle_data;
-                //             // risk_assessment.obstacle_id.push_back(current_obstacle.obstacle_id);
-                //             // risk_assessment.hazard_class.push_back(PEDESTRIAN_HAZARD);
-
-                //             double xy_distance = getDistance(current_obstacle, ego_vehicle);
-                //             double xy_ttc = getTTC(current_obstacle, ego_vehicle);
-                //             double dist_confidence = PEDESTRIAN_DISTANCE/xy_distance*0.7; 
-                //             double ttc_confidence =  PEDESTRIAN_TTC/xy_ttc*0.7;
-                //             if (ttc_confidence > dist_confidence)
-                //                 final_confidence = ttc_confidence;
-                //             else    
-                //                 final_confidence = dist_confidence;
-
-                //             if (final_confidence > CONFIDENCE_THRESHOLD || final_confidence == CONFIDENCE_THRESHOLD)
-                //                 risk_assessment.emplace_back(RiskAssessment(current_obstacle.obstacle_id, PEDESTRIAN_HAZARD, 1, final_confidence));
-                //             else
-                //                 risk_assessment.emplace_back(RiskAssessment(current_obstacle.obstacle_id, PEDESTRIAN_HAZARD, 0, final_confidence));
-
-                //             // risk_assessment.confidence.push_back(final_confidence);
-                //         } break;
-                //     }
-                // }
-
         }
     }   
 }
