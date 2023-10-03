@@ -273,13 +273,13 @@ void ThreadAct1()
                     // mapData_provider.send(mapData);
  
     //==============1.데이터 융합=================
-                    // ObstacleEnvData fused_obstacle_env_data = {0};
-                    // fused_obstacle_env_data.obstacle_class=PEDESTRIAN;
-                    // VehicleData fused_vehicle_data;
+    // i)차량 정보 ii) 노면 정보 iii)장애물 정보를 융합
 
-    //                fused_obstacle_env_data.timestamp = obstacle.Time_stamp;
-    //                fused_obstacle_env_data.obstacle_class = obstacle.index;
-    //....등 받은 데이터 단순 assignment 진행
+                    VehicleData fused_vehicle_data;
+                    ObstacleData fused_obstacle_data;
+
+                    //테스트용 fused_obstacle_data 
+                    // fused_obstacle_data.fused_Position_x
 
     /*메인/보조 차량에서 오는 데이터 융합
     9월 워크샵때는 차량 1대만 고려하기 때문에 융합 부분은 구현 X 
@@ -287,34 +287,99 @@ void ThreadAct1()
     */
 
     //==============2.MapData 생성 =================
-                    adcm::Log::Info() << "before generation";
                     MapData map_data;
-                    adcm::Log::Info() << "after generation";
 
 
-   //==============2.1 노면데이터 생성 =================
+    //==============2.1 MapData에 노면데이터 추가 =================
                     //TO DO:차량이 작업공간을 정찰할 동안 해당 그리드에 맞는 노면데이터 업데이트 
+                    //해당 차량의 위치 정보로 업데이트 그리드의 인덱스를 찾아내는 수식 만들어야 함 
                     map_data.map_2d[3999][4999].road_z= 0;
-                    adcm::Log::Info() << "road info is " << map_data.map_2d[0][0].road_z;
+                    adcm::Log::Info() << "road info is " << map_data.map_2d[3999][4999].road_z;
 
-    //==============2.2 장애물 정보 생성 ================
-                    //차량이 작업공간을 정찰할 동안 작업공간에 있는 장애물의 정보 리스트 생성
+    //==============2.2 장애물 리스트 생성 ================
+                    //융합 장애물 정보를 받은 후 장애물의 정보 리스트 생성
                     std::vector<ObstacleData> obstacle_list;
-                    //테스트용 obstacle id 
+
+                    //장애물의 map_2d_location 계산이 필요. 위와 동일한 수식 써서 그리드 인덱스 찾아내야함
+
+                    //<테스트용 코드 - obstacle 있는 cell 만 업데이트
+                    // ObstacleClass이 구조물이고 +  fused_cuboid_z 가 1m 이상(현재 임의로 지정)이여서 사각지대 가능성 발생 시나리오
+                    ObstacleData current_obstacle;
+                    current_obstacle.fused_Position_x = 20; 
+                    current_obstacle.fused_Position_y = 10; 
+                    current_obstacle.fused_cuboid_x = 4; 
+                    current_obstacle.fused_cuboid_y = 2;
+                    current_obstacle.fused_cuboid_z = 10;  
+
+                    int fused_cuboid_x_start = static_cast<int> (current_obstacle.fused_Position_x - (current_obstacle.fused_cuboid_x/2));
+                    int fused_cuboid_x_end = static_cast<int> (current_obstacle.fused_Position_x + (current_obstacle.fused_cuboid_x/2));
+
+                    int fused_cuboid_y_start = static_cast<int> (current_obstacle.fused_Position_y - (current_obstacle.fused_cuboid_y/2));
+                    int fused_cuboid_y_end = static_cast<int> (current_obstacle.fused_Position_y + (current_obstacle.fused_cuboid_y/2));
+
+                    int count = 0;
+                    adcm::Log::Info() << "i is from  " << fused_cuboid_y_start << " to " << fused_cuboid_y_end;
+                    adcm::Log::Info() << "j is from " <<  fused_cuboid_x_start << " to "<< fused_cuboid_x_end;
+                    for (int i=fused_cuboid_y_start; i<fused_cuboid_y_end+1; i++)
+                    {
+                        for (int j=fused_cuboid_x_start; j< fused_cuboid_x_end+1; j++)
+                        {
+                            current_obstacle.map_2d_location.push_back(std::make_pair(i,j));
+                        }
+                    }
+                    
+
+
+                    // //해당 map cell 에다 데이터 집어 넣기      
+                    // for (int i=fused_cuboid_y_start; i<fused_cuboid_y_end+1; i++)
+                    // {
+                    //     for (int j=fused_cuboid_x_start; j< fused_cuboid_x_end+1; j++)
+                    //     {
+                    //         map_data.map_2d[i][j].obstacle_data->obstacle_id = 123; 
+                    //         map_data.map_2d[i][j].obstacle_class = fused_obstacle_env_data.obstacle_class;
+                    //         map_data.map_2d[i][j].fused_cuboid_x = fused_cuboid_x; 
+                    //         map_data.map_2d[i][j].fused_cuboid_y = fused_cuboid_y;
+                    //         map_data.map_2d[i][j].fused_cuboid_z = fused_cuboid_z;
+                    //         map_data.map_2d[i][j].fused_Position_x = fused_Position_x;
+                    //         map_data.map_2d[i][j].fused_Position_y = fused_Position_y;
+                    //         count++;
+                    //         //등의 데이터 assignment 
+                    //     }
+                    // }
+// #ifdef EDGE_WORKSHOP
+//                         int i = fused_cuboid_y_start;
+//                         int j = fused_cuboid_x_start;
+//                         mapData.obstacle.Time_stamp = "123";
+//                         mapData.obstacle.fused_index = "fused_index";
+//                         mapData.obstacle.fused_cuboid_x = map_data.map_2d[i][j].fused_cuboid_x;
+//                         mapData.obstacle.fused_cuboid_y = map_data.map_2d[i][j].fused_cuboid_y;
+//                         mapData.obstacle.fused_cuboid_z = map_data.map_2d[i][j].fused_cuboid_z;
+//                         mapData.obstacle.fused_Position_x = map_data.map_2d[i][j].fused_Position_x;
+//                         mapData.obstacle.fused_Position_y = map_data.map_2d[i][j].fused_Position_y;
+//                     }
+//                     adcm::Log::Info() << "Data sent (dummy timestamp): "  << mapData.obstacle.Time_stamp;
+//                    mapData_provider.send(mapData);
+//#endif
+
+
+                    //테스트용 obstacle id 시작
                     ObstacleData first_obstacle;
                     ObstacleData second_obstacle;
-                    ObstacleData current_obstacle;
                     current_obstacle.obstacle_id = 1234;
                     first_obstacle.obstacle_id = 1;
                     second_obstacle.obstacle_id = 123;
-                    obstacle_list.push_back(first_obstacle);
+                    obstacle_list.push_back(first_obstacle); 
                     obstacle_list.push_back(second_obstacle);
+                    obstacle_list.push_back(fused_obstacle_data);
+                    //테스트용 obstacle id 종료
                     bool isNew = 1;
 
+                    //장애물 리스트상의 장애물 중복 확인
                     for (auto iter = obstacle_list.begin(); iter != obstacle_list.end(); iter++)
                     {
                         if (current_obstacle.obstacle_id == iter->obstacle_id)
                         { //obstacle info already on the list; update the outdated information 
+                            *iter = current_obstacle;
                             isNew = 0;
                             break;
                         }
@@ -329,37 +394,16 @@ void ThreadAct1()
                         //new obstacle found; add it to the obstacle list
                         obstacle_list.push_back(current_obstacle);
                     }
-                    //==============2.3 2d mapdata의 포인터가 해당 장애물 정보를 point ================
-                    // map_data.map_2d[0][0].obstacle_id = 123;
-                    // map_data.map_2d[3999][4999].obstacle_id = 321;
-                    // adcm::Log::Info() << "obstacle id is : "<< map_data.map_2d[3999][4999].obstacle_id;
 
+//==============2.3 2d MapData가 해당 장애물 정보를 point 하도록 설정================
+                    //작업환경내 모든 장애물 리스트가 완성되면 MapData의 해당 내용을 업데이트
 
                     map_data.map_2d[0][0].obstacle_data = &obstacle_list[0];
                     map_data.map_2d[3999][4999].obstacle_data = &obstacle_list[1];
-                    adcm::Log::Info() << sizeof(map_data)<< "bytes";
+                    adcm::Log::Info() << "size of map_data is " << sizeof(map_data)/(1024*1024)<< "MB";
                     adcm::Log::Info() << "obstacle id is " << map_data.map_2d[3999][4999].obstacle_data->obstacle_id;
 
 
-
-
-
-//     //<테스트용 코드 - obstacle 있는 cell 만 업데이트>=======================
-//     // ObstacleClass이 구조물이고 +  fused_cuboid_z 가 1m 이상(현재 임의로 지정)이여서 사각지대 가능성 발생 시나리오
-//                     double fused_Position_x = 20; 
-//                     double fused_Position_y = 10; 
-//                     double fused_cuboid_x = 4; 
-//                     double fused_cuboid_y = 2; //임의지정 1m
-//                     double fused_cuboid_z = 10;  //임의지정 1m
-
-
-//         //장애물이 없는 경우에는 차량의 위치 기준으로 반경 1m 노면 데이터를 업데이트 한다고 가정한다  
-//                     if(fused_obstacle_env_data.obstacle_class == NO_OBSTACLE)
-//                     {
-
-//                     }
-//                     else //장애물이 있는 경우에는 장애물 사이즈를 구하고 
-//                     {
 // //==================2.1. 장애물이 있는 경우========================
 //                     //obstacle 의 중복여부 확인 후 obstacle list object 생성하고 값 assign
 //                     // 중복? 이미 있는 object에 값만 overwrite 하기 

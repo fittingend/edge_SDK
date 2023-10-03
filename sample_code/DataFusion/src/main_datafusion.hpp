@@ -1,6 +1,5 @@
 #define n 4000
 #define m 5000
-#define EDGE_WORKSHOP
 enum ObstacleClass
 {
     NO_OBSTACLE,
@@ -28,10 +27,10 @@ enum ActionClass
 
 struct ObstacleData
 {
-    int obstacle_id; // 추가됨 obstacle tracking 및 고유 id 부여가 필요
+    unsigned short int obstacle_id;
     ObstacleClass obstacle_class;
     std::string timestamp;
-    //    std::vector<int> map_2d_location;
+    std::vector<std::pair<unsigned short int,unsigned short int>> map_2d_location; //장애물이 위치한 2d 그리드 맵의 index 페어를 저장
     ActionClass action_required;
     unsigned short int fused_cuboid_x;
     unsigned short int fused_cuboid_y;
@@ -62,7 +61,6 @@ struct ObstacleData
 struct ObstacleEnvData
 {
     ObstacleData *obstacle_data; //8bytes
-    //unsigned short int obstacle_id;
     short int road_z; //2 bytes
     //패딩때문에 토탈 16 bytes
 };
