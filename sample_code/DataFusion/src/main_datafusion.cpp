@@ -286,8 +286,55 @@ void ThreadAct1()
     받은 데이터 그대로 전달하면 OK 
     */
 
-    //==============2.map_2d 생성 =================
-                    MapData map_data; 
+    //==============2.MapData 생성 =================
+                    MapData map_data;
+
+   //==============2.1 노면데이터 생성 =================
+                    //TO DO:차량이 작업공간을 정찰할 동안 해당 그리드에 맞는 노면데이터 업데이트 
+                    map_data.map_2d[0][0].road_z = 0;
+                    std::cout << sizeof(map_data.map_2d[0][0].road_z) << std::endl;
+                    std::cout << sizeof(map_data.map_2d[0][0].obstacle_id) << std::endl;
+                    std::cout << sizeof(map_data.map_2d[0][0]) << std::endl;
+
+    //==============2.2 장애물 정보 생성 ================
+                    //차량이 작업공간을 정찰할 동안 작업공간에 있는 장애물의 정보 리스트 생성
+                    std::vector<ObstacleData> obstacle_list;
+                    //테스트용 obstacle id 
+                    ObstacleData first_obstacle;
+                    ObstacleData second_obstacle;
+                    ObstacleData current_obstacle;
+                    current_obstacle.obstacle_id = 1234;
+                    first_obstacle.obstacle_id = 1;
+                    second_obstacle.obstacle_id = 123;
+                    obstacle_list.push_back(first_obstacle);
+                    obstacle_list.push_back(second_obstacle);
+                    bool isNew = 1;
+
+                    for (auto iter = obstacle_list.begin(); iter != obstacle_list.end(); iter++)
+                    {
+                        if (current_obstacle.obstacle_id == iter->obstacle_id)
+                        { //obstacle info already on the list; update the outdated information 
+                            isNew = 0;
+                            break;
+                        }
+                        else
+                        {
+                            continue;
+                        }
+                    }
+
+                    if (isNew == true)
+                    {
+                        //new obstacle found; add it to the obstacle list
+                        obstacle_list.push_back(current_obstacle);
+                    }
+                    //==============2.3 2d mapdata의 포인터가 해당 장애물 정보를 point ================
+
+                /*  map_data.map_2d[0][0].obstacle = &obstacle_list[0];
+                    map_data.map_2d[99][499].obstacle = &obstacle_list[1];*/
+                    std::cout << sizeof(map_data)<< "bytes" << std::endl;
+
+
 
     //<테스트용 코드 - obstacle 있는 cell 만 업데이트>=======================
     // ObstacleClass이 구조물이고 +  fused_cuboid_z 가 1m 이상(현재 임의로 지정)이여서 사각지대 가능성 발생 시나리오

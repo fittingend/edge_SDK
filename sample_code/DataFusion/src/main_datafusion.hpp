@@ -25,22 +25,41 @@ enum ActionClass
     REMOVE_BLIND_SPOT,
     ALERT_OBSTACLE
 };
-struct ObstacleEnvData
+
+struct ObstacleData
 {
     int obstacle_id; // 추가됨 obstacle tracking 및 고유 id 부여가 필요
     ObstacleClass obstacle_class;
     std::string timestamp;
-    double fused_cuboid_x;
-    double fused_cuboid_y;
-    double fused_cuboid_z;
-    double fused_heading_angle;
-    double fused_Position_x;
-    double fused_Position_y;
-    double fused_Position_z;
-    double fused_velocity_x;
-    double fused_velocity_y;
-    double fused_velocity_z;
-    double road_z; // TO DO: to define later
+    //    std::vector<int> map_2d_location;
+    ActionClass action_required;
+    unsigned short int fused_cuboid_x;
+    unsigned short int fused_cuboid_y;
+    unsigned short int fused_cuboid_z;
+    unsigned short int fused_heading_angle;
+    unsigned short int fused_Position_x;
+    unsigned short int fused_Position_y;
+    unsigned short int fused_Position_z;
+    unsigned short int fused_velocity_x;
+    unsigned short int fused_velocity_y;
+    unsigned short int fused_velocity_z;
+
+    ObstacleData(const int obstacle_id, const ObstacleClass obstacle_class, const std::string timestamp,
+                            const ActionClass action_required, const unsigned short int fused_cuboid_x, const unsigned short int fused_cuboid_y, const unsigned short int fused_cuboid_z,
+                            const unsigned short int fused_heading_angle, const unsigned short int fused_Position_x, const unsigned short int fused_Position_y, const unsigned short int fused_Position_z,
+                            const unsigned short int fused_velocity_x, const unsigned short int fused_velocity_y, const unsigned short int fused_velocity_z)
+        : obstacle_id(obstacle_id), obstacle_class(obstacle_class), timestamp(timestamp), action_required(action_required),
+          fused_cuboid_x(fused_cuboid_x), fused_cuboid_y(fused_cuboid_y), fused_cuboid_z(fused_cuboid_z), fused_heading_angle(fused_heading_angle),
+          fused_Position_x(fused_Position_x), fused_Position_y(fused_Position_y), fused_Position_z(fused_Position_z), fused_velocity_x(fused_velocity_x),
+          fused_velocity_y(fused_velocity_y), fused_velocity_z(fused_velocity_z) {}
+};
+
+struct ObstacleEnvData
+{
+    // ObstacleData *obstacle_data; //8bytes
+    unsigned short int obstacle_id;
+    short int road_z; //2 bytes
+    //패딩때문에 토탈 16 bytes
 };
 
 // obstacle list 중복 확인을 위한 operator overload
@@ -55,49 +74,21 @@ bool operator==(const ObstacleEnvData &m1, const ObstacleEnvData &m2)
 struct VehicleData
 {
     VehicleClass vehicle_id;
-    double Position_lat;
-    double Position_long;
-    double Position_height;
-    double Yaw;
-    double Roll;
-    double Pitch;
-    double Velocity_long;
-    double Velocity_lat;
-    double Velocity_ang;
-};
-
-struct ObstacleList
-{
-    int obstacle_id; // 추가됨 obstacle tracking 및 고유 id 부여가 필요
-    ObstacleClass obstacle_class;
-    std::string timestamp;
-    //    std::vector<int> map_2d_location;
-    ActionClass action_required;
-    double fused_cuboid_x;
-    double fused_cuboid_y;
-    double fused_cuboid_z;
-    double fused_heading_angle;
-    double fused_Position_x;
-    double fused_Position_y;
-    double fused_Position_z;
-    double fused_velocity_x;
-    double fused_velocity_y;
-    double fused_velocity_z;
-
-    ObstacleList(const int obstacle_id, const ObstacleClass obstacle_class, const std::string timestamp,
-                            const ActionClass action_required, const double fused_cuboid_x, const double fused_cuboid_y, const double fused_cuboid_z,
-                            const double fused_heading_angle, const double fused_Position_x, const double fused_Position_y, const double fused_Position_z,
-                            const double fused_velocity_x, const double fused_velocity_y, const double fused_velocity_z)
-        : obstacle_id(obstacle_id), obstacle_class(obstacle_class), timestamp(timestamp), action_required(action_required),
-          fused_cuboid_x(fused_cuboid_x), fused_cuboid_y(fused_cuboid_y), fused_cuboid_z(fused_cuboid_z), fused_heading_angle(fused_heading_angle),
-          fused_Position_x(fused_Position_x), fused_Position_y(fused_Position_y), fused_Position_z(fused_Position_z), fused_velocity_x(fused_velocity_x),
-          fused_velocity_y(fused_velocity_y), fused_velocity_z(fused_velocity_z) {}
+    unsigned short int Position_lat;
+    unsigned short int Position_long;
+    unsigned short int Position_height;
+    unsigned short int Yaw;
+    unsigned short int Roll;
+    unsigned short int Pitch;
+    unsigned short int Velocity_long;
+    unsigned short int Velocity_lat;
+    unsigned short int Velocity_ang;
 };
 
 struct MapData
 {
-    ObstacleEnvData map_2d[n][m];
-    std::vector<VehicleData> vehicle_list;
+    ObstacleEnvData map_2d[n][m]; //16bytes
+    std::vector<VehicleData> vehicle_list; //32bytes
 
     // member function declaration
     bool map_2d_init(ObstacleEnvData map_2d[n][m])
