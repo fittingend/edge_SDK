@@ -300,10 +300,9 @@ void ThreadAct1()
                     //융합 장애물 정보를 받은 후 장애물의 정보 리스트 생성
                     std::vector<ObstacleData> obstacle_list;
 
-                    //장애물의 map_2d_location 계산이 필요. 위와 동일한 수식 써서 그리드 인덱스 찾아내야함
+    //============== i) 장애물의 2d 그리드 맵 인덱스 페어 찾아서 저장 ================
 
-                    //<테스트용 코드 - obstacle 있는 cell 만 업데이트
-                    // ObstacleClass이 구조물이고 +  fused_cuboid_z 가 1m 이상(현재 임의로 지정)이여서 사각지대 가능성 발생 시나리오
+                    //테스트용 코드
                     ObstacleData current_obstacle;
                     current_obstacle.fused_Position_x = 20; 
                     current_obstacle.fused_Position_y = 10; 
@@ -325,9 +324,43 @@ void ThreadAct1()
                         for (int j=fused_cuboid_x_start; j< fused_cuboid_x_end+1; j++)
                         {
                             current_obstacle.map_2d_location.push_back(std::make_pair(i,j));
+                            //해당 2d 그리드 맵의 인덱스 페어를 벡터 형태로 저장
                         }
                     }
-                    
+
+    //============== ii) 장애물 리스트 업데이트 ================
+
+                    //테스트용 코드
+                    ObstacleData first_obstacle;
+                    ObstacleData second_obstacle;
+                    current_obstacle.obstacle_id = 1234;
+                    first_obstacle.obstacle_id = 1;
+                    second_obstacle.obstacle_id = 123;
+                    obstacle_list.push_back(first_obstacle); 
+                    obstacle_list.push_back(second_obstacle);
+                    obstacle_list.push_back(fused_obstacle_data);
+                    bool isNew = 1;
+
+                    //장애물 리스트상의 장애물 중복 확인
+                    for (auto iter = obstacle_list.begin(); iter != obstacle_list.end(); iter++)
+                    {
+                        if (current_obstacle.obstacle_id == iter->obstacle_id)
+                        { //obstacle info already on the list; update the outdated information 
+                            *iter = current_obstacle;
+                            isNew = 0;
+                            break;
+                        }
+                        else
+                        {
+                            continue;
+                        }
+                    }
+
+                    if (isNew == true)
+                    {
+                        //new obstacle found; add it to the obstacle list
+                        obstacle_list.push_back(current_obstacle);
+                    }
 
 
                     // //해당 map cell 에다 데이터 집어 넣기      
@@ -362,41 +395,29 @@ void ThreadAct1()
 //#endif
 
 
-                    //테스트용 obstacle id 시작
-                    ObstacleData first_obstacle;
-                    ObstacleData second_obstacle;
-                    current_obstacle.obstacle_id = 1234;
-                    first_obstacle.obstacle_id = 1;
-                    second_obstacle.obstacle_id = 123;
-                    obstacle_list.push_back(first_obstacle); 
-                    obstacle_list.push_back(second_obstacle);
-                    obstacle_list.push_back(fused_obstacle_data);
-                    //테스트용 obstacle id 종료
-                    bool isNew = 1;
-
-                    //장애물 리스트상의 장애물 중복 확인
-                    for (auto iter = obstacle_list.begin(); iter != obstacle_list.end(); iter++)
-                    {
-                        if (current_obstacle.obstacle_id == iter->obstacle_id)
-                        { //obstacle info already on the list; update the outdated information 
-                            *iter = current_obstacle;
-                            isNew = 0;
-                            break;
-                        }
-                        else
-                        {
-                            continue;
-                        }
-                    }
-
-                    if (isNew == true)
-                    {
-                        //new obstacle found; add it to the obstacle list
-                        obstacle_list.push_back(current_obstacle);
-                    }
+                   
 
 //==============2.3 2d MapData가 해당 장애물 정보를 point 하도록 설정================
-                    //작업환경내 모든 장애물 리스트가 완성되면 MapData의 해당 내용을 업데이트
+                    //작업환경내 최초 장애물 리스트가 완성되면 MapData의 해당 내용을 업데이트
+                    //가능하다면 보조차량의 작업환경 이동이 끝난 후 실행
+
+                    //obstacle list 의 장애물을 하나씩 iterate 하면서 index pair를 가져와서
+                    for (auto iter = obstacle_list.begin(); iter != obstacle_list.end(); iter++)
+                    {
+                        for (auto iter1=iter->map_2d_location.begin(); iter1!=iter->map_2d_location.end();iter1++)
+                        {
+                            map_data.map_2d[iter1->first][iter1->second].obstacle_data = &(*iter);
+                        }
+                    }
+
+                     for (int i=fused_cuboid_y_start; i<fused_cuboid_y_end+1; i++)
+                    {
+                        for (int j=fused_cuboid_x_start; j< fused_cuboid_x_end+1; j++)
+                        {
+                            current_obstacle.map_2d_location.push_back(std::make_pair(i,j));
+                            //해당 2d 그리드 맵의 인덱스 페어를 벡터 형태로 저장
+                        }
+                    }
 
                     map_data.map_2d[0][0].obstacle_data = &obstacle_list[0];
                     map_data.map_2d[3999][4999].obstacle_data = &obstacle_list[1];
