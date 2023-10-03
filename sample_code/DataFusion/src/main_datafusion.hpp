@@ -1,5 +1,5 @@
-#define n 40
-#define m 50
+#define n 4000
+#define m 5000
 #define EDGE_WORKSHOP
 enum ObstacleClass
 {
@@ -44,6 +44,11 @@ struct ObstacleData
     unsigned short int fused_velocity_y;
     unsigned short int fused_velocity_z;
 
+    ObstacleData()
+    {
+
+    }
+
     ObstacleData(const int obstacle_id, const ObstacleClass obstacle_class, const std::string timestamp,
                             const ActionClass action_required, const unsigned short int fused_cuboid_x, const unsigned short int fused_cuboid_y, const unsigned short int fused_cuboid_z,
                             const unsigned short int fused_heading_angle, const unsigned short int fused_Position_x, const unsigned short int fused_Position_y, const unsigned short int fused_Position_z,
@@ -56,20 +61,20 @@ struct ObstacleData
 
 struct ObstacleEnvData
 {
-    // ObstacleData *obstacle_data; //8bytes
-    unsigned short int obstacle_id;
+    ObstacleData *obstacle_data; //8bytes
+    //unsigned short int obstacle_id;
     short int road_z; //2 bytes
     //패딩때문에 토탈 16 bytes
 };
 
-// obstacle list 중복 확인을 위한 operator overload
-bool operator==(const ObstacleEnvData &m1, const ObstacleEnvData &m2)
-{
-    if (m1.obstacle_id == m2.obstacle_id)
-        return true;
-    else
-        return false;
-}
+// // obstacle list 중복 확인을 위한 operator overload
+// bool operator==(const ObstacleEnvData &m1, const ObstacleEnvData &m2)
+// {
+//     if (m1.obstacle_id == m2.obstacle_id)
+//         return true;
+//     else
+//         return false;
+// }
 
 struct VehicleData
 {
