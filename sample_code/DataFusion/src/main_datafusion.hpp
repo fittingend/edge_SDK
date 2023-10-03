@@ -1,5 +1,6 @@
-#define n 4000
+#define n 400
 #define m 5000
+
 enum ObstacleClass
 {
     NO_OBSTACLE,
