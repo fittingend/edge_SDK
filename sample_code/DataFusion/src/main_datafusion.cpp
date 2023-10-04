@@ -300,17 +300,17 @@ void ThreadAct1()
     //============== i) 장애물의 2d 그리드 맵 인덱스 페어 찾아서 저장 ================
 
                     //테스트용 코드
-                    current_obstacle.fused_Position_x = 20; 
-                    current_obstacle.fused_Position_y = 10; 
+                    current_obstacle.fused_position_x = 20; 
+                    current_obstacle.fused_position_y = 10; 
                     current_obstacle.fused_cuboid_x = 4; 
                     current_obstacle.fused_cuboid_y = 2;
                     current_obstacle.fused_cuboid_z = 10;  
 
-                    int fused_cuboid_x_start = static_cast<int> (current_obstacle.fused_Position_x - (current_obstacle.fused_cuboid_x/2));
-                    int fused_cuboid_x_end = static_cast<int> (current_obstacle.fused_Position_x + (current_obstacle.fused_cuboid_x/2));
+                    int fused_cuboid_x_start = static_cast<int> (current_obstacle.fused_position_x - (current_obstacle.fused_cuboid_x/2));
+                    int fused_cuboid_x_end = static_cast<int> (current_obstacle.fused_position_x + (current_obstacle.fused_cuboid_x/2));
 
-                    int fused_cuboid_y_start = static_cast<int> (current_obstacle.fused_Position_y - (current_obstacle.fused_cuboid_y/2));
-                    int fused_cuboid_y_end = static_cast<int> (current_obstacle.fused_Position_y + (current_obstacle.fused_cuboid_y/2));
+                    int fused_cuboid_y_start = static_cast<int> (current_obstacle.fused_position_y - (current_obstacle.fused_cuboid_y/2));
+                    int fused_cuboid_y_end = static_cast<int> (current_obstacle.fused_position_y + (current_obstacle.fused_cuboid_y/2));
 
                     int count = 0;
                     adcm::Log::Info() << "i is from  " << fused_cuboid_y_start << " to " << fused_cuboid_y_end;

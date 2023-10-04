@@ -37,9 +37,9 @@ struct ObstacleData
     float fused_cuboid_y;
     float fused_cuboid_z;
     float fused_heading_angle;
-    float fused_Position_x;
-    float fused_Position_y;
-    float fused_Position_z;
+    float fused_position_x;
+    float fused_position_y;
+    float fused_position_z;
     float fused_velocity_x;
     float fused_velocity_y;
     float fused_velocity_z;
@@ -56,15 +56,15 @@ struct ObstacleEnvData
 struct VehicleData
 {
     VehicleClass vehicle_class;
-    float Position_lat;
-    float Position_long;
-    float Position_height;
-    float Yaw;
-    float Roll;
-    float Pitch;
-    float Velocity_long;
-    float Velocity_lat;
-    float Velocity_ang;
+    float position_lat;
+    float position_long;
+    float position_height;
+    float yaw;
+    float roll;
+    float pitch;
+    float velocity_long;
+    float velocity_lat;
+    float velocity_ang;
 };
 
 struct MapData
