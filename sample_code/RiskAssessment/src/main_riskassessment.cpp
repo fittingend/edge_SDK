@@ -108,7 +108,7 @@ bool RegisterSigTermHandler()
 
 double getDistance(ObstacleData obstacle, VehicleData vehicle)
 {
-    return sqrt(pow(obstacle.fused_Position_x -vehicle.Position_lat,2)+ pow(obstacle.fused_Position_y -vehicle.Position_long, 2));
+    return sqrt(pow(obstacle.fused_position_x -vehicle.position_lat,2)+ pow(obstacle.fused_position_y -vehicle.position_long, 2));
 }
 double getDistance(double a_x, double a_y, double b_x, double b_y)
 {
@@ -124,10 +124,10 @@ double getTTC(ObstacleData obstacle, VehicleData vehicle)
     
     for (t; t < 10; t=t+0.05)
     {
-        obstacle_final_pos_x = obstacle.fused_Position_x + obstacle.fused_velocity_x*t;
-        obstacle_final_pos_y = obstacle.fused_Position_y + obstacle.fused_velocity_y*t;
-        vehicle_final_pos_x = vehicle.Position_long + vehicle.Velocity_long*t;
-        vehicle_final_pos_y = vehicle.Position_lat + vehicle.Velocity_lat*t;
+        obstacle_final_pos_x = obstacle.fused_position_x + obstacle.fused_velocity_x*t;
+        obstacle_final_pos_y = obstacle.fused_position_y + obstacle.fused_velocity_y*t;
+        vehicle_final_pos_x = vehicle.position_long + vehicle.velocity_long*t;
+        vehicle_final_pos_y = vehicle.position_lat + vehicle.velocity_lat*t;
         distance=getDistance(obstacle_final_pos_x,obstacle_final_pos_y,vehicle_final_pos_x,vehicle_final_pos_y);
 
         if (distance < COLLISION_DISTANCE)
@@ -225,9 +225,9 @@ void ThreadAct1()
                 //실제로는 obstacle list 는 Datafusion 에서 받음
                 ObstacleData current_obstacle;
                 current_obstacle.obstacle_id = 142;
-                current_obstacle.action_required = REMOVE_BLIND_SPOT;
-                current_obstacle.fused_Position_x = 20; 
-                current_obstacle.fused_Position_y = 10; 
+                current_obstacle.action_class = REMOVE_BLIND_SPOT;
+                current_obstacle.fused_position_x = 20; 
+                current_obstacle.fused_position_y = 10; 
                 current_obstacle.fused_cuboid_x = 4; 
                 current_obstacle.fused_cuboid_y = 2;
                 current_obstacle.fused_cuboid_z = 10;
@@ -235,8 +235,8 @@ void ThreadAct1()
                 
                 VehicleData current_vehicle;
                 current_vehicle.vehicle_class = EGO_VEHICLE;
-                current_vehicle.Position_lat = 5;
-                current_vehicle.Position_lat = 3;
+                current_vehicle.position_lat = 5;
+                current_vehicle.position_lat = 3;
                 map_data.vehicle_list.push_back(current_vehicle);
 
                 VehicleData ego_vehicle, sub_vehicle_1, sub_vehicle_2,sub_vehicle_3,sub_vehicle_4;
@@ -265,7 +265,7 @@ void ThreadAct1()
 
                 for (auto iter = obstacle_list.begin(); iter!= obstacle_list.end();iter++)
                 {
-                    switch(iter->action_required)
+                    switch(iter->action_class)
                     {
                         case REMOVE_BLIND_SPOT:
                         {
