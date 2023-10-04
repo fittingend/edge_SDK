@@ -33,43 +33,43 @@ enum ActionClass
 
 struct ObstacleData
 {
-    unsigned short int obstacle_id;
+    unsigned short obstacle_id;
     ObstacleClass obstacle_class;
     std::string timestamp;
-    std::vector<std::pair<unsigned short int,unsigned short int>> map_2d_location; //장애물이 위치한 2d 그리드 맵의 index 페어를 저장
-    ActionClass action_required;
-    unsigned short int fused_cuboid_x;
-    unsigned short int fused_cuboid_y;
-    unsigned short int fused_cuboid_z;
-    unsigned short int fused_heading_angle;
-    unsigned short int fused_Position_x;
-    unsigned short int fused_Position_y;
-    unsigned short int fused_Position_z;
-    unsigned short int fused_velocity_x;
-    unsigned short int fused_velocity_y;
-    unsigned short int fused_velocity_z;
+    std::vector<std::pair<unsigned short,unsigned short>> map_2d_location; //장애물이 위치한 2d 그리드 맵의 index 페어를 저장
+    ActionClass action_class;
+    float fused_cuboid_x;
+    float fused_cuboid_y;
+    float fused_cuboid_z;
+    float fused_heading_angle;
+    float fused_Position_x;
+    float fused_Position_y;
+    float fused_Position_z;
+    float fused_velocity_x;
+    float fused_velocity_y;
+    float fused_velocity_z;
 
 };
 
 struct ObstacleEnvData
 {
     ObstacleData *obstacle_data; //8 bytes
-    short int road_z; //2 bytes
+    float road_z; //2 bytes
     //패딩때문에 토탈 16 bytes
 };
 
 struct VehicleData
 {
     VehicleClass vehicle_class;
-    unsigned short int Position_lat;
-    unsigned short int Position_long;
-    unsigned short int Position_height;
-    unsigned short int Yaw;
-    unsigned short int Roll;
-    unsigned short int Pitch;
-    unsigned short int Velocity_long;
-    unsigned short int Velocity_lat;
-    unsigned short int Velocity_ang;
+    float Position_lat;
+    float Position_long;
+    float Position_height;
+    float Yaw;
+    float Roll;
+    float Pitch;
+    float Velocity_long;
+    float Velocity_lat;
+    float Velocity_ang;
 };
 
 struct MapData
@@ -90,11 +90,11 @@ enum HazardClass
 
 struct RiskAssessment 
 {
-    unsigned short int obstacle_id; //obstacle 고유 id
+    unsigned short obstacle_id; //obstacle 고유 id
     HazardClass hazard_class;
     bool isHazard;
     float confidence;
         
-    RiskAssessment(const unsigned short int obstacle_id, const HazardClass hazard_class, const bool isHazard, const float confidence):\
+    RiskAssessment(const unsigned short obstacle_id, const HazardClass hazard_class, const bool isHazard, const float confidence):\
     obstacle_id(obstacle_id), hazard_class(hazard_class), isHazard(isHazard), confidence(confidence) {}
 };
