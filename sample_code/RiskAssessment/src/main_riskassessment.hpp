@@ -54,7 +54,7 @@ struct ObstacleData
 struct ObstacleEnvData
 {
     ObstacleData *obstacle_data; //8 bytes
-    float road_z; //2 bytes
+    float road_z; //4 bytes
     //패딩때문에 토탈 16 bytes
 };
 
