@@ -217,8 +217,6 @@ void ThreadAct1()
                 adcm::risk_assessment_Objects riskAssessment;
 
                 //================1. obstacle list 확인================
-
-                std::vector<ObstacleData> obstacle_list;
                 std::vector<RiskAssessment> risk_assessment;
 
                 //테스트용 코드
@@ -231,7 +229,7 @@ void ThreadAct1()
                 current_obstacle.fused_cuboid_x = 4; 
                 current_obstacle.fused_cuboid_y = 2;
                 current_obstacle.fused_cuboid_z = 10;
-                obstacle_list.push_back(current_obstacle);
+                map_data.obstacle_list.push_back(current_obstacle);
                 
                 VehicleData current_vehicle;
                 current_vehicle.vehicle_class = EGO_VEHICLE;
@@ -263,7 +261,7 @@ void ThreadAct1()
                     }
                 }
 
-                for (auto iter = obstacle_list.begin(); iter!= obstacle_list.end();iter++)
+                for (auto iter = map_data.obstacle_list.begin(); iter!= map_data.obstacle_list.end();iter++)
                 {
                     switch(iter->action_class)
                     {

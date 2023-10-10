@@ -43,6 +43,7 @@ struct ObstacleData
     float fused_velocity_x;
     float fused_velocity_y;
     float fused_velocity_z;
+<<<<<<< HEAD
 
 };
 
@@ -51,14 +52,20 @@ struct ObstacleEnvData
     ObstacleData *obstacle_data; //8 bytes
     float road_z; //4 bytes
     //패딩때문에 토탈 16 bytes
+=======
+>>>>>>> 5c416438c47396789ba3af204dd2b9e8135844c9
 };
 
 struct VehicleData
 {
     VehicleClass vehicle_class;
+    std::vector<std::pair<unsigned short,unsigned short>> map_2d_location; //해당 차량이 위치한 2d 그리드 맵의 index 페어를 저장
     float position_lat;
     float position_long;
     float position_height;
+    float position_x;
+    float position_y;
+    float position_z;             
     float yaw;
     float roll;
     float pitch;
@@ -67,10 +74,25 @@ struct VehicleData
     float velocity_ang;
 };
 
+struct ObstacleEnvData
+{
+    ObstacleData *obstacle_data; //8 bytes
+    VehicleData *vehicle_data; //8 bytes
+    float road_z; //2 bytes
+};  //패딩때문에 토탈 24 bytes
+
+
 struct MapData
 {
+<<<<<<< HEAD
     ObstacleEnvData map_2d[n][m]; //16bytes
     std::vector<ObstacleData> obstcle_list;
     std::vector<VehicleData> vehicle_list; //32bytes
 
 };
+=======
+    ObstacleEnvData map_2d[n][m]; //각각 24bytes
+    std::vector<ObstacleData> obstacle_list;
+    std::vector<VehicleData> vehicle_list; //24bytes
+}; //maptdata 사이즈는 24*4000*5000+24 = 480000024 byte = 약 450MB 
+>>>>>>> 5c416438c47396789ba3af204dd2b9e8135844c9
