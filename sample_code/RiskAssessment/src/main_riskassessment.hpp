@@ -50,17 +50,7 @@ struct ObstacleData
     float fused_velocity_z;
 
 };
-<<<<<<< HEAD
 
-struct ObstacleEnvData
-{
-    ObstacleData *obstacle_data; //8 bytes
-    float road_z; //4 bytes
-    //패딩때문에 토탈 16 bytes
-};
-
-=======
->>>>>>> 5c416438c47396789ba3af204dd2b9e8135844c9
 struct VehicleData
 {
     VehicleClass vehicle_class;
