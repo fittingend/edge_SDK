@@ -30,7 +30,7 @@ struct ObstacleData
 {
     unsigned short obstacle_id;
     ObstacleClass obstacle_class;
-    std::string timestamp;
+    std::time_t timestamp;
     std::vector<std::pair<unsigned short,unsigned short>> map_2d_location; //장애물이 위치한 2d 그리드 맵의 index 페어를 저장
     ActionClass action_class;
     float fused_cuboid_x;
@@ -45,10 +45,12 @@ struct ObstacleData
     float fused_velocity_z;
 
 };
+
 struct VehicleData
 {
     VehicleClass vehicle_class;
     std::vector<std::pair<unsigned short,unsigned short>> map_2d_location; //해당 차량이 위치한 2d 그리드 맵의 index 페어를 저장
+    std::time_t timestamp;
     float position_lat;
     float position_long;
     float position_height;
@@ -60,13 +62,17 @@ struct VehicleData
     float pitch;
     float velocity_long;
     float velocity_lat;
+    float velocity_x;
+    float velocity_y;
     float velocity_ang;
 };
 
 struct ObstacleEnvData
 {
-    ObstacleData *obstacle_data; //8 bytes
-    VehicleData *vehicle_data; //8 bytes
+//    ObstacleData *obstacle_data; //8 bytes
+    unsigned short obstacle_id;
+//    VehicleData *vehicle_data; //8 bytes
+    VehicleClass vehicle_class;
     float road_z; //2 bytes
 };  //패딩때문에 토탈 24 bytes
 
@@ -78,3 +84,48 @@ struct MapData
     std::vector<VehicleData> vehicle_list;
 
 }; //maptdata 사이즈는 24*4000*5000+24+24 = 480000048 byte = 약 450MB 
+
+//=============control hub에서 가져온 파트====================
+HubData hub_data; 
+struct HubData
+{
+    std::vector<VehicleData_hub> vehicle;
+};
+
+struct ObstacleData_hub
+{
+//    unsigned short obstacle_id;
+    ObstacleClass obstacle_class;
+    std::time_t timestamp;
+    float cuboid_x;
+    float cuboid_y;
+    float cuboid_z;
+    float heading_angle;
+    float position_x; // m 로 가정
+    float position_y;
+    float position_z;
+    float velocity_x; // m/s 으로 가정
+    float velocity_y;
+};
+
+struct VehicleData_hub
+{
+    std::vector<ObstacleData_hub> obstacle;
+    std::vector<float> road_z; 
+    VehicleClass vehicle_class;
+    std::time_t timestamp;
+    float position_lat;
+    float position_long;
+    float position_height;
+    float position_x;
+    float position_y;
+    float yaw;
+    float roll;
+    float pitch;
+    float velocity_long;
+    float velocity_lat;
+    float velocity_x;
+    float velocity_y;
+    float velocity_ang;
+
+};

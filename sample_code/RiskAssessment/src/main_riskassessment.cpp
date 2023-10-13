@@ -218,6 +218,9 @@ void ThreadAct1()
 
                 //================1. obstacle list 확인================
                 std::vector<RiskAssessment> risk_assessment;
+                build_path_Objects path;
+                path.utm_x.push_back(0, 5, 56, 94, 150);
+                path.utm_y.push_back(0, 20, 53, 88, 230);
 
                 //테스트용 코드
                 //실제로는 obstacle list 는 Datafusion 에서 받음

@@ -71,8 +71,10 @@ struct VehicleData
 
 struct ObstacleEnvData
 {
-    ObstacleData *obstacle_data; //8 bytes
-    VehicleData *vehicle_data; //8 bytes
+//    ObstacleData *obstacle_data; //8 bytes
+    unsigned short obstacle_id;
+//    VehicleData *vehicle_data; //8 bytes
+    VehicleClass vehicle_class;
     float road_z; //2 bytes
 };  //패딩때문에 토탈 24 bytes
 
@@ -85,6 +87,14 @@ struct MapData
     std::vector<VehicleData> vehicle_list; //24bytes
 }; //maptdata 사이즈는 24*4000*5000+24 = 480000024 byte = 약 450MB 
 
+//=====전역경로 관련====
+
+struct build_path_Objects
+{
+    std::vector<float> utm_x;
+    std::vector<float> utm_y;
+
+}
 
 //=====main_riskassessment specific definitions=======
 

@@ -280,10 +280,71 @@ void ThreadAct1()
  
 //==============2.데이터 융합=================
 // i)차량 정보 ii) 노면 정보 iii)장애물 정보를 융합
+                    HubData hub_data; //관제에서 데이터 수신
 
-                    VehicleData current_vehicle;
+                    VehicleData_hub main_vehicle;
+                    VehicleData_hub sub_vehicle1;
+                    VehicleData_hub sub_vehicle2;
+                    VehicleData_hub sub_vehicle3;
+                    VehicleData_hub sub_vehicle4;
+
+                    ObstacleData_hub main_vehicle_obstacle;
+                    ObstacleData_hub sub_vehicle1_obstacle;
+                    ObstacleData_hub sub_vehicle2_obstacle;        
+                    ObstacleData_hub sub_vehicle3_obstacle;        
+                    ObstacleData_hub sub_vehicle4_obstacle;        
+
                     ObstacleData current_obstacle;
 
+                    hub_data.vehicle.push_back(main_vehicle);
+
+//TODO 측위 좌표계 변환 - 현재 시뮬레이션 데이터 검증목표라 필요X
+
+//==============2.1. 차량별 장애물의 속도 좌표계 절대값으로 변환=================
+                    for (auto iter = hub_data.vehicle.begin(); iter!=hub_data.vehicle.end(); iter++)
+                    {
+                        for (auto iter1 = iter->obstacle.begin(); iter1!=iter->obstacle.end(); iter1++)
+                        {
+                            //장애물 속도 좌표계 변환 TODO 수식추가
+                            iter1->velocity_x = iter1->velocity_x;
+                            iter1->velocity_y = iter1->velocity_y;
+                        }
+
+                        //차량 속도 좌표계 변환 TODO 수식추가
+                        iter->velocity_x = iter->velocity_long;
+                        iter->velocity_y = iter->velocity_lat;
+                    }
+
+//==============2.2. 차량별 장애물의 위치 좌표계 절대값으로 변환=================
+                    for (auto iter = hub_data.vehicle.begin(); iter!=hub_data.vehicle.end(); iter++)
+                    {
+                        for (auto iter1 = iter->obstacle.begin(); iter1!=iter->obstacle.end(); iter1++)
+                        {
+                            //장애물 위치 좌표계 변환 TODO 수식추가
+                            iter1->position_x = iter1->position_x;
+                            iter1->position_y = iter1->position_y;
+                        }
+                        //차량 위치 좌표계 변환 TODO 수식추가
+                        iter->position_x = iter->position_long;
+                        iter->position_y = iter->position_lat;
+
+                    }
+//==============2.3. 차량별 장애물 위치 추정 (기준시점)=================
+                    // n대의 차에서 m개의 장애물이 인지되어서 각각의 인지 데이터가 왔다고 가정
+                    //엣지에서 처리를 시작한 시간을 기준시점 레퍼런스 타임으로 지정
+                    std::time_t reference_time = std::time(0);
+
+                    // n대의 차에서 m개의 장애물의 인지데이터를 각각 레퍼런스 타임과의 시차만큼 위치 보정
+                    for (auto iter = hub_data.vehicle.begin(); iter!=hub_data.vehicle.end(); iter++)
+                    {
+                        for (auto iter1 = iter->obstacle.begin(); iter1!=iter->obstacle.end(); iter1++)
+                        {
+                            iter1->position_x = iter1->position_x * (reference_time - iter1->timestamp) * 100 * velocity_x;
+                            iter1->position_y = iter1->position_y * (reference_time - iter1->timestamp) * 100 * velocity_y;
+                            //레퍼런스 타임과의 차이만큼 위치 보정 후 위치 값 업데이트
+                        }
+                    }
+               
 //==============3.1. MapData에 노면데이터 추가 =================
                     //TO DO:차량이 작업공간을 정찰할 동안 해당 그리드에 맞는 노면데이터 업데이트 
                     //해당 차량의 위치 - 위경도 정보로 업데이트 그리드의 인덱스를 찾아내는 수식 만들어야 함 
@@ -340,8 +401,8 @@ void ThreadAct1()
                     {
                         for (auto iter1 = iter->map_2d_location.begin(); iter1!= iter->map_2d_location.end(); iter1++)
                         {
-                            map_data.map_2d[iter1->first][iter1->second].vehicle_data = &(*iter);
-                            //map_data.map_2d[iter1->first][iter1->second].obstacle_id = iter->obstacle_id;
+                            //map_data.map_2d[iter1->first][iter1->second].vehicle_data = &(*iter);
+                            map_data.map_2d[iter1->first][iter1->second].vehicle_class = iter->vehicle_class;
                         }
                     }
 
@@ -418,9 +479,8 @@ void ThreadAct1()
                     {
                         for (auto iter1 = iter->map_2d_location.begin(); iter1!= iter->map_2d_location.end(); iter1++)
                         {
-                            map_data.map_2d[iter1->first][iter1->second].obstacle_data = &(*iter);
-                            //map_data.map_2d[iter1->first][iter1->second].obstacle_id = iter->obstacle_id;
-
+                            //map_data.map_2d[iter1->first][iter1->second].obstacle_data = &(*iter);
+                            map_data.map_2d[iter1->first][iter1->second].obstacle_id = iter->obstacle_id;
                         }
                     }
 
