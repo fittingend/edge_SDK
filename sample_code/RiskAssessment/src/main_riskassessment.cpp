@@ -110,6 +110,11 @@ double getDistance(ObstacleData obstacle, VehicleData vehicle)
 {
     return sqrt(pow(obstacle.fused_position_x -vehicle.position_lat,2)+ pow(obstacle.fused_position_y -vehicle.position_long, 2));
 }
+double getDistance(ObstacleData obstacle, double a_x, double a_y)
+{
+    return sqrt(pow(obstacle.fused_position_x -a_x,2)+ pow(obstacle.fused_position_y -a_y, 2));
+
+}
 double getDistance(double a_x, double a_y, double b_x, double b_y)
 {
     return sqrt(pow(a_x-b_x,2)+ pow(a_y-b_y, 2));
@@ -139,10 +144,36 @@ double getTTC(ObstacleData obstacle, VehicleData vehicle)
 //현재 ttc가 10초가 넘어가면 그냥 10초로 정의한다 
     return ttc;
 }  
+ObstacleData searchLinearpath(std::vector<ObstacleData> obstacle_list, float x1, float y1, float x2, float y2)
+{
+    //목적: 두 coordinate 사이를 연결해 직선을 만들고 n 등분해 
+    // n 등분된 직선 위 x-y coordinate 과 모든 장애물간의 거리를 구해서 10m 이내를 찾는다
+    float coeff = (y2 - y1) / (x2 - x1);
+    float constant = y1 - x1 * coeff;
+    int divide = 10; //임의의 수로 수정 가능 - 두 포인트를 10등분 해 장애물 찾기를 진행 
+
+    for (float new_x = x1; new_x < x2; new_x = new_x + (x2 - x1) / divide)
+    {
+        float new_y = new_x * coeff + constant;
+        for (auto iter = obstacle_list.begin(); iter != obstacle_list.end();iter++)
+        {
+            if (getDistance(*iter, new_x, new_y) <= 10)
+            {
+                //장애물이 전역경로와 10m 내에 위치 
+                return (*iter); //해당 장애물을 리턴
+            }
+            else continue;
+
+        }
+
+    }
+}
+
 
 //===============================
 
 }  // namespace
+
 
 
 //==============1. MapData 생성 =================
@@ -218,9 +249,6 @@ void ThreadAct1()
 
                 //================1. obstacle list 확인================
                 std::vector<RiskAssessment> risk_assessment;
-                build_path_Objects path;
-                path.utm_x.push_back(0, 5, 56, 94, 150);
-                path.utm_y.push_back(0, 20, 53, 88, 230);
 
                 //테스트용 코드
                 //실제로는 obstacle list 는 Datafusion 에서 받음
@@ -236,8 +264,8 @@ void ThreadAct1()
                 
                 VehicleData current_vehicle;
                 current_vehicle.vehicle_class = EGO_VEHICLE;
-                current_vehicle.position_lat = 5;
-                current_vehicle.position_lat = 3;
+                current_vehicle.position_x = 0;
+                current_vehicle.position_y = 0;
                 map_data.vehicle_list.push_back(current_vehicle);
 
                 VehicleData ego_vehicle, sub_vehicle_1, sub_vehicle_2,sub_vehicle_3,sub_vehicle_4;
@@ -263,6 +291,21 @@ void ThreadAct1()
                             break;
                     }
                 }
+                
+                //================전역경로 관련 위험 시나리오================
+                build_path_Objects path;
+                path.utm_x.push_back(0, 5, 56, 94, 150);
+                path.utm_y.push_back(0, 20, 53, 88, 230);
+
+                //특장차의 위치와 첫 x-y 경로 좌표 기준으로 직선을 그어 이차방적식 생성
+                //첫 x-y 좌표는 특장차의 위치인 시작점 (여기선 0,0)을 포함한다고 가정 함
+                for (int count = 0; count < path.utm_x.size ;  count++)
+                {
+                    searchLinearpath(map_data.obstacle_list, path.utm_x[count], path.utm_y[count], path.utm_x[count+1], path.utm_y[count+1]);
+
+                }
+
+                
 
                 for (auto iter = map_data.obstacle_list.begin(); iter!= map_data.obstacle_list.end();iter++)
                 {
