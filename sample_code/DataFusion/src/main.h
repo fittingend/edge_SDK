@@ -42,9 +42,9 @@
 #include <cstdlib>
 
 // Function Declarations
-extern int main(int argc, char **argv);
+//extern int main(int argc, char **argv);
 
-extern void main_EDGE_fusion_function_231019_2222();
+void main_EDGE_fusion_function_231019_2222();
 
 #endif
 //

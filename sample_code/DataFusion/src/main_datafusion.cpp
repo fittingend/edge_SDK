@@ -71,6 +71,7 @@
 
 #include "main_datafusion.hpp"
 
+#include "main.h"
 namespace
 {
 
@@ -104,13 +105,12 @@ bool RegisterSigTermHandler()
     return true;
 }
 
-
 }  // namespace
 
 //==============1.MapData 생성 =================
 
 MapData map_data;
-
+ 
 //=============================================
 
 void ThreadAct1()
@@ -282,6 +282,8 @@ void ThreadAct1()
 // i)차량 정보 ii) 노면 정보 iii)장애물 정보를 융합
                     HubData hub_data; //관제에서 데이터 수신
 
+                    main_EDGE_fusion_function_231019_2222();
+
                     VehicleData_hub main_vehicle;
                     VehicleData_hub sub_vehicle1;
                     VehicleData_hub sub_vehicle2;
@@ -295,6 +297,7 @@ void ThreadAct1()
                     ObstacleData_hub sub_vehicle4_obstacle;        
 
                     ObstacleData current_obstacle;
+                    VehicleData current_vehicle;
 
                     hub_data.vehicle.push_back(main_vehicle);
 
@@ -339,8 +342,8 @@ void ThreadAct1()
                     {
                         for (auto iter1 = iter->obstacle.begin(); iter1!=iter->obstacle.end(); iter1++)
                         {
-                            iter1->position_x = iter1->position_x * (reference_time - iter1->timestamp) * 100 * velocity_x;
-                            iter1->position_y = iter1->position_y * (reference_time - iter1->timestamp) * 100 * velocity_y;
+                            iter1->position_x = iter1->position_x * (reference_time - iter1->timestamp) * 100 * iter->velocity_x;
+                            iter1->position_y = iter1->position_y * (reference_time - iter1->timestamp) * 100 * iter->velocity_y;
                             //레퍼런스 타임과의 차이만큼 위치 보정 후 위치 값 업데이트
                         }
                     }
@@ -491,10 +494,10 @@ void ThreadAct1()
                     //다른 모듈로 map_data 오브젝트 전달
 
                     mapData_provider.send(mapData); //원본
-                    adcm::Log::Info() << "obstacle id saved in [9][20] is  " << map_data.map_2d[9][20].obstacle_data->obstacle_id;
+                //    adcm::Log::Info() << "obstacle id saved in [9][20] is  " << map_data.map_2d[9][20].obstacle_data->obstacle_id;
                     adcm::Log::Info() << "size of MapData is  " << sizeof(map_data);
-                    adcm::Log::Info() << "starting address of map_2d is  " << &(map_data.map_2d[0][0].obstacle_data);
-                    adcm::Log::Info() << "ending address of map_2d is  " << &(map_data.map_2d[3999][4999].vehicle_data);
+                //    adcm::Log::Info() << "starting address of map_2d is  " << &(map_data.map_2d[0][0].obstacle_data);
+                //    adcm::Log::Info() << "ending address of map_2d is  " << &(map_data.map_2d[3999][4999].vehicle_data);
                 }
             }
         }

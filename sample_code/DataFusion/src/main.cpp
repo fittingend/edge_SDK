@@ -174,18 +174,18 @@ static void argInit_struct2_T(struct2_T &result)
 //                char **argv
 // Return Type  : int
 //
-int main(int, char **)
-{
-  // The initialize function is being called automatically from your entry-point
-  // function. So, a call to initialize is not included here. Invoke the
-  // entry-point functions.
-  // You can call entry-point functions multiple times.
-  main_EDGE_fusion_function_231019_2222();
-  // Terminate the application.
-  // You do not need to do this more than one time.
-  EDGE_fusion_function_231019_2222_terminate();
-  return 0;
-}
+// int main(int, char **)
+// {
+//   // The initialize function is being called automatically from your entry-point
+//   // function. So, a call to initialize is not included here. Invoke the
+//   // entry-point functions.
+//   // You can call entry-point functions multiple times.
+//   main_EDGE_fusion_function_231019_2222();
+//   // Terminate the application.
+//   // You do not need to do this more than one time.
+//   EDGE_fusion_function_231019_2222_terminate();
+//   return 0;
+// }
 
 //
 // Arguments    : void

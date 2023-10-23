@@ -80,17 +80,12 @@ struct ObstacleEnvData
 struct MapData
 {
     ObstacleEnvData map_2d[n][m]; //각각 24bytes
-    std::vector<ObstacleData> obstcle_list;
+    std::vector<ObstacleData> obstacle_list;
     std::vector<VehicleData> vehicle_list;
 
 }; //maptdata 사이즈는 24*4000*5000+24+24 = 480000048 byte = 약 450MB 
 
 //=============control hub에서 가져온 파트====================
-HubData hub_data; 
-struct HubData
-{
-    std::vector<VehicleData_hub> vehicle;
-};
 
 struct ObstacleData_hub
 {
@@ -128,4 +123,9 @@ struct VehicleData_hub
     float velocity_y;
     float velocity_ang;
 
+};
+
+struct HubData
+{
+    std::vector<VehicleData_hub> vehicle;
 };
