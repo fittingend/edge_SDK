@@ -1,26 +1,26 @@
-<mxfile host="app.diagrams.net" modified="2023-10-24T16:27:13.984Z" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36" etag="xB6QrcjZv-lBdzxFbq1j" version="22.0.6" type="github">
+<mxfile host="app.diagrams.net" modified="2023-10-24T16:33:13.209Z" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36" etag="xugkEqRiiDRV-vI1b4-S" version="22.0.6" type="github">
   <diagram name="Page-1" id="qEcWMvFpOheO2A7SY_u3">
-    <mxGraphModel dx="496" dy="667" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+    <mxGraphModel dx="293" dy="667" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="eUhHdgj9UX-klLz6yJmO-1" value="차량별 인지 장애물&lt;br&gt;&amp;nbsp;속도 좌표계 &lt;br&gt;절대값으로 변환" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+        <mxCell id="eUhHdgj9UX-klLz6yJmO-1" value="차량별 인지 장애물&lt;br&gt;&amp;nbsp;(n*m) 속도 좌표계 &lt;br&gt;절대값으로 변환" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
           <mxGeometry x="50" y="540" width="110" height="80" as="geometry" />
         </mxCell>
         <mxCell id="eUhHdgj9UX-klLz6yJmO-2" value="" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
-          <mxGeometry x="160" y="310" width="40" height="40" as="geometry" />
+          <mxGeometry x="70" y="310" width="40" height="40" as="geometry" />
         </mxCell>
         <mxCell id="eUhHdgj9UX-klLz6yJmO-3" value="" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
-          <mxGeometry x="160" y="410" width="40" height="40" as="geometry" />
+          <mxGeometry x="70" y="410" width="40" height="40" as="geometry" />
         </mxCell>
         <mxCell id="eUhHdgj9UX-klLz6yJmO-4" value="" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
-          <mxGeometry x="110" y="360" width="40" height="40" as="geometry" />
+          <mxGeometry x="20" y="360" width="40" height="40" as="geometry" />
         </mxCell>
         <mxCell id="eUhHdgj9UX-klLz6yJmO-5" value="" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
-          <mxGeometry x="210" y="360" width="40" height="40" as="geometry" />
+          <mxGeometry x="120" y="360" width="40" height="40" as="geometry" />
         </mxCell>
         <mxCell id="eUhHdgj9UX-klLz6yJmO-6" value="" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
-          <mxGeometry x="160" y="360" width="40" height="40" as="geometry" />
+          <mxGeometry x="70" y="360" width="40" height="40" as="geometry" />
         </mxCell>
         <mxCell id="eUhHdgj9UX-klLz6yJmO-8" value="n대의 차에서 m개의 장애물 인지&lt;br&gt;1. 장애물 정보&amp;nbsp;&lt;br&gt;2. 노면 정보&lt;br&gt;3. 차량 정보" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
           <mxGeometry x="80" y="480" width="210" height="30" as="geometry" />
@@ -28,20 +28,23 @@
         <mxCell id="eUhHdgj9UX-klLz6yJmO-11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="eUhHdgj9UX-klLz6yJmO-1" target="eUhHdgj9UX-klLz6yJmO-1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="eUhHdgj9UX-klLz6yJmO-12" value="차량별 인지 장애물&lt;br&gt;위치 좌표계&lt;br&gt;절대값으로 변환" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+        <mxCell id="eUhHdgj9UX-klLz6yJmO-12" value="차량별 인지 장애물&lt;br&gt;(n*m)&amp;nbsp;위치 좌표계&lt;br&gt;절대값으로 변환" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
           <mxGeometry x="175" y="540" width="110" height="80" as="geometry" />
         </mxCell>
         <mxCell id="eUhHdgj9UX-klLz6yJmO-13" value="엣지 처리시간 기준으로 &lt;br&gt;장애물 위치 추정 후 보정" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="100" y="700" width="140" height="60" as="geometry" />
+          <mxGeometry x="85" y="700" width="170" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="eUhHdgj9UX-klLz6yJmO-16" value="MapData 생성" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="50" y="800" width="140" height="40" as="geometry" />
+        <mxCell id="eUhHdgj9UX-klLz6yJmO-16" value="MapData 생성&lt;br&gt;map_2d[4000][5000]" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="50" y="790" width="140" height="40" as="geometry" />
         </mxCell>
-        <mxCell id="eUhHdgj9UX-klLz6yJmO-17" value="노면데이터 추가" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="25" y="890" width="90" height="40" as="geometry" />
+        <mxCell id="eUhHdgj9UX-klLz6yJmO-17" value="노면데이터 추가&lt;br&gt;map_2d[i][j]" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="870" width="90" height="40" as="geometry" />
         </mxCell>
-        <mxCell id="eUhHdgj9UX-klLz6yJmO-19" value="동일장애물 판단" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+        <mxCell id="eUhHdgj9UX-klLz6yJmO-19" value="동일장애물 (m) 판단" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
           <mxGeometry x="50" y="640" width="240" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="eUhHdgj9UX-klLz6yJmO-20" value="노면데이터 추가&lt;br&gt;map_2d[i][j]" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="140" y="870" width="90" height="40" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
