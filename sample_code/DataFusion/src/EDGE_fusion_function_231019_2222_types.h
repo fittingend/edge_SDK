@@ -33,7 +33,7 @@ struct struct2_T {
   double Velocity_z;
 };
 
-struct VehicleData_hub {
+struct struct1_T {
   struct2_T obstacle[3];
   double road_z;
   double vehicle_class;
@@ -48,8 +48,8 @@ struct VehicleData_hub {
   double Velocity_ang;
 };
 
-struct HubData {
-  VehicleData_hub vehicle[5];
+struct struct0_T {
+  struct1_T vehicle[5];
 };
 
 struct struct4_T {

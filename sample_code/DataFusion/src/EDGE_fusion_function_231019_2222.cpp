@@ -28,7 +28,7 @@
 // UNTITLED9 이 함수의 요약 설명 위치
 //    자세한 설명 위치
 //
-// Arguments    : const HubData *hub_data_Object
+// Arguments    : const struct0_T *hub_data_Object
 //                struct3_T confirmedTracks_data[]
 //                int confirmedTracks_size[1]
 //                struct3_T tentativeTracks_data[]
@@ -37,7 +37,7 @@
 //                struct4_T *analysisInformation
 // Return Type  : void
 //
-void EDGE_fusion_function_231019_2222(const HubData *hub_data_Object,
+void EDGE_fusion_function_231019_2222(const struct0_T *hub_data_Object,
                                       struct3_T confirmedTracks_data[],
                                       int confirmedTracks_size[1],
                                       struct3_T tentativeTracks_data[],
