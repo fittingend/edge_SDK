@@ -17,7 +17,7 @@
 #include "coder_bounded_array.h"
 
 // Type Definitions
-struct struct2_T {
+struct HubObstacleData {
   double timestamp;
   double obstacle_class;
   double cuboid_x;
@@ -33,8 +33,8 @@ struct struct2_T {
   double Velocity_z;
 };
 
-struct struct1_T {
-  struct2_T obstacle[3];
+struct HubVehicleData {
+  HubObstacleData obstacle[3];
   double road_z;
   double vehicle_class;
   double Position_lat;
@@ -48,8 +48,8 @@ struct struct1_T {
   double Velocity_ang;
 };
 
-struct struct0_T {
-  struct1_T vehicle[5];
+struct HubData {
+  HubVehicleData vehicle[5];
 };
 
 struct struct4_T {

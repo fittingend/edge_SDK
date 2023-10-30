@@ -43,8 +43,10 @@
 
 // Function Declarations
 //extern int main(int argc, char **argv);
-
-void main_EDGE_fusion_function_231019_2222();
+struct HubData {
+  HubVehicleData vehicle[5];
+};
+void matlab_fusion(HubData hub_data_Object);
 
 #endif
 //

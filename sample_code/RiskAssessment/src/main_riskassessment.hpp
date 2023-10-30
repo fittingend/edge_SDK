@@ -1,5 +1,5 @@
-#define n 4000
-#define m 5000
+#define map_n 4000
+#define map_m 5000
 #define STRUCTURE_DISTANCE 20
 #define PEDESTRIAN_DISTANCE 15
 #define PEDESTRIAN_TTC 7
@@ -82,7 +82,7 @@ struct ObstacleEnvData
 
 struct MapData
 {
-    ObstacleEnvData map_2d[n][m]; //각각 24bytes
+    ObstacleEnvData map_2d[map_n][map_m]; //각각 24bytes
     std::vector<ObstacleData> obstacle_list;
     std::vector<VehicleData> vehicle_list; //24bytes
 }; //maptdata 사이즈는 24*4000*5000+24 = 480000024 byte = 약 450MB 

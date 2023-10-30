@@ -43,46 +43,46 @@
 #include "coder_bounded_array.h"
 
 // Function Declarations
-static void argInit_1x3_struct2_T(struct2_T result[3]);
+static void argInit_1x3_HubObstacleData(HubObstacleData result[3]);
 
-static void argInit_1x5_struct1_T(struct1_T result[5]);
+static void argInit_1x5_HubVehicleData(HubVehicleData result[5]);
 
 static void argInit_3x3_real_T(double result[9]);
 
 static double argInit_real_T();
 
-static void argInit_struct0_T(struct0_T &result);
+static void argInit_HubData(HubData &result);
 
-static void argInit_struct1_T(struct1_T &result);
+static void argInit_HubVehicleData(HubVehicleData &result);
 
-static void argInit_struct2_T(struct2_T &result);
+static void argInit_HubObstacleData(HubObstacleData &result);
 
 // Function Definitions
 //
-// Arguments    : struct2_T result[3]
+// Arguments    : HubObstacleData result[3]
 // Return Type  : void
 //
-static void argInit_1x3_struct2_T(struct2_T result[3])
+static void argInit_1x3_HubObstacleData(HubObstacleData result[3])
 {
   // Loop over the array to initialize each element.
   for (int idx1{0}; idx1 < 3; idx1++) {
     // Set the value of the array element.
     // Change this value to the value that the application requires.
-    argInit_struct2_T(result[idx1]);
+    argInit_HubObstacleData(result[idx1]);
   }
 }
 
 //
-// Arguments    : struct1_T result[5]
+// Arguments    : HubVehicleData result[5]
 // Return Type  : void
 //
-static void argInit_1x5_struct1_T(struct1_T result[5])
+static void argInit_1x5_HubVehicleData(HubVehicleData result[5])
 {
   // Loop over the array to initialize each element.
   for (int idx1{0}; idx1 < 5; idx1++) {
     // Set the value of the array element.
     // Change this value to the value that the application requires.
-    argInit_struct1_T(result[idx1]);
+    argInit_HubVehicleData(result[idx1]);
   }
 }
 
@@ -110,21 +110,21 @@ static double argInit_real_T()
 }
 
 //
-// Arguments    : struct0_T &result
+// Arguments    : HubData &result
 // Return Type  : void
 //
-static void argInit_struct0_T(struct0_T &result)
+static void argInit_HubData(HubData &result)
 {
   // Set the value of each structure field.
   // Change this value to the value that the application requires.
-  argInit_1x5_struct1_T(result.vehicle);
+  argInit_1x5_HubVehicleData(result.vehicle);
 }
 
 //
-// Arguments    : struct1_T &result
+// Arguments    : HubVehicleData &result
 // Return Type  : void
 //
-static void argInit_struct1_T(struct1_T &result)
+static void argInit_HubVehicleData(HubVehicleData &result)
 {
   double result_tmp;
   // Set the value of each structure field.
@@ -140,15 +140,15 @@ static void argInit_struct1_T(struct1_T &result)
   result.Velocity_long = result_tmp;
   result.Velocity_lat = result_tmp;
   result.Velocity_ang = result_tmp;
-  argInit_1x3_struct2_T(result.obstacle);
+  argInit_1x3_HubObstacleData(result.obstacle);
   result.road_z = result_tmp;
 }
 
 //
-// Arguments    : struct2_T &result
+// Arguments    : HubObstacleData &result
 // Return Type  : void
 //
-static void argInit_struct2_T(struct2_T &result)
+static void argInit_HubObstacleData(HubObstacleData &result)
 {
   double result_tmp;
   // Set the value of each structure field.
@@ -180,7 +180,7 @@ static void argInit_struct2_T(struct2_T &result)
 //   // function. So, a call to initialize is not included here. Invoke the
 //   // entry-point functions.
 //   // You can call entry-point functions multiple times.
-//   main_EDGE_fusion_function_231019_2222();
+//   matlab_fusion();
 //   // Terminate the application.
 //   // You do not need to do this more than one time.
 //   EDGE_fusion_function_231019_2222_terminate();
@@ -191,19 +191,14 @@ static void argInit_struct2_T(struct2_T &result)
 // Arguments    : void
 // Return Type  : void
 //
-void main_EDGE_fusion_function_231019_2222()
+void matlab_fusion(HubData hub_data_Object)
 {
   coder::array<struct3_T, 1U> allTracks;
   coder::bounded_array<struct3_T, 100U, 1U> confirmedTracks;
   coder::bounded_array<struct3_T, 100U, 1U> tentativeTracks;
-  struct0_T r;
   struct4_T analysisInformation;
-  // Initialize function 'EDGE_fusion_function_231019_2222' input arguments.
-  // Initialize function input argument 'hub_data_Object'.
-  // Call the entry-point 'EDGE_fusion_function_231019_2222'.
-  argInit_struct0_T(r);
-  EDGE_fusion_function_231019_2222(
-      &r, confirmedTracks.data, confirmedTracks.size, tentativeTracks.data,
+  argInit_HubData(hub_data_Object); // TODO:뭐하는건지 확인필요
+  EDGE_fusion_function_231019_2222(&hub_data_Object, confirmedTracks.data, confirmedTracks.size, tentativeTracks.data,
       tentativeTracks.size, allTracks, &analysisInformation);
 }
 

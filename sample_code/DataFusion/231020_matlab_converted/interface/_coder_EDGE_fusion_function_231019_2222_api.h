@@ -21,7 +21,7 @@
 #include <cstring>
 
 // Type Definitions
-struct struct2_T {
+struct HubObstacleData {
   real_T timestamp;
   real_T obstacle_class;
   real_T cuboid_x;
@@ -37,8 +37,8 @@ struct struct2_T {
   real_T Velocity_z;
 };
 
-struct struct1_T {
-  struct2_T obstacle[3];
+struct HubVehicleData {
+  HubObstacleData obstacle[3];
   real_T road_z;
   real_T vehicle_class;
   real_T Position_lat;
@@ -52,8 +52,8 @@ struct struct1_T {
   real_T Velocity_ang;
 };
 
-struct struct0_T {
-  struct1_T vehicle[5];
+struct HubData {
+  HubVehicleData vehicle[5];
 };
 
 struct struct4_T {
@@ -91,7 +91,7 @@ extern emlrtCTX emlrtRootTLSGlobal;
 extern emlrtContext emlrtContextGlobal;
 
 // Function Declarations
-void EDGE_fusion_function_231019_2222(struct0_T *hub_data_Object,
+void EDGE_fusion_function_231019_2222(HubData *hub_data_Object,
                                       struct3_T confirmedTracks_data[],
                                       int32_T confirmedTracks_size[1],
                                       struct3_T tentativeTracks_data[],

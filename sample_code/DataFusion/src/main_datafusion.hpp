@@ -1,5 +1,5 @@
-#define n 4000
-#define m 5000
+#define map_n 4000
+#define map_m 5000
 
 enum ObstacleClass
 {
@@ -79,7 +79,7 @@ struct ObstacleEnvData
 
 struct MapData
 {
-    ObstacleEnvData map_2d[n][m]; //각각 24bytes
+    ObstacleEnvData map_2d[map_n][map_m]; //각각 24bytes
     std::vector<ObstacleData> obstacle_list;
     std::vector<VehicleData> vehicle_list;
 
@@ -87,7 +87,7 @@ struct MapData
 
 //=============control hub에서 가져온 파트====================
 
-struct ObstacleData_hub
+struct Out_HubObstacleData
 {
 //    unsigned short obstacle_id;
     ObstacleClass obstacle_class;
@@ -103,9 +103,9 @@ struct ObstacleData_hub
     float velocity_y;
 };
 
-struct VehicleData_hub
+struct Out_HubVehicleData
 {
-    std::vector<ObstacleData_hub> obstacle;
+    std::vector<Out_HubObstacleData> obstacle;
     std::vector<float> road_z; 
     VehicleClass vehicle_class;
     std::time_t timestamp;
@@ -125,7 +125,7 @@ struct VehicleData_hub
 
 };
 
-struct HubData
+struct Out_HubData
 {
-    std::vector<VehicleData_hub> vehicle;
+    std::vector<Out_HubVehicleData> vehicle;
 };

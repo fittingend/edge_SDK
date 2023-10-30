@@ -20,7 +20,7 @@ enum VehicleClass
     SUB_VEHICLE_4
 };
 
-struct ObstacleData
+struct HubObstacleData
 {
 //    unsigned short obstacle_id;
     ObstacleClass obstacle_class;
@@ -39,9 +39,9 @@ struct ObstacleData
     float velocity_z;
 
 };
-struct VehicleData
+struct HubVehicleData
 {
-    std::vector<ObstacleData> obstacle;
+    std::vector<HubObstacleData> obstacle;
     std::vector<float> road_z; 
     VehicleClass vehicle_class;
     std::time_t timestamp;
@@ -58,6 +58,6 @@ struct VehicleData
 };
 struct HubData
 {
-    std::vector<VehicleData> vehicle;
+    std::vector<HubVehicleData> vehicle;
 };
 

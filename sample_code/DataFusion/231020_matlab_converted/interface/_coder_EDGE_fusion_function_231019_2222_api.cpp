@@ -54,18 +54,18 @@ static real_T b_emlrt_marshallIn(const emlrtStack &sp, const mxArray *src,
                                  const emlrtMsgIdentifier *msgId);
 
 static void emlrt_marshallIn(const emlrtStack &sp, const mxArray *b_nullptr,
-                             const char_T *identifier, struct0_T &y);
+                             const char_T *identifier, HubData &y);
 
 static void emlrt_marshallIn(const emlrtStack &sp, const mxArray *u,
-                             const emlrtMsgIdentifier *parentId, struct0_T &y);
-
-static void emlrt_marshallIn(const emlrtStack &sp, const mxArray *u,
-                             const emlrtMsgIdentifier *parentId,
-                             struct1_T y[5]);
+                             const emlrtMsgIdentifier *parentId, HubData &y);
 
 static void emlrt_marshallIn(const emlrtStack &sp, const mxArray *u,
                              const emlrtMsgIdentifier *parentId,
-                             struct2_T y[3]);
+                             HubVehicleData y[5]);
+
+static void emlrt_marshallIn(const emlrtStack &sp, const mxArray *u,
+                             const emlrtMsgIdentifier *parentId,
+                             HubObstacleData y[3]);
 
 static void emlrt_marshallIn(const emlrtStack &sp, const mxArray *u,
                              const emlrtMsgIdentifier *parentId, real_T y[9]);
@@ -131,11 +131,11 @@ static real_T b_emlrt_marshallIn(const emlrtStack &sp, const mxArray *src,
 // Arguments    : const emlrtStack &sp
 //                const mxArray *b_nullptr
 //                const char_T *identifier
-//                struct0_T &y
+//                HubData &y
 // Return Type  : void
 //
 static void emlrt_marshallIn(const emlrtStack &sp, const mxArray *b_nullptr,
-                             const char_T *identifier, struct0_T &y)
+                             const char_T *identifier, HubData &y)
 {
   emlrtMsgIdentifier thisId;
   thisId.fIdentifier = const_cast<const char_T *>(identifier);
@@ -149,11 +149,11 @@ static void emlrt_marshallIn(const emlrtStack &sp, const mxArray *b_nullptr,
 // Arguments    : const emlrtStack &sp
 //                const mxArray *u
 //                const emlrtMsgIdentifier *parentId
-//                struct0_T &y
+//                HubData &y
 // Return Type  : void
 //
 static void emlrt_marshallIn(const emlrtStack &sp, const mxArray *u,
-                             const emlrtMsgIdentifier *parentId, struct0_T &y)
+                             const emlrtMsgIdentifier *parentId, HubData &y)
 {
   static const int32_T dims{0};
   static const char_T *fieldNames{"vehicle"};
@@ -174,11 +174,11 @@ static void emlrt_marshallIn(const emlrtStack &sp, const mxArray *u,
 // Arguments    : const emlrtStack &sp
 //                const mxArray *u
 //                const emlrtMsgIdentifier *parentId
-//                struct1_T y[5]
+//                HubVehicleData y[5]
 // Return Type  : void
 //
 static void emlrt_marshallIn(const emlrtStack &sp, const mxArray *u,
-                             const emlrtMsgIdentifier *parentId, struct1_T y[5])
+                             const emlrtMsgIdentifier *parentId, HubVehicleData y[5])
 {
   static const int32_T dims[2]{1, 5};
   static const char_T *fieldNames[12]{
@@ -266,11 +266,11 @@ static void emlrt_marshallIn(const emlrtStack &sp, const mxArray *u,
 // Arguments    : const emlrtStack &sp
 //                const mxArray *u
 //                const emlrtMsgIdentifier *parentId
-//                struct2_T y[3]
+//                HubObstacleData y[3]
 // Return Type  : void
 //
 static void emlrt_marshallIn(const emlrtStack &sp, const mxArray *u,
-                             const emlrtMsgIdentifier *parentId, struct2_T y[3])
+                             const emlrtMsgIdentifier *parentId, HubObstacleData y[3])
 {
   static const int32_T dims[2]{1, 3};
   static const char_T *fieldNames[13]{
@@ -995,7 +995,7 @@ void EDGE_fusion_function_231019_2222_api(const mxArray *prhs, int32_T nlhs,
       nullptr, // tls
       nullptr  // prev
   };
-  struct0_T hub_data_Object;
+  HubData hub_data_Object;
   struct4_T analysisInformation;
   st.tls = emlrtRootTLSGlobal;
   emlrtHeapReferenceStackEnterFcnR2012b(&st);

@@ -70,6 +70,9 @@
 #include "hub_data_subscriber.h"
 
 #include "main_datafusion.hpp"
+#include "coder_bounded_array.h"
+#include "coder_array.h"
+#include "EDGE_fusion_function_231019_2222_types.h"
 
 #include "main.h"
 namespace
@@ -104,6 +107,7 @@ bool RegisterSigTermHandler()
 
     return true;
 }
+
 
 }  // namespace
 
@@ -280,21 +284,22 @@ void ThreadAct1()
  
 //==============2.데이터 융합=================
 // i)차량 정보 ii) 노면 정보 iii)장애물 정보를 융합
-                    HubData hub_data; //관제에서 데이터 수신
+                    HubData hub_data_raw; //관제에서 데이터 수신 - 인풋 
+                    matlab_fusion(hub_data_raw);
 
-                    main_EDGE_fusion_function_231019_2222();
+                    Out_HubData hub_data; // 아웃풋
 
-                    VehicleData_hub main_vehicle;
-                    VehicleData_hub sub_vehicle1;
-                    VehicleData_hub sub_vehicle2;
-                    VehicleData_hub sub_vehicle3;
-                    VehicleData_hub sub_vehicle4;
+                    Out_HubVehicleData main_vehicle;
+                    Out_HubVehicleData sub_vehicle1;
+                    Out_HubVehicleData sub_vehicle2;
+                    Out_HubVehicleData sub_vehicle3;
+                    Out_HubVehicleData sub_vehicle4;
 
-                    ObstacleData_hub main_vehicle_obstacle;
-                    ObstacleData_hub sub_vehicle1_obstacle;
-                    ObstacleData_hub sub_vehicle2_obstacle;        
-                    ObstacleData_hub sub_vehicle3_obstacle;        
-                    ObstacleData_hub sub_vehicle4_obstacle;        
+                    Out_HubObstacleData main_vehicle_obstacle;
+                    Out_HubObstacleData sub_vehicle1_obstacle;
+                    Out_HubObstacleData sub_vehicle2_obstacle;        
+                    Out_HubObstacleData sub_vehicle3_obstacle;        
+                    Out_HubObstacleData sub_vehicle4_obstacle;        
 
                     ObstacleData current_obstacle;
                     VehicleData current_vehicle;

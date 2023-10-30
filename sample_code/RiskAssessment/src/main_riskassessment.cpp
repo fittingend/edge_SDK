@@ -146,8 +146,8 @@ double getTTC(ObstacleData obstacle, VehicleData vehicle)
 }  
 ObstacleData searchLinearpath(std::vector<ObstacleData> obstacle_list, float x1, float y1, float x2, float y2)
 {
-    //목적: 두 coordinate 사이를 연결해 직선을 만들고 n 등분해 
-    // n 등분된 직선 위 x-y coordinate 과 모든 장애물간의 거리를 구해서 10m 이내를 찾는다
+    //목적: 두 coordinate 사이를 연결해 직선을 만들고 map_n 등분해 
+    // map_n 등분된 직선 위 x-y coordinate 과 모든 장애물간의 거리를 구해서 10m 이내를 찾는다
     float coeff = (y2 - y1) / (x2 - x1);
     float constant = y1 - x1 * coeff;
     int divide = 10; //임의의 수로 수정 가능 - 두 포인트를 10등분 해 장애물 찾기를 진행 

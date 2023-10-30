@@ -20,7 +20,7 @@
 
 // Function Declarations
 extern void EDGE_fusion_function_231017_2135(
-    const struct0_T *hub_data_Object, struct3_T confirmedTracks_data[],
+    const HubData *hub_data_Object, struct3_T confirmedTracks_data[],
     int confirmedTracks_size[1], struct3_T tentativeTracks_data[],
     int tentativeTracks_size[1], coder::array<struct3_T, 1U> &allTracks,
     struct4_T *analysisInformation);

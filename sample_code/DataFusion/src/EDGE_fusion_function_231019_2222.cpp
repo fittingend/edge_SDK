@@ -28,7 +28,7 @@
 // UNTITLED9 이 함수의 요약 설명 위치
 //    자세한 설명 위치
 //
-// Arguments    : const struct0_T *hub_data_Object
+// Arguments    : const HubData *hub_data_Object
 //                struct3_T confirmedTracks_data[]
 //                int confirmedTracks_size[1]
 //                struct3_T tentativeTracks_data[]
@@ -37,7 +37,7 @@
 //                struct4_T *analysisInformation
 // Return Type  : void
 //
-void EDGE_fusion_function_231019_2222(const struct0_T *hub_data_Object,
+void EDGE_fusion_function_231019_2222(const HubData *hub_data_Object,
                                       struct3_T confirmedTracks_data[],
                                       int confirmedTracks_size[1],
                                       struct3_T tentativeTracks_data[],
@@ -193,6 +193,7 @@ void EDGE_fusion_function_231019_2222(const struct0_T *hub_data_Object,
       obj->clone((&(&(&(&b_obj[0])[0])[0])[0])[18]);
   fuser.pSourceConfigurations[19] =
       obj->clone((&(&(&(&b_obj[0])[0])[0])[0])[19]);
+
   for (int i{0}; i < 5; i++) {
     fuser.pSourceConfigurations[i] = sourceconfig_ego[i];
   }
@@ -226,13 +227,7 @@ void EDGE_fusion_function_231019_2222(const struct0_T *hub_data_Object,
     fuser.pIsValidSource[b_track_ego] = false;
   }
   fuser.matlabCodegenIsDeleted = false;
-  //   % 인지 융합 함수 configuration
-  // 'EDGE_fusion_function_231019_2222:30' for i = 1 : numveh
-  // 'EDGE_fusion_function_231019_2222:34' idx=numobs>0;
-  //  장애물 인지한 차량 인덱스
-  // 'EDGE_fusion_function_231019_2222:35' numobs=numobs(idx);
-  //  Obstacle state-space structure
-  // 'EDGE_fusion_function_231019_2222:40' for i = 1 : numveh
+  
   expl_temp.BranchID = 0U;
   expl_temp.Age = 1U;
   expl_temp.ObjectClassProbabilities = 1.0;
@@ -247,36 +242,15 @@ void EDGE_fusion_function_231019_2222(const struct0_T *hub_data_Object,
     expl_temp.StateCovariance[b_track_ego] = stateCov[b_track_ego];
   }
   for (int i{0}; i < 5; i++) {
-    // 'EDGE_fusion_function_231019_2222:44' for j = 1 : numobs(i,1)
     expl_temp.SourceIndex = static_cast<unsigned int>(i + 1);
-    // 'EDGE_fusion_function_231019_2222:48' obs_state =
-    // [hub_data_Object.vehicle(i).obstacle(j).Position_x
-    // 'EDGE_fusion_function_231019_2222:49'
-    // hub_data_Object.vehicle(i).obstacle(j).Velocity_x
-    // 'EDGE_fusion_function_231019_2222:50'
-    // hub_data_Object.vehicle(i).obstacle(j).Position_y
-    // 'EDGE_fusion_function_231019_2222:51'
-    // hub_data_Object.vehicle(i).obstacle(j).Velocity_y
-    // 'EDGE_fusion_function_231019_2222:52'
-    // hub_data_Object.vehicle(i).obstacle(j).Position_z
-    // 'EDGE_fusion_function_231019_2222:53'
-    // hub_data_Object.vehicle(i).obstacle(j).Velocity_z];
-    // 'EDGE_fusion_function_231019_2222:55'
-    // temp_track=toStruct(objectTrack('State',obs_state, ...
-    // 'EDGE_fusion_function_231019_2222:56' 'TrackID',(i-1)*maxobs+j, ...
-    // 'EDGE_fusion_function_231019_2222:57' 'SourceIndex',i, ...
-    // 'EDGE_fusion_function_231019_2222:58' 'StateCovariance',5*eye(6), ...
-    // 'EDGE_fusion_function_231019_2222:59'
-    // 'IsConfirmed',true,'UpdateTime',hub_data_Object.vehicle(i).obstacle(j).timestamp,
-    // ... 'EDGE_fusion_function_231019_2222:60'
-    // 'ObjectClassID',hub_data_Object.vehicle(i).obstacle(j).obstacle_class));
+  
     expl_temp.State[0] = hub_data_Object->vehicle[i].obstacle[0].Position_x;
     expl_temp.State[1] = hub_data_Object->vehicle[i].obstacle[0].Velocity_x;
     expl_temp.State[2] = hub_data_Object->vehicle[i].obstacle[0].Position_y;
     expl_temp.State[3] = hub_data_Object->vehicle[i].obstacle[0].Velocity_y;
     expl_temp.State[4] = hub_data_Object->vehicle[i].obstacle[0].Position_z;
     expl_temp.State[5] = hub_data_Object->vehicle[i].obstacle[0].Velocity_z;
-    // 'EDGE_fusion_function_231019_2222:61' track_ego(end+1)=temp_track;
+
     b_track_ego = track_ego.size(1) + 1;
     track_ego.set_size(1, track_ego.size(1) + 1);
     expl_temp.TrackID = static_cast<unsigned int>(i * 20 + 1);
@@ -284,34 +258,14 @@ void EDGE_fusion_function_231019_2222(const struct0_T *hub_data_Object,
     expl_temp.ObjectClassID =
         hub_data_Object->vehicle[i].obstacle[0].obstacle_class;
     track_ego[b_track_ego - 1] = expl_temp;
-    // 'EDGE_fusion_function_231019_2222:48' obs_state =
-    // [hub_data_Object.vehicle(i).obstacle(j).Position_x
-    // 'EDGE_fusion_function_231019_2222:49'
-    // hub_data_Object.vehicle(i).obstacle(j).Velocity_x
-    // 'EDGE_fusion_function_231019_2222:50'
-    // hub_data_Object.vehicle(i).obstacle(j).Position_y
-    // 'EDGE_fusion_function_231019_2222:51'
-    // hub_data_Object.vehicle(i).obstacle(j).Velocity_y
-    // 'EDGE_fusion_function_231019_2222:52'
-    // hub_data_Object.vehicle(i).obstacle(j).Position_z
-    // 'EDGE_fusion_function_231019_2222:53'
-    // hub_data_Object.vehicle(i).obstacle(j).Velocity_z];
-    // 'EDGE_fusion_function_231019_2222:55'
-    // temp_track=toStruct(objectTrack('State',obs_state, ...
-    // 'EDGE_fusion_function_231019_2222:56' 'TrackID',(i-1)*maxobs+j, ...
-    // 'EDGE_fusion_function_231019_2222:57' 'SourceIndex',i, ...
-    // 'EDGE_fusion_function_231019_2222:58' 'StateCovariance',5*eye(6), ...
-    // 'EDGE_fusion_function_231019_2222:59'
-    // 'IsConfirmed',true,'UpdateTime',hub_data_Object.vehicle(i).obstacle(j).timestamp,
-    // ... 'EDGE_fusion_function_231019_2222:60'
-    // 'ObjectClassID',hub_data_Object.vehicle(i).obstacle(j).obstacle_class));
+  
     expl_temp.State[0] = hub_data_Object->vehicle[i].obstacle[1].Position_x;
     expl_temp.State[1] = hub_data_Object->vehicle[i].obstacle[1].Velocity_x;
     expl_temp.State[2] = hub_data_Object->vehicle[i].obstacle[1].Position_y;
     expl_temp.State[3] = hub_data_Object->vehicle[i].obstacle[1].Velocity_y;
     expl_temp.State[4] = hub_data_Object->vehicle[i].obstacle[1].Position_z;
     expl_temp.State[5] = hub_data_Object->vehicle[i].obstacle[1].Velocity_z;
-    // 'EDGE_fusion_function_231019_2222:61' track_ego(end+1)=temp_track;
+
     b_track_ego = track_ego.size(1) + 1;
     track_ego.set_size(1, track_ego.size(1) + 1);
     expl_temp.TrackID = static_cast<unsigned int>(i * 20 + 2);
@@ -319,34 +273,14 @@ void EDGE_fusion_function_231019_2222(const struct0_T *hub_data_Object,
     expl_temp.ObjectClassID =
         hub_data_Object->vehicle[i].obstacle[1].obstacle_class;
     track_ego[b_track_ego - 1] = expl_temp;
-    // 'EDGE_fusion_function_231019_2222:48' obs_state =
-    // [hub_data_Object.vehicle(i).obstacle(j).Position_x
-    // 'EDGE_fusion_function_231019_2222:49'
-    // hub_data_Object.vehicle(i).obstacle(j).Velocity_x
-    // 'EDGE_fusion_function_231019_2222:50'
-    // hub_data_Object.vehicle(i).obstacle(j).Position_y
-    // 'EDGE_fusion_function_231019_2222:51'
-    // hub_data_Object.vehicle(i).obstacle(j).Velocity_y
-    // 'EDGE_fusion_function_231019_2222:52'
-    // hub_data_Object.vehicle(i).obstacle(j).Position_z
-    // 'EDGE_fusion_function_231019_2222:53'
-    // hub_data_Object.vehicle(i).obstacle(j).Velocity_z];
-    // 'EDGE_fusion_function_231019_2222:55'
-    // temp_track=toStruct(objectTrack('State',obs_state, ...
-    // 'EDGE_fusion_function_231019_2222:56' 'TrackID',(i-1)*maxobs+j, ...
-    // 'EDGE_fusion_function_231019_2222:57' 'SourceIndex',i, ...
-    // 'EDGE_fusion_function_231019_2222:58' 'StateCovariance',5*eye(6), ...
-    // 'EDGE_fusion_function_231019_2222:59'
-    // 'IsConfirmed',true,'UpdateTime',hub_data_Object.vehicle(i).obstacle(j).timestamp,
-    // ... 'EDGE_fusion_function_231019_2222:60'
-    // 'ObjectClassID',hub_data_Object.vehicle(i).obstacle(j).obstacle_class));
+
     expl_temp.State[0] = hub_data_Object->vehicle[i].obstacle[2].Position_x;
     expl_temp.State[1] = hub_data_Object->vehicle[i].obstacle[2].Velocity_x;
     expl_temp.State[2] = hub_data_Object->vehicle[i].obstacle[2].Position_y;
     expl_temp.State[3] = hub_data_Object->vehicle[i].obstacle[2].Velocity_y;
     expl_temp.State[4] = hub_data_Object->vehicle[i].obstacle[2].Position_z;
     expl_temp.State[5] = hub_data_Object->vehicle[i].obstacle[2].Velocity_z;
-    // 'EDGE_fusion_function_231019_2222:61' track_ego(end+1)=temp_track;
+
     b_track_ego = track_ego.size(1) + 1;
     track_ego.set_size(1, track_ego.size(1) + 1);
     expl_temp.TrackID = static_cast<unsigned int>(i * 20 + 3);
@@ -355,8 +289,7 @@ void EDGE_fusion_function_231019_2222(const struct0_T *hub_data_Object,
         hub_data_Object->vehicle[i].obstacle[2].obstacle_class;
     track_ego[b_track_ego - 1] = expl_temp;
   }
-  // 'EDGE_fusion_function_231019_2222:67'
-  // [confirmedTracks,tentativeTracks,allTracks,analysisInformation]=fuser(track_ego,hub_data_Object.vehicle(1).obstacle(1).timestamp);
+
   confirmedTracks_size[0] = fuser.step(
       track_ego, hub_data_Object->vehicle[0].obstacle[0].timestamp,
       confirmedTracks_data, tentativeTracks_data, allTracks,
@@ -375,8 +308,3 @@ void EDGE_fusion_function_231019_2222(const struct0_T *hub_data_Object,
       analysisInformation->TrackIDsAtStepEnd.size, tentativeTracks_size[0]);
 }
 
-//
-// File trailer for EDGE_fusion_function_231019_2222.cpp
-//
-// [EOF]
-//
