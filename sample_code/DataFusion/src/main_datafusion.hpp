@@ -89,43 +89,43 @@ struct MapData
 
 struct Out_HubObstacleData
 {
-//    unsigned short obstacle_id;
+    unsigned short obstacle_id;
     ObstacleClass obstacle_class;
     std::time_t timestamp;
     float cuboid_x;
     float cuboid_y;
     float cuboid_z;
-    float heading_angle;
+    float heading_angle; 
     float position_x; // m 로 가정
-    float position_y;
+    float position_y; 
     float position_z;
-    float velocity_x; // m/s 으로 가정
+    float velocity_x; //작업환경의 가로와 세로축을 XY로 지정했을때의 속도
     float velocity_y;
 };
 
 struct Out_HubVehicleData
 {
-    std::vector<Out_HubObstacleData> obstacle;
     std::vector<float> road_z; 
     VehicleClass vehicle_class;
     std::time_t timestamp;
     float position_lat;
     float position_long;
     float position_height;
-    float position_x;
-    float position_y;
+    float position_x; //작업환경의 가로와 세로축을 XY로 지정했을때의 위치 
+    float position_y; //작업환경의 가로와 세로축을 XY로 지정했을때의 위치 
     float yaw;
     float roll;
     float pitch;
     float velocity_long;
     float velocity_lat;
-    float velocity_x;
-    float velocity_y;
-    float velocity_ang;
+    float velocity_x; //작업환경의 가로와 세로축을 XY로 지정했을때의 속도
+    float velocity_y;//작업환경의 가로와 세로축을 XY로 지정했을때의 속도
+    float velocity_ang; 
 
 };
 
 struct Out_HubData
 {
     std::vector<Out_HubVehicleData> vehicle;
+    std::vector<Out_HubObstacleData> obstacle;
 };

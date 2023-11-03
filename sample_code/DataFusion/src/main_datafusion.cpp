@@ -285,9 +285,8 @@ void ThreadAct1()
 //==============2.데이터 융합=================
 // i)차량 정보 ii) 노면 정보 iii)장애물 정보를 융합
                     HubData hub_data_raw; //관제에서 데이터 수신 - 인풋 
-                    matlab_fusion(hub_data_raw);
-
-                    Out_HubData hub_data; // 아웃풋
+ //                   Out_HubData hub_data = matlab_fusion(hub_data_raw);
+                    Out_HubData hub_data; // matlab 모듈에서 나온 아웃풋
 
                     Out_HubVehicleData main_vehicle;
                     Out_HubVehicleData sub_vehicle1;
@@ -295,11 +294,9 @@ void ThreadAct1()
                     Out_HubVehicleData sub_vehicle3;
                     Out_HubVehicleData sub_vehicle4;
 
-                    Out_HubObstacleData main_vehicle_obstacle;
-                    Out_HubObstacleData sub_vehicle1_obstacle;
-                    Out_HubObstacleData sub_vehicle2_obstacle;        
-                    Out_HubObstacleData sub_vehicle3_obstacle;        
-                    Out_HubObstacleData sub_vehicle4_obstacle;        
+                    Out_HubObstacleData obstacle1;
+                    Out_HubObstacleData obstacle2;
+                    Out_HubObstacleData obstacle3;        
 
                     ObstacleData current_obstacle;
                     VehicleData current_vehicle;
@@ -309,53 +306,61 @@ void ThreadAct1()
 //TODO 측위 좌표계 변환 - 현재 시뮬레이션 데이터 검증목표라 필요X
 
 //==============2.1. 차량별 장애물의 속도 좌표계 절대값으로 변환=================
-                    for (auto iter = hub_data.vehicle.begin(); iter!=hub_data.vehicle.end(); iter++)
-                    {
-                        for (auto iter1 = iter->obstacle.begin(); iter1!=iter->obstacle.end(); iter1++)
-                        {
-                            //장애물 속도 좌표계 변환 TODO 수식추가
-                            iter1->velocity_x = iter1->velocity_x;
-                            iter1->velocity_y = iter1->velocity_y;
-                        }
+                    // for (auto iter = hub_data.vehicle.begin(); iter!=hub_data.vehicle.end(); iter++)
+                    // {
+                    //     for (auto iter1 = iter->obstacle.begin(); iter1!=iter->obstacle.end(); iter1++)
+                    //     {
+                    //         //장애물 속도 좌표계 변환 TODO 수식추가
+                    //         iter1->velocity_x = iter1->velocity_x;
+                    //         iter1->velocity_y = iter1->velocity_y;
+                    //     }
 
-                        //차량 속도 좌표계 변환 TODO 수식추가
-                        iter->velocity_x = iter->velocity_long;
-                        iter->velocity_y = iter->velocity_lat;
-                    }
+                    //     //차량 속도 좌표계 변환 TODO 수식추가
+                    //     iter->velocity_x = iter->velocity_long;
+                    //     iter->velocity_y = iter->velocity_lat;
+                    // }
 
-//==============2.2. 차량별 장애물의 위치 좌표계 절대값으로 변환=================
-                    for (auto iter = hub_data.vehicle.begin(); iter!=hub_data.vehicle.end(); iter++)
-                    {
-                        for (auto iter1 = iter->obstacle.begin(); iter1!=iter->obstacle.end(); iter1++)
-                        {
-                            //장애물 위치 좌표계 변환 TODO 수식추가
-                            iter1->position_x = iter1->position_x;
-                            iter1->position_y = iter1->position_y;
-                        }
-                        //차량 위치 좌표계 변환 TODO 수식추가
-                        iter->position_x = iter->position_long;
-                        iter->position_y = iter->position_lat;
+// //==============2.2. 차량별 장애물의 위치 좌표계 절대값으로 변환=================
+//                     for (auto iter = hub_data.vehicle.begin(); iter!=hub_data.vehicle.end(); iter++)
+//                     {
+//                         for (auto iter1 = iter->obstacle.begin(); iter1!=iter->obstacle.end(); iter1++)
+//                         {
+//                             //장애물 위치 좌표계 변환 TODO 수식추가
+//                             iter1->position_x = iter1->position_x;
+//                             iter1->position_y = iter1->position_y;
+//                         }
+//                         //차량 위치 좌표계 변환 TODO 수식추가
+//                         iter->position_x = iter->position_long;
+//                         iter->position_y = iter->position_lat;
 
-                    }
-//==============2.3. 차량별 장애물 위치 추정 (기준시점)=================
-                    // n대의 차에서 m개의 장애물이 인지되어서 각각의 인지 데이터가 왔다고 가정
+//                     }
+
+//==============2.3. 장애물 위치 보정 (엣지에서 처리 기준시점)=================
+                    // m개의 장애물이 인지되어서 데이터가 옴
                     //엣지에서 처리를 시작한 시간을 기준시점 레퍼런스 타임으로 지정
                     std::time_t reference_time = std::time(0);
 
-                    // n대의 차에서 m개의 장애물의 인지데이터를 각각 레퍼런스 타임과의 시차만큼 위치 보정
-                    for (auto iter = hub_data.vehicle.begin(); iter!=hub_data.vehicle.end(); iter++)
+                    for (auto iter = hub_data.obstacle.begin(); iter!=hub_data.obstacle.end(); iter++)
                     {
-                        for (auto iter1 = iter->obstacle.begin(); iter1!=iter->obstacle.end(); iter1++)
-                        {
-                            iter1->position_x = iter1->position_x * (reference_time - iter1->timestamp) * 100 * iter->velocity_x;
-                            iter1->position_y = iter1->position_y * (reference_time - iter1->timestamp) * 100 * iter->velocity_y;
-                            //레퍼런스 타임과의 차이만큼 위치 보정 후 위치 값 업데이트
-                        }
+                        iter->position_x = iter->position_x *(reference_time - iter->timestamp) * 100 * iter->velocity_x;
+                        iter->position_y = iter->position_y *(reference_time - iter->timestamp) * 100 * iter->velocity_y;
+                        //시차는 ms 단위라 100 곱하고 속도는 m/s 이라고 가정
                     }
                
 //==============3.1. MapData에 노면데이터 추가 =================
                     //TO DO:차량이 작업공간을 정찰할 동안 해당 그리드에 맞는 노면데이터 업데이트 
                     //해당 차량의 위치 - 위경도 정보로 업데이트 그리드의 인덱스를 찾아내는 수식 만들어야 함 
+
+                    for (auto iter = hub_data.vehicle.begin(); iter!=hub_data.vehicle.end(); iter++)
+                    {
+                        for (auto iter1 = iter->road_z.begin(); iter1!= iter->road_z.end(); iter1++)
+                        {
+                            // TODO:차량의 위치에 기반해 주변 노면 정보 업데이트
+                            // 현재 차량과 인지 노면데이터의 위치 관계가 불분명하므로 '차량의 위치 = 업데이트 되는 노면 위치' 라는 단순한 가정의 dummy code 로 대체 
+                            map_data.map_2d[iter->position_x *10][iter->position_y *10].road_z = *iter1;
+                            // 미터 단위의 position_x 를 10cm 그리드 셀 기준으로 하면 position_x *100 /10 = position_x*10 th grid cell
+                        }
+                    }
                     map_data.map_2d[23][4142].road_z= 132;
                     map_data.map_2d[0][0].road_z= 423;
                     adcm::Log::Info() << "road info is " << map_data.map_2d[23][4142].road_z;
