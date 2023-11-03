@@ -1,5 +1,6 @@
 #define map_n 4000
 #define map_m 5000
+#define ABS(x) ((x >= 0) ? x : -x)
 
 enum ObstacleClass
 {
@@ -25,7 +26,10 @@ enum ActionClass
     REMOVE_BLIND_SPOT,
     ALERT_OBSTACLE
 };
-
+typedef struct
+{
+    long x, y;
+} Point2D;
 struct ObstacleData
 {
     unsigned short obstacle_id;
@@ -92,6 +96,7 @@ struct Out_HubObstacleData
     unsigned short obstacle_id;
     ObstacleClass obstacle_class;
     std::time_t timestamp;
+    std::vector<std::pair<unsigned short,unsigned short>> map_2d_location; //장애물이 위치한 2d 그리드 맵의 index 페어를 저장
     float cuboid_x;
     float cuboid_y;
     float cuboid_z;
@@ -108,6 +113,7 @@ struct Out_HubVehicleData
     std::vector<float> road_z; 
     VehicleClass vehicle_class;
     std::time_t timestamp;
+    std::vector<std::pair<unsigned short,unsigned short>> map_2d_location; //해당 차량이 위치한 2d 그리드 맵의 index 페어를 저장
     float position_lat;
     float position_long;
     float position_height;

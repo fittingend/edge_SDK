@@ -52,8 +52,9 @@
 #include <cstdlib>
 #include <csignal>
 #include <stdio.h>
-#include <random>
 
+#include <random>
+#include <algorithm>
 #include <set>
 #include <vector>
 #include <array>
@@ -108,12 +109,155 @@ bool RegisterSigTermHandler()
     return true;
 }
 
+void ScanLine(long x1, long y1, long x2, long y2, long min_y, long max_y)
+{
+    long sx, sy, dx1, dy1, dx2, dy2, x, y, m, n, k, cnt;
+
+    sx = x2 - x1;
+    sy = y2 - y1;
+
+    if (sx > 0) dx1 = 1;
+    else if (sx < 0) dx1 = -1;
+    else dx1 = 0;
+
+    if (sy > 0) dy1 = 1;
+    else if (sy < 0) dy1 = -1;
+    else dy1 = 0;
+
+    m = ABS(sx);
+    n = ABS(sy);
+    dx2 = dx1;
+    dy2 = 0;
+
+    if (m < n)
+    {
+        m = ABS(sy);
+        n = ABS(sx);
+        dx2 = 0;
+        dy2 = dy1;
+    }
+
+    x = x1; y = y1;
+    cnt = m + 1;
+    k = n / 2;
+
+    while (cnt--)
+    {
+        if ((y >= min_y) && (y < max_y+1))
+        {
+            if (x < ContourX[y][0]) ContourX[y][0] = x;
+            if (x > ContourX[y][1]) ContourX[y][1] = x;
+        }
+
+        k += n;
+        if (k < m)
+        {
+            x += dx2;
+            y += dy2;
+        }
+        else
+        {
+            k -= m;
+            x += dx1;
+            y += dy1;
+        }
+    }
+}
+
+void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std::vector<Out_HubVehicleData>::iterator iter)
+{
+    long arr_x[] = {p0.x, p1.x, p2.x, p3.x};
+    long arr_y[] = {p0.y, p1.y, p2.y, p3.y};
+    //find max x&y and min x&y of the rectangle 
+    int n = sizeof(arr_y) / sizeof(arr_y[0]);
+    // Implemented inbuilt function to sort array
+    std::sort(arr_x, arr_x + n);
+    std::sort(arr_y, arr_y + n);
+    long min_x = arr_x[0];
+    long max_x = arr_x[n - 1];
+    long min_y = arr_y[0];
+    long max_y = arr_y[n - 1];
+
+    int y;
+    for (y = min_y; y < max_y+1; y++)
+    {
+        ContourX[y][0] = LONG_MAX; // min X
+        ContourX[y][1] = LONG_MIN; // max X
+    }
+    
+    ScanLine(p0.x, p0.y, p1.x, p1.y, min_y, max_y);
+    ScanLine(p1.x, p1.y, p2.x, p2.y, min_y, max_y);
+    ScanLine(p2.x, p2.y, p3.x, p3.y, min_y, max_y);
+    ScanLine(p3.x, p3.y, p0.x, p0.y, min_y, max_y);
+
+    for (y = min_y; y < max_y+1; y++)
+    {
+        if (ContourX[y][1] >= ContourX[y][0])
+        {
+            long x = ContourX[y][0];
+            long len = 1 + ContourX[y][1] - ContourX[y][0];
+
+            // Can draw a horizontal line instead of individual pixels here
+            while (len--)
+            {
+                //occupied
+                iter->map_2d_location.push_back(std::make_pair(x,y));
+                x++;
+            }
+        }
+    }                          
+}
+void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std::vector<Out_HubObstacleData>::iterator iter)
+{
+    long arr_x[] = {p0.x, p1.x, p2.x, p3.x};
+    long arr_y[] = {p0.y, p1.y, p2.y, p3.y};
+    //find max x&y and min x&y of the rectangle 
+    int n = sizeof(arr_y) / sizeof(arr_y[0]);
+    // Implemented inbuilt function to sort array
+    std::sort(arr_x, arr_x + n);
+    std::sort(arr_y, arr_y + n);
+    long min_x = arr_x[0];
+    long max_x = arr_x[n - 1];
+    long min_y = arr_y[0];
+    long max_y = arr_y[n - 1];
+
+    int y;
+    for (y = min_y; y < max_y+1; y++)
+    {
+        ContourX[y][0] = LONG_MAX; // min X
+        ContourX[y][1] = LONG_MIN; // max X
+    }
+    
+    ScanLine(p0.x, p0.y, p1.x, p1.y, min_y, max_y);
+    ScanLine(p1.x, p1.y, p2.x, p2.y, min_y, max_y);
+    ScanLine(p2.x, p2.y, p3.x, p3.y, min_y, max_y);
+    ScanLine(p3.x, p3.y, p0.x, p0.y, min_y, max_y);
+
+    for (y = min_y; y < max_y+1; y++)
+    {
+        if (ContourX[y][1] >= ContourX[y][0])
+        {
+            long x = ContourX[y][0];
+            long len = 1 + ContourX[y][1] - ContourX[y][0];
+
+            // Can draw a horizontal line instead of individual pixels here
+            while (len--)
+            {
+                //occupied
+                iter->map_2d_location.push_back(std::make_pair(x,y));
+                x++;
+            }
+        }
+    }                          
+}
+
 
 }  // namespace
 
 //==============1.MapData 생성 =================
 
 MapData map_data;
+long ContourX[map_m][2];
  
 //=============================================
 
@@ -368,19 +512,44 @@ void ThreadAct1()
 
 //==============3.2. MapData에 메인/보조차량 리스트 생성 ==============================
     //============== i) 차량의 2d 그리드 맵 인덱스 페어 찾아서 저장 ================
-                    //TODO: 차량의 위치에 해당하는 그리드 인덱스를 찾아내는 수식
+                    //우선 4 vertices 안다고 가정
+                    //TODO: 중심점+rotation angle + cuboid_x/y 값으로 구하기 
 
-                    for (int i=1; i<2; i++)
+                    for (auto iter = hub_data.vehicle.begin(); iter!=hub_data.vehicle.end(); iter++)
                     {
-                        for (int j=1; j< 2; j++)
+                        p0.x = 62;
+                        p0.y = 113;
+
+                        p1.x = 89;
+                        p1.y = 79;
+
+                        p2.x = 153;
+                        p2.y = 115;
+
+                        p3.x = 130;
+                        p3.y = 150;
+
+                        generateOccupancyIndex(p0, p1, p2, p3, *(&iter));
+                    }
+
+    //============== ii) 장애물의 2d 그리드 맵 인덱스 페어 찾아서 저장 ================                  
+
+                    for (auto iter = hub_data.obstacle.begin(); iter!=hub_data.obstacle.end(); iter++)
                         {
-                            current_vehicle.map_2d_location.push_back(std::make_pair(i,j));
-                            //해당 2d 그리드 맵의 인덱스 페어를 벡터 형태로 저장
+                            p0.x = 62;
+                            p0.y = 113;
+
+                            p1.x = 89;
+                            p1.y = 79;
+
+                            p2.x = 153;
+                            p2.y = 115;
+
+                            p3.x = 130;
+                            p3.y = 150;
+                            generateOccupancyIndex(p0, p1, p2, p3, *(&iter));
                         }
                     }
-                    // 융합데이터에서 받은 정보 그대로 assign       
-                   //map_data.vehicle_list.push_back(fused_vehicle_data);
-
 
     //============== ii) 차량 리스트 업데이트 ================
 
