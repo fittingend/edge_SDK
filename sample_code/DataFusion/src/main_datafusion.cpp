@@ -78,6 +78,7 @@
 #include "main.h"
 namespace
 {
+long ContourX[map_m][2];
 
 // Atomic flag for exit after SIGTERM caught
 std::atomic_bool continueExecution{true};
@@ -257,7 +258,7 @@ void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std:
 //==============1.MapData 생성 =================
 
 MapData map_data;
-long ContourX[map_m][2];
+
  
 //=============================================
 
@@ -446,6 +447,8 @@ void ThreadAct1()
                     VehicleData current_vehicle;
 
                     hub_data.vehicle.push_back(main_vehicle);
+                    hub_data.obstacle.push_back(obstacle1);
+
 
 //TODO 측위 좌표계 변환 - 현재 시뮬레이션 데이터 검증목표라 필요X
 
@@ -501,7 +504,9 @@ void ThreadAct1()
                         {
                             // TODO:차량의 위치에 기반해 주변 노면 정보 업데이트
                             // 현재 차량과 인지 노면데이터의 위치 관계가 불분명하므로 '차량의 위치 = 업데이트 되는 노면 위치' 라는 단순한 가정의 dummy code 로 대체 
-                            map_data.map_2d[iter->position_x *10][iter->position_y *10].road_z = *iter1;
+                            int i = iter->position_x * 10;
+                            int j = iter->position_y * 10; 
+                            map_data.map_2d[i][j].road_z = *iter1;
                             // 미터 단위의 position_x 를 10cm 그리드 셀 기준으로 하면 position_x *100 /10 = position_x*10 th grid cell
                         }
                     }
@@ -517,6 +522,8 @@ void ThreadAct1()
 
                     for (auto iter = hub_data.vehicle.begin(); iter!=hub_data.vehicle.end(); iter++)
                     {
+                        Point2D p0, p1, p2, p3;
+
                         p0.x = 62;
                         p0.y = 113;
 
@@ -535,45 +542,47 @@ void ThreadAct1()
     //============== ii) 장애물의 2d 그리드 맵 인덱스 페어 찾아서 저장 ================                  
 
                     for (auto iter = hub_data.obstacle.begin(); iter!=hub_data.obstacle.end(); iter++)
-                        {
-                            p0.x = 62;
-                            p0.y = 113;
-
-                            p1.x = 89;
-                            p1.y = 79;
-
-                            p2.x = 153;
-                            p2.y = 115;
-
-                            p3.x = 130;
-                            p3.y = 150;
-                            generateOccupancyIndex(p0, p1, p2, p3, *(&iter));
-                        }
-                    }
-
-    //============== ii) 차량 리스트 업데이트 ================
-
-                    bool isNewVehicle = 1;
-                    //메인 및 보조차량 정보 중복 확인 후 업데이트 
-                    for (auto iter = map_data.vehicle_list.begin(); iter != map_data.vehicle_list.end(); iter++)
                     {
-                        if (current_vehicle.vehicle_class == iter->vehicle_class)
-                        { //vehicle info already on the list; update the outdated information 
-                            *iter = current_vehicle;
-                            isNewVehicle = 0;
-                            break;
-                        }
-                        else
-                        {
-                            continue;
-                        }
-                    }
+                        Point2D p0, p1, p2, p3;
 
-                    if (isNewVehicle == true)
-                    {
-                        //new vehicle found; add it to the vehicle list
-                        map_data.vehicle_list.push_back(current_vehicle);
+                        p0.x = 62;
+                        p0.y = 113;
+
+                        p1.x = 89;
+                        p1.y = 79;
+
+                        p2.x = 153;
+                        p2.y = 115;
+
+                        p3.x = 130;
+                        p3.y = 150;
+                        generateOccupancyIndex(p0, p1, p2, p3, *(&iter));
                     }
+                    
+
+    // //============== ii) 차량 리스트 업데이트 ================
+
+    //                 bool isNewVehicle = 1;
+    //                 //메인 및 보조차량 정보 중복 확인 후 업데이트 
+    //                 for (auto iter = map_data.vehicle_list.begin(); iter != map_data.vehicle_list.end(); iter++)
+    //                 {
+    //                     if (current_vehicle.vehicle_class == iter->vehicle_class)
+    //                     { //vehicle info already on the list; update the outdated information 
+    //                         *iter = current_vehicle;
+    //                         isNewVehicle = 0;
+    //                         break;
+    //                     }
+    //                     else
+    //                     {
+    //                         continue;
+    //                     }
+    //                 }
+
+    //                 if (isNewVehicle == true)
+    //                 {
+    //                     //new vehicle found; add it to the vehicle list
+    //                     map_data.vehicle_list.push_back(current_vehicle);
+    //                 }
 
     //============== iii) 2d MapData가 해당 차량 정보를 point 하도록 설정 ================
 
@@ -593,63 +602,63 @@ void ThreadAct1()
 
     //============== i) 장애물의 2d 그리드 맵 인덱스 페어 찾아서 저장 ================
 
-                    //테스트용 코드
-                    current_obstacle.fused_position_x = 20; 
-                    current_obstacle.fused_position_y = 10; 
-                    current_obstacle.fused_cuboid_x = 4; 
-                    current_obstacle.fused_cuboid_y = 2;
-                    current_obstacle.fused_cuboid_z = 10;  
+                    // //테스트용 코드
+                    // current_obstacle.fused_position_x = 20; 
+                    // current_obstacle.fused_position_y = 10; 
+                    // current_obstacle.fused_cuboid_x = 4; 
+                    // current_obstacle.fused_cuboid_y = 2;
+                    // current_obstacle.fused_cuboid_z = 10;  
 
-                    int fused_cuboid_x_start = static_cast<int> (current_obstacle.fused_position_x - (current_obstacle.fused_cuboid_x/2));
-                    int fused_cuboid_x_end = static_cast<int> (current_obstacle.fused_position_x + (current_obstacle.fused_cuboid_x/2));
+                    // int fused_cuboid_x_start = static_cast<int> (current_obstacle.fused_position_x - (current_obstacle.fused_cuboid_x/2));
+                    // int fused_cuboid_x_end = static_cast<int> (current_obstacle.fused_position_x + (current_obstacle.fused_cuboid_x/2));
 
-                    int fused_cuboid_y_start = static_cast<int> (current_obstacle.fused_position_y - (current_obstacle.fused_cuboid_y/2));
-                    int fused_cuboid_y_end = static_cast<int> (current_obstacle.fused_position_y + (current_obstacle.fused_cuboid_y/2));
+                    // int fused_cuboid_y_start = static_cast<int> (current_obstacle.fused_position_y - (current_obstacle.fused_cuboid_y/2));
+                    // int fused_cuboid_y_end = static_cast<int> (current_obstacle.fused_position_y + (current_obstacle.fused_cuboid_y/2));
 
-                    int count = 0;
-                    adcm::Log::Info() << "i is from  " << fused_cuboid_y_start << " to " << fused_cuboid_y_end;
-                    adcm::Log::Info() << "j is from " <<  fused_cuboid_x_start << " to "<< fused_cuboid_x_end;
-                    for (int i=fused_cuboid_y_start; i<fused_cuboid_y_end+1; i++)
-                    {
-                        for (int j=fused_cuboid_x_start; j< fused_cuboid_x_end+1; j++)
-                        {
-                            current_obstacle.map_2d_location.push_back(std::make_pair(i,j));
-                            //해당 2d 그리드 맵의 인덱스 페어를 벡터 형태로 저장
-                        }
-                    }
+                    // int count = 0;
+                    // adcm::Log::Info() << "i is from  " << fused_cuboid_y_start << " to " << fused_cuboid_y_end;
+                    // adcm::Log::Info() << "j is from " <<  fused_cuboid_x_start << " to "<< fused_cuboid_x_end;
+                    // for (int i=fused_cuboid_y_start; i<fused_cuboid_y_end+1; i++)
+                    // {
+                    //     for (int j=fused_cuboid_x_start; j< fused_cuboid_x_end+1; j++)
+                    //     {
+                    //         current_obstacle.map_2d_location.push_back(std::make_pair(i,j));
+                    //         //해당 2d 그리드 맵의 인덱스 페어를 벡터 형태로 저장
+                    //     }
+                    // }
 
     //============== ii) 장애물 리스트 업데이트 ================
 
-                    //테스트용 코드
-                    ObstacleData first_obstacle;
-                    ObstacleData second_obstacle;
-                    current_obstacle.obstacle_id = 1234;
-                    first_obstacle.obstacle_id = 1;
-                    second_obstacle.obstacle_id = 123;
-                    map_data.obstacle_list.push_back(first_obstacle); 
-                    map_data.obstacle_list.push_back(second_obstacle);
-                    bool isNewObstacle = 1;
+                    // //테스트용 코드
+                    // ObstacleData first_obstacle;
+                    // ObstacleData second_obstacle;
+                    // current_obstacle.obstacle_id = 1234;
+                    // first_obstacle.obstacle_id = 1;
+                    // second_obstacle.obstacle_id = 123;
+                    // map_data.obstacle_list.push_back(first_obstacle); 
+                    // map_data.obstacle_list.push_back(second_obstacle);
+                    // bool isNewObstacle = 1;
 
-                    //장애물 리스트상의 장애물 중복 확인
-                    for (auto iter = map_data.obstacle_list.begin(); iter != map_data.obstacle_list.end(); iter++)
-                    {
-                        if (current_obstacle.obstacle_id == iter->obstacle_id)
-                        { //obstacle info already on the list; update the outdated information 
-                            *iter = current_obstacle;
-                            isNewObstacle = 0;
-                            break;
-                        }
-                        else
-                        {
-                            continue;
-                        }
-                    }
+                    // //장애물 리스트상의 장애물 중복 확인
+                    // for (auto iter = map_data.obstacle_list.begin(); iter != map_data.obstacle_list.end(); iter++)
+                    // {
+                    //     if (current_obstacle.obstacle_id == iter->obstacle_id)
+                    //     { //obstacle info already on the list; update the outdated information 
+                    //         *iter = current_obstacle;
+                    //         isNewObstacle = 0;
+                    //         break;
+                    //     }
+                    //     else
+                    //     {
+                    //         continue;
+                    //     }
+                    // }
 
-                    if (isNewObstacle == true)
-                    {
-                        //new obstacle found; add it to the obstacle list
-                        map_data.obstacle_list.push_back(current_obstacle);
-                    }
+                    // if (isNewObstacle == true)
+                    // {
+                    //     //new obstacle found; add it to the obstacle list
+                    //     map_data.obstacle_list.push_back(current_obstacle);
+                    // }
 
     //============== iii) 2d MapData가 해당 장애물 정보를 point 하도록 설정================
                     //작업환경내 최초 장애물 리스트가 완성되면 MapData의 해당 내용을 업데이트

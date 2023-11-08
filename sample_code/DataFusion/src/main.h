@@ -43,10 +43,10 @@
 
 // Function Declarations
 //extern int main(int argc, char **argv);
-struct HubData {
-  HubVehicleData vehicle[5];
-};
-void matlab_fusion(HubData hub_data_Object);
+// struct HubData {
+//   HubVehicleData vehicle[5];
+// // };
+// void matlab_fusion(HubData hub_data_Object);
 
 #endif
 //
