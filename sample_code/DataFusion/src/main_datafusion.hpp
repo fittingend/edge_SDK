@@ -29,7 +29,8 @@ enum ActionClass
 typedef struct
 {
     long x, y;
-} Point2D;
+} Point2D; 
+
 struct ObstacleData
 {
     unsigned short obstacle_id;
@@ -37,6 +38,7 @@ struct ObstacleData
     std::time_t timestamp;
     std::vector<std::pair<unsigned short,unsigned short>> map_2d_location; //장애물이 위치한 2d 그리드 맵의 index 페어를 저장
     ActionClass action_class;
+    int stop_count; 
     float fused_cuboid_x;
     float fused_cuboid_y;
     float fused_cuboid_z;
@@ -47,7 +49,6 @@ struct ObstacleData
     float fused_velocity_x;
     float fused_velocity_y;
     float fused_velocity_z;
-
 };
 
 struct VehicleData
@@ -55,6 +56,7 @@ struct VehicleData
     VehicleClass vehicle_class;
     std::vector<std::pair<unsigned short,unsigned short>> map_2d_location; //해당 차량이 위치한 2d 그리드 맵의 index 페어를 저장
     std::time_t timestamp;
+    float road_z[4];
     float position_lat;
     float position_long;
     float position_height;
@@ -71,7 +73,7 @@ struct VehicleData
     float velocity_ang;
 };
 
-struct ObstacleEnvData
+struct GridCellData
 {
 //    ObstacleData *obstacle_data; //8 bytes
     unsigned short obstacle_id;
@@ -83,55 +85,14 @@ struct ObstacleEnvData
 
 struct MapData
 {
-    ObstacleEnvData map_2d[map_n][map_m]; //각각 24bytes
+    GridCellData map_2d[map_n][map_m]; //각각 24bytes
     std::vector<ObstacleData> obstacle_list;
     std::vector<VehicleData> vehicle_list;
 
 }; //maptdata 사이즈는 24*4000*5000+24+24 = 480000048 byte = 약 450MB 
 
-//=============control hub에서 가져온 파트====================
-
-struct Out_HubObstacleData
+struct FusionData
 {
-    unsigned short obstacle_id;
-    ObstacleClass obstacle_class;
-    std::time_t timestamp;
-    std::vector<std::pair<unsigned short,unsigned short>> map_2d_location; //장애물이 위치한 2d 그리드 맵의 index 페어를 저장
-    float cuboid_x;
-    float cuboid_y;
-    float cuboid_z;
-    float heading_angle; 
-    float position_x; // m 로 가정
-    float position_y; 
-    float position_z;
-    float velocity_x; //작업환경의 가로와 세로축을 XY로 지정했을때의 속도
-    float velocity_y;
-};
-
-struct Out_HubVehicleData
-{
-    std::vector<float> road_z; 
-    VehicleClass vehicle_class;
-    std::time_t timestamp;
-    std::vector<std::pair<unsigned short,unsigned short>> map_2d_location; //해당 차량이 위치한 2d 그리드 맵의 index 페어를 저장
-    float position_lat;
-    float position_long;
-    float position_height;
-    float position_x; //작업환경의 가로와 세로축을 XY로 지정했을때의 위치 
-    float position_y; //작업환경의 가로와 세로축을 XY로 지정했을때의 위치 
-    float yaw;
-    float roll;
-    float pitch;
-    float velocity_long;
-    float velocity_lat;
-    float velocity_x; //작업환경의 가로와 세로축을 XY로 지정했을때의 속도
-    float velocity_y;//작업환경의 가로와 세로축을 XY로 지정했을때의 속도
-    float velocity_ang; 
-
-};
-
-struct Out_HubData
-{
-    std::vector<Out_HubVehicleData> vehicle;
-    std::vector<Out_HubObstacleData> obstacle;
+    std::vector<ObstacleData> obstacle_list;
+    std::vector<VehicleData> vehicle_list;
 };

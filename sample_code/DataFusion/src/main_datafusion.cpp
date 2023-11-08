@@ -430,25 +430,19 @@ void ThreadAct1()
 //==============2.데이터 융합=================
 // i)차량 정보 ii) 노면 정보 iii)장애물 정보를 융합
                     HubData hub_data_raw; //관제에서 데이터 수신 - 인풋 
- //                   Out_HubData hub_data = matlab_fusion(hub_data_raw);
-                    Out_HubData hub_data; // matlab 모듈에서 나온 아웃풋
+ //                   FusionData hub_data = matlab_fusion(hub_data_raw);
+                    FusionData fused_data_out; // matlab 모듈에서 나온 아웃풋
 
-                    Out_HubVehicleData main_vehicle;
-                    Out_HubVehicleData sub_vehicle1;
-                    Out_HubVehicleData sub_vehicle2;
-                    Out_HubVehicleData sub_vehicle3;
-                    Out_HubVehicleData sub_vehicle4;
+                    VehicleData main_vehicle;
+                    main_vehicle.vehicle_class = EGO_VEHICLE;
+                    main_vehicle.position_x = 3;
+                    main_vehicle.position_y = 1;
+                    main_vehicle.road_z.push_back(11);
 
-                    Out_HubObstacleData obstacle1;
-                    Out_HubObstacleData obstacle2;
-                    Out_HubObstacleData obstacle3;        
+                    ObstacleData obstacle1;
 
-                    ObstacleData current_obstacle;
-                    VehicleData current_vehicle;
-
-                    hub_data.vehicle.push_back(main_vehicle);
-                    hub_data.obstacle.push_back(obstacle1);
-
+                    fused_data_out.vehicle_list.push_back(main_vehicle);
+                    fused_data_out.obstacle_list.push_back(obstacle1);
 
 //TODO 측위 좌표계 변환 - 현재 시뮬레이션 데이터 검증목표라 필요X
 
@@ -487,40 +481,44 @@ void ThreadAct1()
                     //엣지에서 처리를 시작한 시간을 기준시점 레퍼런스 타임으로 지정
                     std::time_t reference_time = std::time(0);
 
-                    for (auto iter = hub_data.obstacle.begin(); iter!=hub_data.obstacle.end(); iter++)
+                    for (auto iter = fused_data_out.obstacle_list.begin(); iter!=fused_data_out.obstacle_list.end(); iter++)
                     {
                         iter->position_x = iter->position_x *(reference_time - iter->timestamp) * 100 * iter->velocity_x;
                         iter->position_y = iter->position_y *(reference_time - iter->timestamp) * 100 * iter->velocity_y;
                         //시차는 ms 단위라 100 곱하고 속도는 m/s 이라고 가정
                     }
+
+
+//==============2.4. 퓨전 후 데이터를 map data 형식으로 재구성해서 overwrite=================
+                    map_data.vehicle_list.assign(fused_data_out.vehicle_list.begin(), fused_data_out.vehicle_list.end());
+                    map_data.obstacle_list.assign(fused_data_out.obstacle_list.begin(), fused_data_out.obstacle_list.end());
                
 //==============3.1. MapData에 노면데이터 추가 =================
                     //TO DO:차량이 작업공간을 정찰할 동안 해당 그리드에 맞는 노면데이터 업데이트 
                     //해당 차량의 위치 - 위경도 정보로 업데이트 그리드의 인덱스를 찾아내는 수식 만들어야 함 
 
-                    for (auto iter = hub_data.vehicle.begin(); iter!=hub_data.vehicle.end(); iter++)
+                    for (auto iter = map_data.vehicle_list.begin(); iter != map_data.vehicle_list.end(); iter++)
                     {
-                        for (auto iter1 = iter->road_z.begin(); iter1!= iter->road_z.end(); iter1++)
+                        for (auto iter1 = iter->road_z.begin(); iter1 != iter->road_z.end(); iter1++)
                         {
                             // TODO:차량의 위치에 기반해 주변 노면 정보 업데이트
                             // 현재 차량과 인지 노면데이터의 위치 관계가 불분명하므로 '차량의 위치 = 업데이트 되는 노면 위치' 라는 단순한 가정의 dummy code 로 대체 
                             int i = iter->position_x * 10;
-                            int j = iter->position_y * 10; 
-                            map_data.map_2d[i][j].road_z = *iter1;
+                            int j = iter->position_y * 10;
+                            map_data.map_2d[i][j].road_z= *iter1;
                             // 미터 단위의 position_x 를 10cm 그리드 셀 기준으로 하면 position_x *100 /10 = position_x*10 th grid cell
                         }
                     }
-                    map_data.map_2d[23][4142].road_z= 132;
-                    map_data.map_2d[0][0].road_z= 423;
+
                     adcm::Log::Info() << "road info is " << map_data.map_2d[23][4142].road_z;
                     adcm::Log::Info() << "road info is " << map_data.map_2d[0][0].road_z;
 
-//==============3.2. MapData에 메인/보조차량 리스트 생성 ==============================
+//==============3.2. MapData에 메인/보조차량 정보 업데이트 ==============================
     //============== i) 차량의 2d 그리드 맵 인덱스 페어 찾아서 저장 ================
                     //우선 4 vertices 안다고 가정
                     //TODO: 중심점+rotation angle + cuboid_x/y 값으로 구하기 
 
-                    for (auto iter = hub_data.vehicle.begin(); iter!=hub_data.vehicle.end(); iter++)
+                    for (auto iter = map_data.vehicle_list.begin(); iter != map_data.vehicle_list.end(); iter++)
                     {
                         Point2D p0, p1, p2, p3;
 
@@ -559,35 +557,9 @@ void ThreadAct1()
                         generateOccupancyIndex(p0, p1, p2, p3, *(&iter));
                     }
                     
+    //============== iii) 2d MapData가 해당 차량과 장애물 ID 정보를 가지도록 설정 ================
 
-    // //============== ii) 차량 리스트 업데이트 ================
-
-    //                 bool isNewVehicle = 1;
-    //                 //메인 및 보조차량 정보 중복 확인 후 업데이트 
-    //                 for (auto iter = map_data.vehicle_list.begin(); iter != map_data.vehicle_list.end(); iter++)
-    //                 {
-    //                     if (current_vehicle.vehicle_class == iter->vehicle_class)
-    //                     { //vehicle info already on the list; update the outdated information 
-    //                         *iter = current_vehicle;
-    //                         isNewVehicle = 0;
-    //                         break;
-    //                     }
-    //                     else
-    //                     {
-    //                         continue;
-    //                     }
-    //                 }
-
-    //                 if (isNewVehicle == true)
-    //                 {
-    //                     //new vehicle found; add it to the vehicle list
-    //                     map_data.vehicle_list.push_back(current_vehicle);
-    //                 }
-
-    //============== iii) 2d MapData가 해당 차량 정보를 point 하도록 설정 ================
-
-                    //vehicle list 의 차량을 하나씩 iterate 하면서 index pair를 가져와서
-                    //MapData 의 index pair 가 해당 차량을 point 하도록 설정
+                    //리스트를 iterate 하면서 index pair를 가져와서 MapData 의 index pair 가 해당 정보를 가지도록 설정
                     for (auto iter = map_data.vehicle_list.begin(); iter != map_data.vehicle_list.end(); iter++)
                     {
                         for (auto iter1 = iter->map_2d_location.begin(); iter1!= iter->map_2d_location.end(); iter1++)
@@ -597,80 +569,10 @@ void ThreadAct1()
                         }
                     }
 
-
-//==============3.3. 장애물 리스트 생성 ================
-
-    //============== i) 장애물의 2d 그리드 맵 인덱스 페어 찾아서 저장 ================
-
-                    // //테스트용 코드
-                    // current_obstacle.fused_position_x = 20; 
-                    // current_obstacle.fused_position_y = 10; 
-                    // current_obstacle.fused_cuboid_x = 4; 
-                    // current_obstacle.fused_cuboid_y = 2;
-                    // current_obstacle.fused_cuboid_z = 10;  
-
-                    // int fused_cuboid_x_start = static_cast<int> (current_obstacle.fused_position_x - (current_obstacle.fused_cuboid_x/2));
-                    // int fused_cuboid_x_end = static_cast<int> (current_obstacle.fused_position_x + (current_obstacle.fused_cuboid_x/2));
-
-                    // int fused_cuboid_y_start = static_cast<int> (current_obstacle.fused_position_y - (current_obstacle.fused_cuboid_y/2));
-                    // int fused_cuboid_y_end = static_cast<int> (current_obstacle.fused_position_y + (current_obstacle.fused_cuboid_y/2));
-
-                    // int count = 0;
-                    // adcm::Log::Info() << "i is from  " << fused_cuboid_y_start << " to " << fused_cuboid_y_end;
-                    // adcm::Log::Info() << "j is from " <<  fused_cuboid_x_start << " to "<< fused_cuboid_x_end;
-                    // for (int i=fused_cuboid_y_start; i<fused_cuboid_y_end+1; i++)
-                    // {
-                    //     for (int j=fused_cuboid_x_start; j< fused_cuboid_x_end+1; j++)
-                    //     {
-                    //         current_obstacle.map_2d_location.push_back(std::make_pair(i,j));
-                    //         //해당 2d 그리드 맵의 인덱스 페어를 벡터 형태로 저장
-                    //     }
-                    // }
-
-    //============== ii) 장애물 리스트 업데이트 ================
-
-                    // //테스트용 코드
-                    // ObstacleData first_obstacle;
-                    // ObstacleData second_obstacle;
-                    // current_obstacle.obstacle_id = 1234;
-                    // first_obstacle.obstacle_id = 1;
-                    // second_obstacle.obstacle_id = 123;
-                    // map_data.obstacle_list.push_back(first_obstacle); 
-                    // map_data.obstacle_list.push_back(second_obstacle);
-                    // bool isNewObstacle = 1;
-
-                    // //장애물 리스트상의 장애물 중복 확인
-                    // for (auto iter = map_data.obstacle_list.begin(); iter != map_data.obstacle_list.end(); iter++)
-                    // {
-                    //     if (current_obstacle.obstacle_id == iter->obstacle_id)
-                    //     { //obstacle info already on the list; update the outdated information 
-                    //         *iter = current_obstacle;
-                    //         isNewObstacle = 0;
-                    //         break;
-                    //     }
-                    //     else
-                    //     {
-                    //         continue;
-                    //     }
-                    // }
-
-                    // if (isNewObstacle == true)
-                    // {
-                    //     //new obstacle found; add it to the obstacle list
-                    //     map_data.obstacle_list.push_back(current_obstacle);
-                    // }
-
-    //============== iii) 2d MapData가 해당 장애물 정보를 point 하도록 설정================
-                    //작업환경내 최초 장애물 리스트가 완성되면 MapData의 해당 내용을 업데이트
-                    //가능하다면 보조차량의 작업환경 이동이 끝난 후 실행
-
-                    //obstacle list 의 장애물을 하나씩 iterate 하면서 index pair를 가져와서
-                    //MapData 의 index pair 가 해당 장애물을 point 하도록 설정
                     for (auto iter = map_data.obstacle_list.begin(); iter != map_data.obstacle_list.end(); iter++)
                     {
                         for (auto iter1 = iter->map_2d_location.begin(); iter1!= iter->map_2d_location.end(); iter1++)
                         {
-                            //map_data.map_2d[iter1->first][iter1->second].obstacle_data = &(*iter);
                             map_data.map_2d[iter1->first][iter1->second].obstacle_id = iter->obstacle_id;
                         }
                     }
