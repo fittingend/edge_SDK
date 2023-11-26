@@ -406,10 +406,21 @@ void ThreadAct1()
                 obstacle_scenario2_1.fused_position_y = 30;
                 map_data.obstacle_list.push_back(obstacle_scenario2_1);
 
+                obstacle_scenario3.obstacle_id = 3333;
+                obstacle_scenario3.obstacle_class = VEHICLE_SMALL;
+                obstacle_scenario3.fused_cuboid_z = 4;
+                obstacle_scenario3.fused_position_x = 2;
+                obstacle_scenario3.fused_position_y = 15;
+                obstacle_scenario3.fused_velocity_x = -5;
+                obstacle_scenario3.fused_velocity_y = -5;
+                map_data.obstacle_list.push_back(obstacle_scenario3);
+
                 VehicleData current_vehicle;
                 current_vehicle.vehicle_class = EGO_VEHICLE;
                 current_vehicle.position_x = 0;
                 current_vehicle.position_y = 0;
+                current_vehicle.velocity_x = 10;
+                current_vehicle.velocity_y = 5;
                 map_data.vehicle_list.push_back(current_vehicle);
 
                 VehicleData ego_vehicle, sub_vehicle_1, sub_vehicle_2, sub_vehicle_3, sub_vehicle_4;
@@ -523,7 +534,7 @@ void ThreadAct1()
                 //=====시나리오 #3. 주행중 경로 주변 동적 장애물 통행 환경 판단=====
                 //=========i) 특장차로부터의 거리 판정: 10<obs<30m 거리 이내인 경우
                 std::vector<ObstacleData> obstacle_near;
-                float ttc=99999;
+                float ttc = 99999;
                 float dist_ego_obs_linear_approx;
                 float ttc_confidence, area_confidence, final_confidence;
 
@@ -540,19 +551,24 @@ void ThreadAct1()
                 for (auto iter = obstacle_near.begin(); iter != obstacle_near.end(); iter++)
                 {
                     ttc = getTTC(*iter, ego_vehicle);
-                    dist_ego_obs_linear_approx = getLinearApprox(*iter, ego_vehicle);
-                    ttc_confidence = 5 / ttc * 0.7;
-                    area_confidence = 30 / dist_ego_obs_linear_approx * 0.7;
-
-                    //infinity check ->  isinf()
-                    if (ttc_confidence > area_confidence)
+                    if (ttc != INVALID_RETURN_VALUE)
                     {
-                        final_confidence = ttc_confidence;
+                        dist_ego_obs_linear_approx = getLinearApprox(*iter, ego_vehicle);
+                        ttc_confidence = 5 / ttc * 0.7;
+                        area_confidence = 30 / dist_ego_obs_linear_approx * 0.7;
+
+                        //infinity check ->  isinf()
+                        if (ttc_confidence > area_confidence)
+                        {
+                            final_confidence = ttc_confidence;
+                        }
+                        else final_confidence = area_confidence; // 큰 값을 취한다
+
+                        risk_assessment.push_back({ iter->obstacle_id, SCENARIO_3, final_confidence });
                     }
-                    else final_confidence = area_confidence; // 큰 값을 취한다
-                    
-                    risk_assessment.push_back({iter->obstacle_id, SCENARIO_3, final_confidence});
                 }
+
+
 
                 //=====시나리오 #4. 작업 중 경로 주변 동적 장애물 통행 환경=====
                 //=========i) 20~40m 내 동적객체 추출
