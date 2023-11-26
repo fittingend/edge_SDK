@@ -69,8 +69,6 @@
 
 #include "main_riskassessment.hpp"
 
-
-    
 namespace
 {
 
@@ -108,14 +106,15 @@ bool RegisterSigTermHandler()
 //TO DO: Datafusion 에서 제대로 받아오면 삭제
 //현재 테스트용
 MapData map_data;
+bool flag_once = true;
 
-
+//계속 업데이트 되어야 하는 전역변수
 std::vector<ObstacleData> obstacle_pedes_previous;
 std::vector<ObstacleData> obstacle_vehicle_previous;
 
 //=============================================
 
-//============== 함수 definition =================
+//============== 2. 함수 definition =================
 
 double getDistance(ObstacleData obstacle, VehicleData vehicle)
 {
@@ -378,50 +377,58 @@ void ThreadAct1()
 
                 //테스트용 코드
                 //실제로는 obstacle list 는 Datafusion 에서 받음
-                ObstacleData obstacle_scenario1;
-                ObstacleData obstacle_scenario2;
-                ObstacleData obstacle_scenario2_1;
+                while (flag_once)
+                {
+                    ObstacleData obstacle_scenario1;
+                    ObstacleData obstacle_scenario2;
+                    ObstacleData obstacle_scenario2_1;
+                    ObstacleData obstacle_scenario3;
 
-                obstacle_scenario1.obstacle_id = 142;
-                obstacle_scenario1.action_class = REMOVE_BLIND_SPOT;
-                obstacle_scenario1.fused_position_x = 20;
-                obstacle_scenario1.fused_position_y = 10;
-                obstacle_scenario1.fused_cuboid_x = 4;
-                obstacle_scenario1.fused_cuboid_y = 2;
-                obstacle_scenario1.fused_cuboid_z = 10;
-                obstacle_scenario1.stop_count = 10;
-                map_data.obstacle_list.push_back(obstacle_scenario1);
+                    obstacle_scenario1.obstacle_id = 142;
+                    obstacle_scenario1.action_class = REMOVE_BLIND_SPOT;
+                    obstacle_scenario1.fused_position_x = 20;
+                    obstacle_scenario1.fused_position_y = 10;
+                    obstacle_scenario1.fused_cuboid_x = 4;
+                    obstacle_scenario1.fused_cuboid_y = 2;
+                    obstacle_scenario1.fused_cuboid_z = 10;
+                    obstacle_scenario1.stop_count = 10;
+                    map_data.obstacle_list.push_back(obstacle_scenario1);
 
-                obstacle_scenario2.obstacle_id = 222;
-                obstacle_scenario2.obstacle_class = STRUCTURE;
-                obstacle_scenario2.fused_cuboid_z = 3;
-                obstacle_scenario2.fused_position_x = 15;
-                obstacle_scenario2.fused_position_y = 300;
-                map_data.obstacle_list.push_back(obstacle_scenario2);
+                    obstacle_scenario2.obstacle_id = 222;
+                    obstacle_scenario2.obstacle_class = STRUCTURE;
+                    obstacle_scenario2.fused_cuboid_z = 3;
+                    obstacle_scenario2.fused_position_x = 15;
+                    obstacle_scenario2.fused_position_y = 300;
+                    map_data.obstacle_list.push_back(obstacle_scenario2);
 
-                obstacle_scenario2_1.obstacle_id = 2221;
-                obstacle_scenario2_1.obstacle_class = STRUCTURE;
-                obstacle_scenario2_1.fused_cuboid_z = 4;
-                obstacle_scenario2_1.fused_position_x = 15;
-                obstacle_scenario2_1.fused_position_y = 30;
-                map_data.obstacle_list.push_back(obstacle_scenario2_1);
+                    obstacle_scenario2_1.obstacle_id = 2221;
+                    obstacle_scenario2_1.obstacle_class = STRUCTURE;
+                    obstacle_scenario2_1.fused_cuboid_z = 4;
+                    obstacle_scenario2_1.fused_position_x = 15;
+                    obstacle_scenario2_1.fused_position_y = 30;
+                    map_data.obstacle_list.push_back(obstacle_scenario2_1);
 
-                obstacle_scenario3.obstacle_id = 3333;
-                obstacle_scenario3.obstacle_class = VEHICLE_SMALL;
-                obstacle_scenario3.fused_cuboid_z = 4;
-                obstacle_scenario3.fused_position_x = 2;
-                obstacle_scenario3.fused_position_y = 15;
-                obstacle_scenario3.fused_velocity_x = -5;
-                obstacle_scenario3.fused_velocity_y = -5;
-                map_data.obstacle_list.push_back(obstacle_scenario3);
+                    obstacle_scenario3.obstacle_id = 3333;
+                    obstacle_scenario3.obstacle_class = VEHICLE_SMALL;
+                    obstacle_scenario3.fused_cuboid_z = 4;
+                    obstacle_scenario3.fused_position_x = 2;
+                    obstacle_scenario3.fused_position_y = 15;
+                    obstacle_scenario3.fused_velocity_x = -5;
+                    obstacle_scenario3.fused_velocity_y = -5;
+                    map_data.obstacle_list.push_back(obstacle_scenario3);
 
-                VehicleData current_vehicle;
-                current_vehicle.vehicle_class = EGO_VEHICLE;
-                current_vehicle.position_x = 0;
-                current_vehicle.position_y = 0;
-                current_vehicle.velocity_x = 10;
-                current_vehicle.velocity_y = 5;
-                map_data.vehicle_list.push_back(current_vehicle);
+                    VehicleData current_vehicle;
+                    current_vehicle.vehicle_class = EGO_VEHICLE;
+                    current_vehicle.position_x = 0;
+                    current_vehicle.position_y = 0;
+                    current_vehicle.velocity_x = 10;
+                    current_vehicle.velocity_y = 5;
+                    map_data.vehicle_list.push_back(current_vehicle);
+
+                    flag_once = false;
+                }
+
+                adcm::Log::Info() << "map_data recevied";
 
                 VehicleData ego_vehicle, sub_vehicle_1, sub_vehicle_2, sub_vehicle_3, sub_vehicle_4;
 
@@ -485,117 +492,137 @@ void ThreadAct1()
                     {
                         confidence_scenario_1 = 20 / getDistance(*iter, ego_vehicle) * 0.7;
                         risk_assessment.push_back({ iter->obstacle_id, SCENARIO_1, confidence_scenario_1 });
+                        adcm::Log::Info() << "Risk assessment generated: " << iter->obstacle_id << "with confidence:  " << confidence_scenario_1;
+
                     }
                 }
 
-                //=====시나리오 #2. 주행중 사각영역 존재 환경 판단=====
-                //=========i) 정지상태 판정: 시나리오 #1에서 만든 obstacle_stop + obstacle_class 가 정적 객체이고 1m 이상인 경우도 포함
-                std::vector<ObstacleData> obstacle_static_stop;
-                float distance_scenario_2;
-                float confidence_scenario_2;
+                adcm::Log::Info() << "scenario 1 DONE";
 
-                obstacle_static_stop.assign(obstacle_stop.begin(), obstacle_stop.end());
-
-                for (auto iter = map_data.obstacle_list.begin(); iter != map_data.obstacle_list.end(); iter++)
                 {
-                    if (iter->obstacle_class == STRUCTURE && iter->fused_cuboid_z > 1)
-                    { //obstacle_class 가 정적 객체이고 높이가 1m 이상인 경우
-                        obstacle_static_stop.push_back(*iter);
-                    }
-                }
+                    //=====시나리오 #2. 주행중 사각영역 존재 환경 판단=====
+                    //=========i) 정지상태 판정: 시나리오 #1에서 만든 obstacle_stop + obstacle_class 가 정적 객체이고 1m 이상인 경우도 포함
+                    std::vector<ObstacleData> obstacle_static_stop;
+                    float distance_scenario_2;
+                    float confidence_scenario_2;
 
-                //=========ii) 특장차로부터의 거리 판정: 40m 거리 이내인 경우
-                for (auto iter = obstacle_static_stop.begin(); iter != obstacle_static_stop.end();)
-                {
-                    float distance_ego_obs = getDistance(*iter, ego_vehicle);
-                    if (distance_ego_obs > 40 || distance_ego_obs == 40) {
-                        iter = obstacle_static_stop.erase(iter); //30m 이상인 경우 해당 장애물 삭제 
-                    }
-                    else
-                        ++iter;
-                }
+                    obstacle_static_stop.assign(obstacle_stop.begin(), obstacle_stop.end());
 
-                //==========iii) 장애물과 전역경로간 거리 추정
-
-                for (auto iter = obstacle_static_stop.begin(); iter != obstacle_static_stop.end(); iter++)
-                {
-                    distance_scenario_2 = getDistance_LinearTrajectory(*iter, path);
-                    if (distance_scenario_2 < 10)
+                    for (auto iter = map_data.obstacle_list.begin(); iter != map_data.obstacle_list.end(); iter++)
                     {
-                        confidence_scenario_2 = 20 / getDistance(*iter, ego_vehicle) * 0.7;
-                        risk_assessment.push_back({ iter->obstacle_id, SCENARIO_2, confidence_scenario_2 });
+                        if (iter->obstacle_class == STRUCTURE && iter->fused_cuboid_z > 1)
+                        { //obstacle_class 가 정적 객체이고 높이가 1m 이상인 경우
+                            obstacle_static_stop.push_back(*iter);
+                        }
                     }
-                }
 
-                std::vector<ObstacleData>().swap(obstacle_stop);  //free memory
-                std::vector<ObstacleData>().swap(obstacle_static_stop);  //free memory            
-
-
-                //=====시나리오 #3. 주행중 경로 주변 동적 장애물 통행 환경 판단=====
-                //=========i) 특장차로부터의 거리 판정: 10<obs<30m 거리 이내인 경우
-                std::vector<ObstacleData> obstacle_near;
-                float ttc = 99999;
-                float dist_ego_obs_linear_approx;
-                float ttc_confidence, area_confidence, final_confidence;
-
-                for (auto iter = map_data.obstacle_list.begin(); iter != map_data.obstacle_list.end(); iter++)
-                {
-                    float distance_ego_obs = getDistance(*iter, ego_vehicle);
-                    if ((distance_ego_obs > 10 || distance_ego_obs == 10) && (distance_ego_obs < 30 || distance_ego_obs == 30))
+                    //=========ii) 특장차로부터의 거리 판정: 40m 거리 이내인 경우
+                    for (auto iter = obstacle_static_stop.begin(); iter != obstacle_static_stop.end();)
                     {
-                        obstacle_near.push_back(*iter);
+                        float distance_ego_obs = getDistance(*iter, ego_vehicle);
+                        if (distance_ego_obs > 40 || distance_ego_obs == 40) {
+                            iter = obstacle_static_stop.erase(iter); //30m 이상인 경우 해당 장애물 삭제 
+                        }
+                        else
+                            ++iter;
                     }
+
+                    //==========iii) 장애물과 전역경로간 거리 추정
+
+                    for (auto iter = obstacle_static_stop.begin(); iter != obstacle_static_stop.end(); iter++)
+                    {
+                        distance_scenario_2 = getDistance_LinearTrajectory(*iter, path);
+                        if (distance_scenario_2 < 10)
+                        {
+                            confidence_scenario_2 = 20 / getDistance(*iter, ego_vehicle) * 0.7;
+                            risk_assessment.push_back({ iter->obstacle_id, SCENARIO_2, confidence_scenario_2 });
+                            adcm::Log::Info() << "Risk assessment generated: " << iter->obstacle_id << "with confidence:  " << confidence_scenario_2;
+
+                        }
+                    }
+                    adcm::Log::Info() << "scenario 2 DONE";
+
+                    std::vector<ObstacleData>().swap(obstacle_stop);  //free memory
+                    std::vector<ObstacleData>().swap(obstacle_static_stop);  //free memory            
+
+                }
+                {
+                    //=====시나리오 #3. 주행중 경로 주변 동적 장애물 통행 환경 판단=====
+                    //=========i) 특장차로부터의 거리 판정: 10<obs<30m 거리 이내인 경우
+                    std::vector<ObstacleData> obstacle_near;
+                    float ttc;
+                    float dist_ego_obs_linear_approx;
+                    float ttc_confidence, area_confidence, final_confidence;
+
+                    for (auto iter = map_data.obstacle_list.begin(); iter != map_data.obstacle_list.end(); iter++)
+                    {
+                        float distance_ego_obs = getDistance(*iter, ego_vehicle);
+                        if ((distance_ego_obs > 10 || distance_ego_obs == 10) && (distance_ego_obs < 30 || distance_ego_obs == 30))
+                        {
+                            obstacle_near.push_back(*iter);
+                        }
+                    }
+
+                    //=========ii) TTC 와 5초후 안전영역 진입여부 확인 후 컨피던스 계산
+                    for (auto iter = obstacle_near.begin(); iter != obstacle_near.end(); iter++)
+                    {
+                        ttc = getTTC(*iter, ego_vehicle);
+                        if (ttc != INVALID_RETURN_VALUE)
+                        {
+                            dist_ego_obs_linear_approx = getLinearApprox(*iter, ego_vehicle);
+                            ttc_confidence = 5 / ttc * 0.7;
+                            area_confidence = 30 / dist_ego_obs_linear_approx * 0.7;
+
+                            //infinity check ->  isinf()
+                            if (ttc_confidence > area_confidence)
+                            {
+                                final_confidence = ttc_confidence;
+                            }
+                            else final_confidence = area_confidence; // 큰 값을 취한다
+
+                            risk_assessment.push_back({ iter->obstacle_id, SCENARIO_3, final_confidence });
+                            adcm::Log::Info() << "Risk assessment generated: " << iter->obstacle_id << "with confidence:  " << final_confidence;
+
+                        }
+                    }
+                    adcm::Log::Info() << "scenario 3 DONE";
+                    std::vector<ObstacleData>().swap(obstacle_near);  //free memory
                 }
 
-                //=========ii) TTC 와 5초후 안전영역 진입여부 확인 후 컨피던스 계산
-                for (auto iter = obstacle_near.begin(); iter != obstacle_near.end(); iter++)
                 {
-                    ttc = getTTC(*iter, ego_vehicle);
-                    if (ttc != INVALID_RETURN_VALUE)
+                    //=====시나리오 #4. 작업 중 경로 주변 동적 장애물 통행 환경=====
+                    //=========i) 20~40m 내 동적객체 추출
+                    std::vector<ObstacleData> obstacle_near_20_40;
+                    float confidence_scenario_4;
+                    float dist_ego_obs_linear_approx;
+
+
+                    for (auto iter = map_data.obstacle_list.begin(); iter != map_data.obstacle_list.end(); iter++)
+                    {
+                        float distance_ego_obs = getDistance(*iter, ego_vehicle);
+                        if (distance_ego_obs > 20 && distance_ego_obs < 40 && iter->obstacle_class != STRUCTURE)
+                        {
+                            obstacle_near_20_40.push_back(*iter);
+                        }
+                    }
+                    //=========ii) 5초후 경로가 40m 이내인 경우 안전영역 진입했음으로 컨피던스값 계산해 넣어줌 
+
+                    for (auto iter = obstacle_near_20_40.begin(); iter != obstacle_near_20_40.end(); iter++)
                     {
                         dist_ego_obs_linear_approx = getLinearApprox(*iter, ego_vehicle);
-                        ttc_confidence = 5 / ttc * 0.7;
-                        area_confidence = 30 / dist_ego_obs_linear_approx * 0.7;
-
-                        //infinity check ->  isinf()
-                        if (ttc_confidence > area_confidence)
+                        if (dist_ego_obs_linear_approx < 40)
                         {
-                            final_confidence = ttc_confidence;
+                            confidence_scenario_4 = 40 / dist_ego_obs_linear_approx * 0.7;
+                            risk_assessment.push_back({ iter->obstacle_id, SCENARIO_4, confidence_scenario_4});
+                            adcm::Log::Info() << "Risk assessment generated: " << iter->obstacle_id << "with confidence:  " << confidence_scenario_4;
+
                         }
-                        else final_confidence = area_confidence; // 큰 값을 취한다
-
-                        risk_assessment.push_back({ iter->obstacle_id, SCENARIO_3, final_confidence });
                     }
+                    adcm::Log::Info() << "scenario 4 DONE";
+                    std::vector<ObstacleData>().swap(obstacle_near_20_40);  //free memory
                 }
 
-
-
-                //=====시나리오 #4. 작업 중 경로 주변 동적 장애물 통행 환경=====
-                //=========i) 20~40m 내 동적객체 추출
-                std::vector<ObstacleData> obstacle_near_20_40;
-                float confidence_scenario_4;
-
-                for (auto iter = map_data.obstacle_list.begin(); iter != map_data.obstacle_list.end(); iter++)
-                {
-                    float distance_ego_obs = getDistance(*iter, ego_vehicle);
-                    if (distance_ego_obs > 20 && distance_ego_obs < 40 && iter->obstacle_class != STRUCTURE)
-                    {
-                        obstacle_near_20_40.push_back(*iter);
-                    }
-                }
-                //=========ii) 5초후 경로가 40m 이내인 경우 안전영역 진입했음으로 컨피던스값 계산해 넣어줌 
-
-                for (auto iter = obstacle_near_20_40.begin(); iter != obstacle_near_20_40.end(); iter++)
-                {
-                    dist_ego_obs_linear_approx = getLinearApprox(*iter, ego_vehicle);
-                    if (dist_ego_obs_linear_approx < 40)
-                    {
-                        confidence_scenario_4 = 40 / dist_ego_obs_linear_approx * 0.7;
-                        risk_assessment.push_back({ iter->obstacle_id, SCENARIO_4, confidence_scenario_4});
-                    }
-                }
-
-                
+                /*
                 //=====시나리오 #5. 주행 경로상 장애물 통행량이 과다한 환경(사람)=====
                 //=========i) 40 < pedestrian < 50 인 보행자만 추출
 
@@ -769,65 +796,7 @@ void ThreadAct1()
                 //=====시나리오 #7. 미개척 지역 주행환경======
 
                 drawline(path, risk_assessment);
-
-
-                // //================전역경로 관련 위험 시나리오================
-
-                // //특장차의 위치와 첫 x-y 경로 좌표 기준으로 직선을 그어 이차방적식 생성
-                // //첫 x-y 좌표는 특장차의 위치인 시작점 (여기선 0,0)을 포함한다고 가정 함
-                // for (int count = 0; count < path.utm_x.size ;  count++)
-                // {
-                //     searchLinearpath(map_data.obstacle_list, path.utm_x[count], path.utm_y[count], path.utm_x[count+1], path.utm_y[count+1]);
-
-                // }
-
-                
-
-                // for (auto iter = map_data.obstacle_list.begin(); iter!= map_data.obstacle_list.end();iter++)
-                // {
-                //     switch(iter->action_class)
-                //     {
-                //         case REMOVE_BLIND_SPOT:
-                //         {
-                //             float final_confidence = 0;
-                //             // risk_assessment.obstacle_id.push_back(current_obstacle.obstacle_id);
-                //             // risk_assessment.hazard_class.push_back(BLIND_SPOT);
-                //             // angle 포함 안시킨 경우
-                //             double xy_distance = getDistance(*iter, ego_vehicle);
-                //             final_confidence = STRUCTURE_DISTANCE / xy_distance * 0.7;
-                //             if (final_confidence > CONFIDENCE_THRESHOLD || final_confidence == CONFIDENCE_THRESHOLD)
-                //             {
-                //                 risk_assessment.emplace_back(RiskAssessment(iter->obstacle_id, BLIND_SPOT, 1, final_confidence));
-                //             }
-                //             else
-                //             {
-                //                 risk_assessment.emplace_back(RiskAssessment(iter->obstacle_id, BLIND_SPOT, 0, final_confidence));
-                //             }
-                //             adcm::Log::Info() << "confident for blindspot is " << final_confidence;
-                //             adcm::Log::Info() << "obstalce id is " << risk_assessment[0].obstacle_id;
-
-                //         } break;
-
-                //         case ALERT_OBSTACLE: 
-                //         {
-                //             //동적 장애물일 경우
-                //             float final_confidence = 0;
-                //             double xy_distance = getDistance(*iter, ego_vehicle);
-                //             double xy_ttc = getTTC(*iter, ego_vehicle);
-                //             double dist_confidence = PEDESTRIAN_DISTANCE/xy_distance*0.7; 
-                //             double ttc_confidence =  PEDESTRIAN_TTC/xy_ttc*0.7;
-                //             if (ttc_confidence > dist_confidence)
-                //                 final_confidence = ttc_confidence;
-                //             else    
-                //                 final_confidence = dist_confidence;
-
-                //             if (final_confidence > CONFIDENCE_THRESHOLD || final_confidence == CONFIDENCE_THRESHOLD)
-                //                 risk_assessment.emplace_back(RiskAssessment(iter->obstacle_id, PEDESTRIAN_HAZARD, 1, final_confidence));
-                //             else
-                //                 risk_assessment.emplace_back(RiskAssessment(iter->obstacle_id, PEDESTRIAN_HAZARD, 0, final_confidence));
-                //         } break;
-                //     }
-                // }
+*/
 
                 //dummy output 
                 riskAssessment.hazard_index.clear();
