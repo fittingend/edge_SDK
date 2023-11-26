@@ -140,23 +140,20 @@ double cot(float x)
 
 float getTTC(ObstacleData obstacle, VehicleData vehicle)
 {
-    int ttc_difference = 5; //to adjust
-    float ttc = 0;
-    float x_collision, y_collision;
-    x_collision = ((obstacle.fused_position_y - vehicle.position_y) - (obstacle.fused_position_x * tan(obstacle.fused_heading_angle) - vehicle.position_x * tan(vehicle.yaw))) / (tan(vehicle.yaw) - tan(obstacle.fused_heading_angle));
-    y_collision = ((obstacle.fused_position_x - vehicle.position_x) - (obstacle.fused_position_y * cot(obstacle.fused_heading_angle) - vehicle.position_y * cot(vehicle.yaw))) / (cot(vehicle.yaw) - cot(obstacle.fused_heading_angle));
-    
-    if (x_collision >0 && x_collision < map_n && y_collision > 0 && y_collision < map_m) //작업환경 내에서 충돌이 일어날때 (infinity check)
+    float c, ttc; 
+    int threshold_distance = 5;
+    ObstacleData obstacle_relative_to_vehicle;
+    obstacle_relative_to_vehicle.fused_position_x = obstacle.fused_position_x - vehicle.position_x;
+    obstacle_relative_to_vehicle.fused_position_y = obstacle.fused_position_y - vehicle.position_y;
+    obstacle_relative_to_vehicle.fused_velocity_x = obstacle.fused_velocity_x - vehicle.velocity_x;
+    obstacle_relative_to_vehicle.fused_velocity_y = obstacle.fused_velocity_y - vehicle.velocity_y;
+
+    c = (obstacle_relative_to_vehicle.fused_velocity_x * obstacle_relative_to_vehicle.fused_position_y) - (obstacle_relative_to_vehicle.fused_velocity_y * obstacle_relative_to_vehicle.fused_position_x);
+    ttc = ((c / (2 * obstacle_relative_to_vehicle.fused_velocity_y)) - obstacle_relative_to_vehicle.fused_position_x)/ obstacle_relative_to_vehicle.fused_velocity_x;
+  
+    if (ttc > 0) 
     {
-        float time_vehicle_x_collision = abs((x_collision - vehicle.position_x) / vehicle.velocity_x);
-        float time_obstacle_x_collision = abs((x_collision - obstacle.fused_position_x) / obstacle.fused_velocity_x);
-        if (abs(time_vehicle_x_collision - time_obstacle_x_collision) < ttc_difference)
-        {
-            if (time_vehicle_x_collision < time_obstacle_x_collision)
-                return time_vehicle_x_collision;
-            else
-                return time_obstacle_x_collision;
-        }
+        return ttc;
     }
     else
         return INVALID_RETURN_VALUE; //return random big number
