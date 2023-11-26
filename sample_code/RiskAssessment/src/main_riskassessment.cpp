@@ -185,63 +185,6 @@ float getLinearApprox(ObstacleData obstacle, VehicleData vehicle)
     }
     return min_distance_ego_obs;
 }
-//double getTTC(ObstacleData obstacle, VehicleData vehicle)
-//{
-//     double ttc=0;
-//     double distance=0;
-//     float t = 0.1;
-//     double obstacle_final_pos_x, obstacle_final_pos_y, vehicle_final_pos_x, vehicle_final_pos_y;
-    
-//     for (t; t < 10; t=t+0.05)
-//     {
-//         obstacle_final_pos_x = obstacle.fused_position_x + obstacle.fused_velocity_x*t;
-//         obstacle_final_pos_y = obstacle.fused_position_y + obstacle.fused_velocity_y*t;
-//         vehicle_final_pos_x = vehicle.position_long + vehicle.velocity_long*t;
-//         vehicle_final_pos_y = vehicle.position_lat + vehicle.velocity_lat*t;
-//         distance=getDistance(obstacle_final_pos_x,obstacle_final_pos_y,vehicle_final_pos_x,vehicle_final_pos_y);
-
-//         if (distance < COLLISION_DISTANCE)
-//         {    //현재 상대 거리가 3m 인 경우 충돌이 일어났다고 가정-이 시간을 ttc로 정의
-//             break; 
-//         }
-//     }
-//     ttc = t;
-// //현재 ttc가 10초가 넘어가면 그냥 10초로 정의한다 
-//     return ttc;
-//}  
-
-float getDistance_LinearTrajectory(ObstacleData obstacle, VehicleData ego_vehicle, build_path_Objects path, std::vector<RiskAssessment>& risk_assessment)
-{
-    float confidence;
-    for (int count = 0; count < path.utm_x.size(); count++)
-    {
-        float x_start = path.utm_x[count];
-        float x_end = path.utm_x[count + 1];
-        float y_start = path.utm_y[count];
-        float y_end = path.utm_y[count + 1];
-
-        Point2D start_to_end_vector;
-        start_to_end_vector.x = x_end - x_start;
-        start_to_end_vector.y = y_end - y_start;
-
-        Point2D start_to_obs_vector;
-        start_to_obs_vector.x = obstacle.fused_position_x - x_start;
-        start_to_obs_vector.y = obstacle.fused_position_y - y_start;
-
-        double angle = atan2(start_to_end_vector.y, start_to_end_vector.x) - atan2(start_to_obs_vector.y,start_to_obs_vector.x);
-        double start_to_end_vector_DOT_start_to_obs_vector = cos(angle) * getMagnitude(start_to_end_vector) * getMagnitude(start_to_obs_vector);
-        if (start_to_end_vector_DOT_start_to_obs_vector > 0 && start_to_end_vector_DOT_start_to_obs_vector < pow(getMagnitude(start_to_end_vector), 2))
-            //장애물 위치가 시작점과 끝점 사이일때
-        {
-            double distance = getMagnitude(start_to_obs_vector) * sqrt(1 - pow(start_to_end_vector_DOT_start_to_obs_vector / (getMagnitude(start_to_end_vector) * getMagnitude(start_to_obs_vector)), 2));
-            if (distance < 10)
-            {
-                confidence = 20 / getDistance(obstacle, ego_vehicle) * 0.7;
-                risk_assessment.push_back({ obstacle.obstacle_id, SCENARIO_1, 1, confidence});
-            }
-        }
-    }   
-}
 
 ObstacleData searchLinearpath(std::vector<ObstacleData> obstacle_list, float x1, float y1, float x2, float y2)
 {
@@ -268,7 +211,7 @@ ObstacleData searchLinearpath(std::vector<ObstacleData> obstacle_list, float x1,
     }
 }
 
-float getDistance_LinearTrajectory(ObstacleData current_obstacle, build_path_Objects path)
+float getDistance_LinearTrajectory(ObstacleData obstacle, build_path_Objects path)
 {
     for (int count = 0; count < path.utm_x.size(); count++)
     {
@@ -282,8 +225,8 @@ float getDistance_LinearTrajectory(ObstacleData current_obstacle, build_path_Obj
         start_to_end_vector.y = y_end - y_start;
 
         Point2D start_to_obs_vector;
-        start_to_obs_vector.x = current_obstacle.fused_position_x - x_start;
-        start_to_obs_vector.y = current_obstacle.fused_position_y - y_start;
+        start_to_obs_vector.x = obstacle.fused_position_x - x_start;
+        start_to_obs_vector.y = obstacle.fused_position_y - y_start;
 
         double angle = atan2(start_to_end_vector.y, start_to_end_vector.x) - atan2(start_to_obs_vector.y, start_to_obs_vector.x);
         double start_to_end_vector_DOT_start_to_obs_vector = cos(angle) * getMagnitude(start_to_end_vector) * getMagnitude(start_to_obs_vector);
@@ -498,7 +441,7 @@ void ThreadAct1()
 
                 //=========iii) 장애물과 전역경로간 거리 추정
                 build_path_Objects path;
-                double confidence = 0;
+                float confidence_scenario_1;
 
                 path.utm_x.insert(path.utm_x.end(), { 0, 5, 56, 94, 150 });
                 path.utm_y.insert(path.utm_y.end(), { 0, 20, 53, 88, 230 });
@@ -528,8 +471,8 @@ void ThreadAct1()
                             double distance = getMagnitude(start_to_obs_vector) * sqrt(1 - pow(start_to_end_vector_DOT_start_to_obs_vector / (getMagnitude(start_to_end_vector) * getMagnitude(start_to_obs_vector)), 2));
                             if (distance < 10)
                             {
-                                confidence = 20 / getDistance(*iter, ego_vehicle) * 0.7;
-                                risk_assessment.push_back({iter->obstacle_id, SCENARIO_1, 1, confidence})
+                                confidence_scenario_1 = 20 / getDistance(*iter, ego_vehicle) * 0.7;
+                                risk_assessment.push_back({iter->obstacle_id, SCENARIO_1, confidence_scenario_1});
                             }
                         }
                     }
@@ -538,6 +481,8 @@ void ThreadAct1()
                 //=====시나리오 #2. 주행중 사각영역 존재 환경 판단=====
                 //=========i) 정지상태 판정: 시나리오 #1에서 만든 obstacle_stop + obstacle_class 가 정적 객체이고 1m 이상인 경우도 포함
                 std::vector<ObstacleData> obstacle_static_stop; 
+                float confidence_scenario_2;
+
                 obstacle_static_stop.assign(obstacle_stop.begin(), obstacle_stop.end());
 
                 for (auto iter = map_data.obstacle_list.begin(); iter != map_data.obstacle_list.end(); iter++)
@@ -584,8 +529,8 @@ void ThreadAct1()
                             double distance = getMagnitude(start_to_obs_vector) * sqrt(1 - pow(start_to_end_vector_DOT_start_to_obs_vector / (getMagnitude(start_to_end_vector) * getMagnitude(start_to_obs_vector)), 2));
                             if (distance < 10)
                             {
-                                confidence = 20 / getDistance(*iter, ego_vehicle) * 0.7;
-                                risk_assessment.push_back({iter->obstacle_id, SCENARIO_2, 1, confidence})
+                                confidence_scenario_2 = 20 / getDistance(*iter, ego_vehicle) * 0.7;
+                                risk_assessment.push_back({iter->obstacle_id, SCENARIO_2, confidence_scenario_2});
                             }
                         }
                     }
@@ -627,13 +572,13 @@ void ThreadAct1()
                     }
                     else final_confidence = area_confidence; // 큰 값을 취한다
                     
-                    risk_assessment.push_back({iter->obstacle_id, SCENARIO_3, 1, final_confidence});
+                    risk_assessment.push_back({iter->obstacle_id, SCENARIO_3, final_confidence});
                 }
 
                 //=====시나리오 #4. 작업 중 경로 주변 동적 장애물 통행 환경=====
                 //=========i) 20~40m 내 동적객체 추출
                 std::vector<ObstacleData> obstacle_near_20_40;
-                float confidence;
+                float confidence_scenario_4;
 
                 for (auto iter = map_data.obstacle_list.begin(); iter != map_data.obstacle_list.end(); iter++)
                 {
@@ -650,8 +595,8 @@ void ThreadAct1()
                     dist_ego_obs_linear_approx = getLinearApprox(*iter, ego_vehicle);
                     if (dist_ego_obs_linear_approx < 40)
                     {
-                        confidence = 40 / dist_ego_obs_linear_approx * 0.7;
-                        risk_assessment.push_back({ iter->obstacle_id, SCENARIO_4, 1, confidence});
+                        confidence_scenario_4 = 40 / dist_ego_obs_linear_approx * 0.7;
+                        risk_assessment.push_back({ iter->obstacle_id, SCENARIO_4, confidence_scenario_4});
                     }
                 }
 
@@ -676,7 +621,7 @@ void ThreadAct1()
 
                 for (auto iter = obstacle_pedes.begin(); iter != obstacle_pedes.end(); iter++)
                 {
-                    distance = getDistance_LinearTrajectory(*iter, ego_vehicle, path);
+                    distance = getDistance_LinearTrajectory(*iter, path);
                     if (distance > 10 || distance == 10 || distance == INVALID_RETURN_VALUE)
                     {
                         // 10m 이상이거나 invalid 값을 지닌 사람들은 삭제
@@ -733,7 +678,7 @@ void ThreadAct1()
                             if (distance < 30)
                             {
                                 float confidence = 30 / distance * 0.7;
-                                risk_assessment.push_back({ iter->obstacle_id, SCENARIO_5, 1, confidence });
+                                risk_assessment.push_back({ iter->obstacle_id, SCENARIO_5, confidence });
                             }
                         }
                     }
@@ -760,7 +705,7 @@ void ThreadAct1()
 
                 for (auto iter = obstacle_vehicle.begin(); iter != obstacle_vehicle.end(); iter++)
                 {
-                    distance = getDistance_LinearTrajectory(*iter, ego_vehicle, path);
+                    distance = getDistance_LinearTrajectory(*iter, path);
                     if (distance > 15 || distance == 15 || distance == INVALID_RETURN_VALUE)
                     {
                         // 15m 이상이거나 invalid 값을 지닌 사람들은 삭제
