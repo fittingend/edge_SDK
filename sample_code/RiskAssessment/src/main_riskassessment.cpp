@@ -619,7 +619,7 @@ void ThreadAct1()
                     std::vector<ObstacleData>().swap(obstacle_near_20_40);  //free memory
                 }
 
-                /*
+                
                 //=====시나리오 #5. 주행 경로상 장애물 통행량이 과다한 환경(사람)=====
                 //=========i) 40 < pedestrian < 50 인 보행자만 추출
 
@@ -638,15 +638,18 @@ void ThreadAct1()
                 }
                 //=========ii) 주행경로 반경 10 m 이내인지 계산 
 
-                for (auto iter = obstacle_pedes.begin(); iter != obstacle_pedes.end(); iter++)
+                for (auto iter = obstacle_pedes.begin(); iter != obstacle_pedes.end();)
                 {
                     distance = getDistance_LinearTrajectory(*iter, path);
                     if (distance > 10 || distance == 10 || distance == INVALID_RETURN_VALUE)
                     {
                         // 10m 이상이거나 invalid 값을 지닌 사람들은 삭제
-                        obstacle_pedes.erase(iter);
+                        iter = obstacle_pedes.erase(iter);
                     }
+                    else
+                        ++iter;
                 }
+                
                 if (obstacle_pedes_previous.empty())
                 { //최초 리스트 생성시 -> 여기서 해당시나리오 종료
                     obstacle_pedes_previous.assign(obstacle_pedes.begin(), obstacle_pedes.end());
@@ -722,14 +725,15 @@ void ThreadAct1()
                 }
                 //=========ii) 주행경로 반경 15 m 이내인지 계산 
 
-                for (auto iter = obstacle_vehicle.begin(); iter != obstacle_vehicle.end(); iter++)
+                for (auto iter = obstacle_vehicle.begin(); iter != obstacle_vehicle.end();)
                 {
                     distance = getDistance_LinearTrajectory(*iter, path);
                     if (distance > 15 || distance == 15 || distance == INVALID_RETURN_VALUE)
                     {
                         // 15m 이상이거나 invalid 값을 지닌 사람들은 삭제
-                        obstacle_vehicle.erase(iter);
+                       iter = obstacle_vehicle.erase(iter);
                     }
+                    else ++iter;
                 }
 
                 if (obstacle_vehicle_previous.empty())
@@ -789,11 +793,9 @@ void ThreadAct1()
                     }
                 }
 
-
                 //=====시나리오 #7. 미개척 지역 주행환경======
 
                 drawline(path, risk_assessment);
-*/
 
                 //dummy output 
                 riskAssessment.hazard_index.clear();
