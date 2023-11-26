@@ -378,16 +378,33 @@ void ThreadAct1()
 
                 //테스트용 코드
                 //실제로는 obstacle list 는 Datafusion 에서 받음
-                ObstacleData current_obstacle;
-                current_obstacle.obstacle_id = 142;
-                current_obstacle.action_class = REMOVE_BLIND_SPOT;
-                current_obstacle.fused_position_x = 20;
-                current_obstacle.fused_position_y = 10;
-                current_obstacle.fused_cuboid_x = 4;
-                current_obstacle.fused_cuboid_y = 2;
-                current_obstacle.fused_cuboid_z = 10;
-                current_obstacle.stop_count = 10;
-                map_data.obstacle_list.push_back(current_obstacle);
+                ObstacleData obstacle_scenario1;
+                ObstacleData obstacle_scenario2;
+                ObstacleData obstacle_scenario2_1;
+
+                obstacle_scenario1.obstacle_id = 142;
+                obstacle_scenario1.action_class = REMOVE_BLIND_SPOT;
+                obstacle_scenario1.fused_position_x = 20;
+                obstacle_scenario1.fused_position_y = 10;
+                obstacle_scenario1.fused_cuboid_x = 4;
+                obstacle_scenario1.fused_cuboid_y = 2;
+                obstacle_scenario1.fused_cuboid_z = 10;
+                obstacle_scenario1.stop_count = 10;
+                map_data.obstacle_list.push_back(obstacle_scenario1);
+
+                obstacle_scenario2.obstacle_id = 222;
+                obstacle_scenario2.obstacle_class = STRUCTURE;
+                obstacle_scenario2.fused_cuboid_z = 3;
+                obstacle_scenario2.fused_position_x = 15;
+                obstacle_scenario2.fused_position_y = 300;
+                map_data.obstacle_list.push_back(obstacle_scenario2);
+
+                obstacle_scenario2_1.obstacle_id = 2221;
+                obstacle_scenario2_1.obstacle_class = STRUCTURE;
+                obstacle_scenario2_1.fused_cuboid_z = 4;
+                obstacle_scenario2_1.fused_position_x = 15;
+                obstacle_scenario2_1.fused_position_y = 30;
+                map_data.obstacle_list.push_back(obstacle_scenario2_1);
 
                 VehicleData current_vehicle;
                 current_vehicle.vehicle_class = EGO_VEHICLE;
@@ -431,56 +448,39 @@ void ThreadAct1()
                 }
 
                 //=========ii) 특장차로부터의 거리 판정: 30m 거리 이내인 경우
-                for (auto iter = obstacle_stop.begin(); iter!= obstacle_stop.end(); iter++)
+                for (auto iter = obstacle_stop.begin(); iter != obstacle_stop.end();)
                 {
                     float distance_ego_obs = getDistance(*iter, ego_vehicle);
-                    if (distance_ego_obs > 30 || distance_ego_obs == 30) {
-                        obstacle_stop.erase(iter); //30m 이상인 경우 해당 장애물 삭제 
+                    if (distance_ego_obs > 30 || distance_ego_obs == 30) 
+                    {
+                        iter = obstacle_stop.erase(iter); //30m 이상인 경우 해당 장애물 삭제 
                     }
+                    else
+                        ++iter;
                 }
 
                 //=========iii) 장애물과 전역경로간 거리 추정
                 build_path_Objects path;
+                float distance_scenario_1;
                 float confidence_scenario_1;
 
                 path.utm_x.insert(path.utm_x.end(), { 0, 5, 56, 94, 150 });
                 path.utm_y.insert(path.utm_y.end(), { 0, 20, 53, 88, 230 });
-
-                for (int count = 0; count < path.utm_x.size(); count++)
+                
+                for (auto iter = obstacle_stop.begin(); iter != obstacle_stop.end(); iter++)
                 {
-                    float x_start = path.utm_x[count];
-                    float x_end = path.utm_x[count + 1];
-                    float y_start = path.utm_y[count];
-                    float y_end = path.utm_y[count + 1];
-
-                    Point2D start_to_end_vector;
-                    start_to_end_vector.x = x_end - x_start;
-                    start_to_end_vector.y = y_end - y_start;
-
-                    for (auto iter = obstacle_stop.begin(); iter != obstacle_stop.end(); iter++)
+                    distance_scenario_1 = getDistance_LinearTrajectory(*iter, path);
+                    if (distance_scenario_1 < 10)
                     {
-                        Point2D start_to_obs_vector;
-                        start_to_obs_vector.x = iter->fused_position_x - x_start;
-                        start_to_obs_vector.y = iter->fused_position_y - y_start;
-
-                        double angle = atan2(start_to_end_vector.y, start_to_end_vector.x) - atan2(start_to_obs_vector.y,start_to_obs_vector.x);
-                        double start_to_end_vector_DOT_start_to_obs_vector = cos(angle) * getMagnitude(start_to_end_vector) * getMagnitude(start_to_obs_vector);
-                        if (start_to_end_vector_DOT_start_to_obs_vector > 0 && start_to_end_vector_DOT_start_to_obs_vector < pow(getMagnitude(start_to_end_vector), 2))
-                            //장애물 위치가 시작점과 끝점 사이일때
-                        {
-                            double distance = getMagnitude(start_to_obs_vector) * sqrt(1 - pow(start_to_end_vector_DOT_start_to_obs_vector / (getMagnitude(start_to_end_vector) * getMagnitude(start_to_obs_vector)), 2));
-                            if (distance < 10)
-                            {
-                                confidence_scenario_1 = 20 / getDistance(*iter, ego_vehicle) * 0.7;
-                                risk_assessment.push_back({iter->obstacle_id, SCENARIO_1, confidence_scenario_1});
-                            }
-                        }
+                        confidence_scenario_1 = 20 / getDistance(*iter, ego_vehicle) * 0.7;
+                        risk_assessment.push_back({ iter->obstacle_id, SCENARIO_1, confidence_scenario_1 });
                     }
                 }
 
                 //=====시나리오 #2. 주행중 사각영역 존재 환경 판단=====
                 //=========i) 정지상태 판정: 시나리오 #1에서 만든 obstacle_stop + obstacle_class 가 정적 객체이고 1m 이상인 경우도 포함
-                std::vector<ObstacleData> obstacle_static_stop; 
+                std::vector<ObstacleData> obstacle_static_stop;
+                float distance_scenario_2;
                 float confidence_scenario_2;
 
                 obstacle_static_stop.assign(obstacle_stop.begin(), obstacle_stop.end());
@@ -494,54 +494,33 @@ void ThreadAct1()
                 }
 
                 //=========ii) 특장차로부터의 거리 판정: 40m 거리 이내인 경우
-                for (auto iter = obstacle_static_stop.begin(); iter!= obstacle_static_stop.end(); iter++)
+                for (auto iter = obstacle_static_stop.begin(); iter != obstacle_static_stop.end();)
                 {
                     float distance_ego_obs = getDistance(*iter, ego_vehicle);
                     if (distance_ego_obs > 40 || distance_ego_obs == 40) {
-                        obstacle_static_stop.erase(iter); //30m 이상인 경우 해당 장애물 삭제 
+                        iter = obstacle_static_stop.erase(iter); //30m 이상인 경우 해당 장애물 삭제 
                     }
+                    else
+                        ++iter;
                 }
 
                 //==========iii) 장애물과 전역경로간 거리 추정
 
-                for (int count = 0; count < path.utm_x.size(); count++)
+                for (auto iter = obstacle_static_stop.begin(); iter != obstacle_static_stop.end(); iter++)
                 {
-                    float x_start = path.utm_x[count];
-                    float x_end = path.utm_x[count + 1];
-                    float y_start = path.utm_y[count];
-                    float y_end = path.utm_y[count + 1];
-
-                    Point2D start_to_end_vector;
-                    start_to_end_vector.x = x_end - x_start;
-                    start_to_end_vector.y = y_end - y_start;
-
-                    for (auto iter = obstacle_static_stop.begin(); iter != obstacle_static_stop.end(); iter++)
+                    distance_scenario_2 = getDistance_LinearTrajectory(*iter, path);
+                    if (distance_scenario_2 < 10)
                     {
-                        Point2D start_to_obs_vector;
-                        start_to_obs_vector.x = iter->fused_position_x - x_start;
-                        start_to_obs_vector.y = iter->fused_position_y - y_start;
-
-                        double angle = atan2(start_to_end_vector.y, start_to_end_vector.x) - atan2(start_to_obs_vector.y,start_to_obs_vector.x);
-                        double start_to_end_vector_DOT_start_to_obs_vector = cos(angle) * getMagnitude(start_to_end_vector) * getMagnitude(start_to_obs_vector);
-                        if (start_to_end_vector_DOT_start_to_obs_vector > 0 && start_to_end_vector_DOT_start_to_obs_vector < pow(getMagnitude(start_to_end_vector), 2))
-                            //장애물 위치가 시작점과 끝점 사이일때
-                        {
-                            double distance = getMagnitude(start_to_obs_vector) * sqrt(1 - pow(start_to_end_vector_DOT_start_to_obs_vector / (getMagnitude(start_to_end_vector) * getMagnitude(start_to_obs_vector)), 2));
-                            if (distance < 10)
-                            {
-                                confidence_scenario_2 = 20 / getDistance(*iter, ego_vehicle) * 0.7;
-                                risk_assessment.push_back({iter->obstacle_id, SCENARIO_2, confidence_scenario_2});
-                            }
-                        }
+                        confidence_scenario_2 = 20 / getDistance(*iter, ego_vehicle) * 0.7;
+                        risk_assessment.push_back({ iter->obstacle_id, SCENARIO_2, confidence_scenario_2 });
                     }
                 }
 
-
                 std::vector<ObstacleData>().swap(obstacle_stop);  //free memory
                 std::vector<ObstacleData>().swap(obstacle_static_stop);  //free memory            
-            
 
-            //=====시나리오 #3. 주행중 경로 주변 동적 장애물 통행 환경 판단=====
+
+                //=====시나리오 #3. 주행중 경로 주변 동적 장애물 통행 환경 판단=====
                 //=========i) 특장차로부터의 거리 판정: 10<obs<30m 거리 이내인 경우
                 std::vector<ObstacleData> obstacle_near;
                 float ttc=99999;
