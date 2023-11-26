@@ -118,13 +118,18 @@ enum HazardClass
     SCENARIO_7
 };
 
-struct RiskAssessment 
+struct RiskAssessment
 {
     unsigned short obstacle_id; //obstacle 고유 id
+    std::pair<float, float> utm_xy_start; //위험한 전역경로 XY 시작 값
+    std::pair<float, float> utm_xy_end;   //위험한 전역경로 XY 끝 값
     HazardClass hazard_class;
     bool isHazard;
     float confidence;
-        
-    RiskAssessment(const unsigned short obstacle_id, const HazardClass hazard_class, const bool isHazard, const float confidence):\
-    obstacle_id(obstacle_id), hazard_class(hazard_class), isHazard(isHazard), confidence(confidence) {}
+
+    RiskAssessment(const std::pair<float, float> utm_xy_start, const std::pair<float, float> utm_xy_end, const HazardClass hazard_class, const bool isHazard) :\
+        utm_xy_start(utm_xy_start), utm_xy_end(utm_xy_end), hazard_class(hazard_class), isHazard(isHazard) {}
+
+    RiskAssessment(const unsigned short obstacle_id, const HazardClass hazard_class, const float confidence) :\
+        obstacle_id(obstacle_id),hazard_class(hazard_class), confidence(confidence) {}
 };

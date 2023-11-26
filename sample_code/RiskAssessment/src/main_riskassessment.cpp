@@ -119,25 +119,72 @@ std::vector<ObstacleData> obstacle_vehicle_previous;
 
 double getDistance(ObstacleData obstacle, VehicleData vehicle)
 {
-    return sqrt(pow(obstacle.fused_position_x -vehicle.position_x,2)+ pow(obstacle.fused_position_y -vehicle.position_y, 2));
+    return sqrt(pow(obstacle.fused_position_x - vehicle.position_x, 2) + pow(obstacle.fused_position_y - vehicle.position_y, 2));
+}
+double getDistance(ObstacleData obstacle1, ObstacleData obstacle2)
+{
+    return sqrt(pow(obstacle1.fused_position_x - obstacle2.fused_position_x, 2) + pow(obstacle1.fused_position_y - obstacle2.fused_position_y, 2));
 }
 double getDistance(ObstacleData obstacle, double a_x, double a_y)
 {
-    return sqrt(pow(obstacle.fused_position_x -a_x,2)+ pow(obstacle.fused_position_y -a_y, 2));
-
+    return sqrt(pow(obstacle.fused_position_x - a_x, 2) + pow(obstacle.fused_position_y - a_y, 2));
 }
 double getDistance(double a_x, double a_y, double b_x, double b_y)
 {
-    return sqrt(pow(a_x-b_x,2)+ pow(a_y-b_y, 2));
-
+    return sqrt(pow(a_x - b_x, 2) + pow(a_y - b_y, 2));
 }
 
+double cot(float x)
+{
+    return (1 / tan(x));
+}
+
+float getTTC(ObstacleData obstacle, VehicleData vehicle)
+{
+    int ttc_difference = 5; //to adjust
+    float ttc = 0;
+    float x_collision, y_collision;
+    x_collision = ((obstacle.fused_position_y - vehicle.position_y) - (obstacle.fused_position_x * tan(obstacle.fused_heading_angle) - vehicle.position_x * tan(vehicle.yaw))) / (tan(vehicle.yaw) - tan(obstacle.fused_heading_angle));
+    y_collision = ((obstacle.fused_position_x - vehicle.position_x) - (obstacle.fused_position_y * cot(obstacle.fused_heading_angle) - vehicle.position_y * cot(vehicle.yaw))) / (cot(vehicle.yaw) - cot(obstacle.fused_heading_angle));
+    
+    if (x_collision >0 && x_collision < map_n && y_collision > 0 && y_collision < map_m) //작업환경 내에서 충돌이 일어날때 (infinity check)
+    {
+        float time_vehicle_x_collision = abs((x_collision - vehicle.position_x) / vehicle.velocity_x);
+        float time_obstacle_x_collision = abs((x_collision - obstacle.fused_position_x) / obstacle.fused_velocity_x);
+        if (abs(time_vehicle_x_collision - time_obstacle_x_collision) < ttc_difference)
+        {
+            if (time_vehicle_x_collision < time_obstacle_x_collision)
+                return time_vehicle_x_collision;
+            else
+                return time_obstacle_x_collision;
+        }
+    }
+    else
+        return INVALID_RETURN_VALUE; //return random big number
+}
 
 float getMagnitude(Point2D a)
 {
     return sqrt(a.x^2 + a.y^2);
 }
+float getLinearApprox(ObstacleData obstacle, VehicleData vehicle)
+{
+    float min_distance_ego_obs=INVALID_RETURN_VALUE; //random big number
+    for (float k = 0; k < 5.1; k = k + 0.5)
+    {
+        vehicle.position_x = vehicle.position_x + vehicle.velocity_x * k;
+        vehicle.position_y = vehicle.position_y + vehicle.velocity_y * k;
+        obstacle.fused_position_x = obstacle.fused_position_x + obstacle.fused_velocity_x * k;
+        obstacle.fused_position_y = obstacle.fused_position_y + obstacle.fused_velocity_y * k;
 
+        float temp = getDistance(obstacle, vehicle);
+        if (min_distance_ego_obs > temp)
+        {
+            min_distance_ego_obs = temp;
+        }
+    }
+    return min_distance_ego_obs;
+}
 //double getTTC(ObstacleData obstacle, VehicleData vehicle)
 //{
 //     double ttc=0;
@@ -168,34 +215,31 @@ float getDistance_LinearTrajectory(ObstacleData obstacle, VehicleData ego_vehicl
     float confidence;
     for (int count = 0; count < path.utm_x.size(); count++)
     {
-       float x_start = path.utm_x[count];
-       float x_end = path.utm_x[count + 1];
-       float y_start = path.utm_y[count];
-       float y_end = path.utm_y[count + 1];
+        float x_start = path.utm_x[count];
+        float x_end = path.utm_x[count + 1];
+        float y_start = path.utm_y[count];
+        float y_end = path.utm_y[count + 1];
 
-       Point2D start_to_end_vector;
-       start_to_end_vector.x = x_end - x_start;
-       start_to_end_vector.y = y_end - y_start;
+        Point2D start_to_end_vector;
+        start_to_end_vector.x = x_end - x_start;
+        start_to_end_vector.y = y_end - y_start;
 
-//       for (auto iter = obstacle.begin(); iter != obstacle.end(); iter++)
-//       {
-           Point2D start_to_obs_vector;
-           start_to_obs_vector.x = obstacle.fused_position_x - x_start;
-           start_to_obs_vector.y = obstacle.fused_position_y - y_start;
+        Point2D start_to_obs_vector;
+        start_to_obs_vector.x = obstacle.fused_position_x - x_start;
+        start_to_obs_vector.y = obstacle.fused_position_y - y_start;
 
-           double angle = atan2(start_to_end_vector.y, start_to_end_vector.x) - atan2(start_to_obs_vector.y,start_to_obs_vector.x);
-           double start_to_end_vector_DOT_start_to_obs_vector = cos(angle) * getMagnitude(start_to_end_vector) * getMagnitude(start_to_obs_vector);
-           if (start_to_end_vector_DOT_start_to_obs_vector > 0 && start_to_end_vector_DOT_start_to_obs_vector < pow(getMagnitude(start_to_end_vector), 2))
-               //장애물 위치가 시작점과 끝점 사이일때
-           {
-               double distance = getMagnitude(start_to_obs_vector) * sqrt(1 - pow(start_to_end_vector_DOT_start_to_obs_vector / (getMagnitude(start_to_end_vector) * getMagnitude(start_to_obs_vector)), 2));
-               if (distance < 10)
-               {
-                   confidence = 20 / getDistance(obstacle, ego_vehicle) * 0.7;
-                   risk_assessment.push_back({ obstacle.obstacle_id, SCENARIO_1, 1, confidence});
-               }
-           }
-//        }
+        double angle = atan2(start_to_end_vector.y, start_to_end_vector.x) - atan2(start_to_obs_vector.y,start_to_obs_vector.x);
+        double start_to_end_vector_DOT_start_to_obs_vector = cos(angle) * getMagnitude(start_to_end_vector) * getMagnitude(start_to_obs_vector);
+        if (start_to_end_vector_DOT_start_to_obs_vector > 0 && start_to_end_vector_DOT_start_to_obs_vector < pow(getMagnitude(start_to_end_vector), 2))
+            //장애물 위치가 시작점과 끝점 사이일때
+        {
+            double distance = getMagnitude(start_to_obs_vector) * sqrt(1 - pow(start_to_end_vector_DOT_start_to_obs_vector / (getMagnitude(start_to_end_vector) * getMagnitude(start_to_obs_vector)), 2));
+            if (distance < 10)
+            {
+                confidence = 20 / getDistance(obstacle, ego_vehicle) * 0.7;
+                risk_assessment.push_back({ obstacle.obstacle_id, SCENARIO_1, 1, confidence});
+            }
+        }
     }   
 }
 
@@ -319,8 +363,6 @@ void drawline(build_path_Objects path, std::vector<RiskAssessment>& risk_assessm
 //===============================
 
 }  // namespace
-
-
 
 
 void ThreadAct1()
