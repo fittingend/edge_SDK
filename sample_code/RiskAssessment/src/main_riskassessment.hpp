@@ -6,6 +6,7 @@
 #define COLLISION_DISTANCE 3
 #define CONFIDENCE_THRESHOLD 0.7
 #define STOP_VALUE 10 // 1초간 정지시 정지 장애물로 판단
+#define INVALID_RETURN_VALUE 99999 
 typedef struct
 {
     long x, y;

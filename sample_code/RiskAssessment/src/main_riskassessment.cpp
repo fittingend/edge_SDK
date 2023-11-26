@@ -104,6 +104,17 @@ bool RegisterSigTermHandler()
 }
 
 
+//==============1. MapData 생성 =================
+//TO DO: Datafusion 에서 제대로 받아오면 삭제
+//현재 테스트용
+MapData map_data;
+
+
+std::vector<ObstacleData> obstacle_pedes_previous;
+std::vector<ObstacleData> obstacle_vehicle_previous;
+
+//=============================================
+
 //============== 함수 definition =================
 
 double getDistance(ObstacleData obstacle, VehicleData vehicle)
@@ -120,8 +131,15 @@ double getDistance(double a_x, double a_y, double b_x, double b_y)
     return sqrt(pow(a_x-b_x,2)+ pow(a_y-b_y, 2));
 
 }
-double getTTC(ObstacleData obstacle, VehicleData vehicle)
+
+
+float getMagnitude(Point2D a)
 {
+    return sqrt(a.x^2 + a.y^2);
+}
+
+//double getTTC(ObstacleData obstacle, VehicleData vehicle)
+//{
 //     double ttc=0;
 //     double distance=0;
 //     float t = 0.1;
@@ -143,10 +161,11 @@ double getTTC(ObstacleData obstacle, VehicleData vehicle)
 //     ttc = t;
 // //현재 ttc가 10초가 넘어가면 그냥 10초로 정의한다 
 //     return ttc;
-}  
+//}  
 
-float getDistance_LinearTrajectory(ObstacleData obstacle, build_path_Objects path)
+float getDistance_LinearTrajectory(ObstacleData obstacle, VehicleData ego_vehicle, build_path_Objects path, std::vector<RiskAssessment>& risk_assessment)
 {
+    float confidence;
     for (int count = 0; count < path.utm_x.size(); count++)
     {
        float x_start = path.utm_x[count];
@@ -161,8 +180,8 @@ float getDistance_LinearTrajectory(ObstacleData obstacle, build_path_Objects pat
 //       for (auto iter = obstacle.begin(); iter != obstacle.end(); iter++)
 //       {
            Point2D start_to_obs_vector;
-           start_to_obs_vector.x = iter->fused_position_x - x_start;
-           start_to_obs_vector.y = iter->fused_position_y - y_start;
+           start_to_obs_vector.x = obstacle.fused_position_x - x_start;
+           start_to_obs_vector.y = obstacle.fused_position_y - y_start;
 
            double angle = atan2(start_to_end_vector.y, start_to_end_vector.x) - atan2(start_to_obs_vector.y,start_to_obs_vector.x);
            double start_to_end_vector_DOT_start_to_obs_vector = cos(angle) * getMagnitude(start_to_end_vector) * getMagnitude(start_to_obs_vector);
@@ -172,8 +191,8 @@ float getDistance_LinearTrajectory(ObstacleData obstacle, build_path_Objects pat
                double distance = getMagnitude(start_to_obs_vector) * sqrt(1 - pow(start_to_end_vector_DOT_start_to_obs_vector / (getMagnitude(start_to_end_vector) * getMagnitude(start_to_obs_vector)), 2));
                if (distance < 10)
                {
-                   confidence = 20 / getDistance(*iter, ego_vehicle) * 0.7;
-                   risk_assessment.push_back({ iter->obstacle_id, SCENARIO_1, 1, confidence});
+                   confidence = 20 / getDistance(obstacle, ego_vehicle) * 0.7;
+                   risk_assessment.push_back({ obstacle.obstacle_id, SCENARIO_1, 1, confidence});
                }
            }
 //        }
@@ -205,10 +224,6 @@ ObstacleData searchLinearpath(std::vector<ObstacleData> obstacle_list, float x1,
     }
 }
 
-float getMagnitude(Point2D a)
-{
-    return sqrt(a.x^2 + a.y^2);
-}
 float getDistance_LinearTrajectory(ObstacleData current_obstacle, build_path_Objects path)
 {
     for (int count = 0; count < path.utm_x.size(); count++)
@@ -307,14 +322,6 @@ void drawline(build_path_Objects path, std::vector<RiskAssessment>& risk_assessm
 
 
 
-//==============1. MapData 생성 =================
-//TO DO: Datafusion 에서 제대로 받아오면 삭제
-//현재 테스트용
-MapData map_data;
-std::vector<ObstacleData> obstacle_pedes_previous;
-std::vector<ObstacleData> obstacle_vehicle_previous;
-
-//=============================================
 
 void ThreadAct1()
 {
@@ -627,7 +634,7 @@ void ThreadAct1()
 
                 for (auto iter = obstacle_pedes.begin(); iter != obstacle_pedes.end(); iter++)
                 {
-                    distance = getDistance_LinearTrajectory(*iter, path);
+                    distance = getDistance_LinearTrajectory(*iter, ego_vehicle, path);
                     if (distance > 10 || distance == 10 || distance == INVALID_RETURN_VALUE)
                     {
                         // 10m 이상이거나 invalid 값을 지닌 사람들은 삭제
@@ -711,7 +718,7 @@ void ThreadAct1()
 
                 for (auto iter = obstacle_vehicle.begin(); iter != obstacle_vehicle.end(); iter++)
                 {
-                    distance = getDistance_LinearTrajectory(*iter, path);
+                    distance = getDistance_LinearTrajectory(*iter, ego_vehicle, path);
                     if (distance > 15 || distance == 15 || distance == INVALID_RETURN_VALUE)
                     {
                         // 15m 이상이거나 invalid 값을 지닌 사람들은 삭제
