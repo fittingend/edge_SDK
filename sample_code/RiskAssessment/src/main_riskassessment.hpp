@@ -5,6 +5,11 @@
 #define PEDESTRIAN_TTC 7
 #define COLLISION_DISTANCE 3
 #define CONFIDENCE_THRESHOLD 0.7
+#define STOP_VALUE 10 // 1초간 정지시 정지 장애물로 판단
+typedef struct
+{
+    long x, y;
+} Point2D; 
 
 enum ObstacleClass
 {
@@ -35,9 +40,10 @@ struct ObstacleData
 {
     unsigned short obstacle_id;
     ObstacleClass obstacle_class;
-    std::string timestamp;
+    std::time_t timestamp;
     std::vector<std::pair<unsigned short,unsigned short>> map_2d_location; //장애물이 위치한 2d 그리드 맵의 index 페어를 저장
     ActionClass action_class;
+    int stop_count; 
     float fused_cuboid_x;
     float fused_cuboid_y;
     float fused_cuboid_z;
@@ -48,13 +54,14 @@ struct ObstacleData
     float fused_velocity_x;
     float fused_velocity_y;
     float fused_velocity_z;
-
 };
 
 struct VehicleData
 {
     VehicleClass vehicle_class;
     std::vector<std::pair<unsigned short,unsigned short>> map_2d_location; //해당 차량이 위치한 2d 그리드 맵의 index 페어를 저장
+    std::time_t timestamp;
+    float road_z[4];
     float position_lat;
     float position_long;
     float position_height;
@@ -66,10 +73,11 @@ struct VehicleData
     float pitch;
     float velocity_long;
     float velocity_lat;
+    float velocity_x;
+    float velocity_y;
     float velocity_ang;
 };
-
-struct ObstacleEnvData
+struct GridCellData
 {
 //    ObstacleData *obstacle_data; //8 bytes
     unsigned short obstacle_id;
@@ -82,7 +90,7 @@ struct ObstacleEnvData
 
 struct MapData
 {
-    ObstacleEnvData map_2d[map_n][map_m]; //각각 24bytes
+    GridCellData map_2d[map_n][map_m]; //각각 24bytes
     std::vector<ObstacleData> obstacle_list;
     std::vector<VehicleData> vehicle_list; //24bytes
 }; //maptdata 사이즈는 24*4000*5000+24 = 480000024 byte = 약 450MB 
@@ -93,16 +101,20 @@ struct build_path_Objects
 {
     std::vector<float> utm_x;
     std::vector<float> utm_y;
-
-}
+};
 
 //=====main_riskassessment specific definitions=======
 
 enum HazardClass
 {
     NO_HAZARD,
-    BLIND_SPOT,
-    PEDESTRIAN_HAZARD
+    SCENARIO_1,
+    SCENARIO_2,
+    SCENARIO_3,
+    SCENARIO_4,
+    SCENARIO_5,
+    SCENARIO_6,
+    SCENARIO_7
 };
 
 struct RiskAssessment 

@@ -433,13 +433,13 @@ void ThreadAct1()
  //                   FusionData hub_data = matlab_fusion(hub_data_raw);
                     FusionData fused_data_out; // matlab 모듈에서 나온 아웃풋
 
-                    VehicleData main_vehicle;
+                    VehicleData main_vehicle={};
                     main_vehicle.vehicle_class = EGO_VEHICLE;
                     main_vehicle.position_x = 3;
                     main_vehicle.position_y = 1;
                     main_vehicle.road_z.push_back(11);
 
-                    ObstacleData obstacle1;
+                    ObstacleData obstacle1={};
 
                     fused_data_out.vehicle_list.push_back(main_vehicle);
                     fused_data_out.obstacle_list.push_back(obstacle1);
@@ -488,11 +488,41 @@ void ThreadAct1()
                         //시차는 ms 단위라 100 곱하고 속도는 m/s 이라고 가정
                     }
 
+//==============2.3. 0.1 m/s 미만인 경우 장애물 정지 상태 판정 및 map 데이터에 반영 =================
+                    for (auto iter = fused_data_out.obstacle_list.begin(); iter!=fused_data_out.obstacle_list.end(); iter++)
+                    {
+                        if (iter->fused_position_x < 0.1 && iter -> fused_position_y < 0.1 && iter->fused_position_z < 0.1)
+                        {
+                            iter->stop_count = 1; //해당 시각 물체 정지상태
+                        }
+                        else 
+                        {
+                            iter->stop_count = 0;
+                        }
+                    }
 
+//이 전에 장애물의 stop status 를 카운트 하는 카운터 값 변동
+                    for (auto iter = map_data.obstacle_list.begin(); iter!=map_data.obstacle_list.end(); iter++)
+                    {
+                        for (auto iter1 = fused_data_out.obstacle_list.begin(); iter1 != fused_data_out.obstacle_list.end(); iter1++)
+                        {
+                            if (iter->obstacle_id == iter1->obstacle_id)
+                            { //동일 장애물
+                                if (iter1->stop_count == 1)
+                                {
+                                    iter->stop_count++;
+                                }
+                                //한번이라도 속도가 0 이 아니면 카운트 리셋
+                                else iter->stop_count = 0;
+                                break;
+                            }
+                        }
+                    }
 //==============2.4. 퓨전 후 데이터를 map data 형식으로 재구성해서 overwrite=================
+// 맵 데이터 최초 생성시에는 동일한 장애물 id 가 없기에 해당사항 없음 => 단순이 벡터 assign  
                     map_data.vehicle_list.assign(fused_data_out.vehicle_list.begin(), fused_data_out.vehicle_list.end());
                     map_data.obstacle_list.assign(fused_data_out.obstacle_list.begin(), fused_data_out.obstacle_list.end());
-               
+
 //==============3.1. MapData에 노면데이터 추가 =================
                     //TO DO:차량이 작업공간을 정찰할 동안 해당 그리드에 맞는 노면데이터 업데이트 
                     //해당 차량의 위치 - 위경도 정보로 업데이트 그리드의 인덱스를 찾아내는 수식 만들어야 함 
