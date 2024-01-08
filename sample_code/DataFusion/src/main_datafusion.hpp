@@ -20,12 +20,12 @@ enum VehicleClass
     SUB_VEHICLE_3,
     SUB_VEHICLE_4
 };
-enum ActionClass
-{
-    NO_ACTION,
-    REMOVE_BLIND_SPOT,
-    ALERT_OBSTACLE
-};
+// enum ActionClass
+// {
+//     NO_ACTION,
+//     REMOVE_BLIND_SPOT,
+//     ALERT_OBSTACLE
+// };
 typedef struct
 {
     long x, y;
@@ -37,7 +37,7 @@ struct ObstacleData
     ObstacleClass obstacle_class;
     std::time_t timestamp;
     std::vector<std::pair<unsigned short,unsigned short>> map_2d_location; //장애물이 위치한 2d 그리드 맵의 index 페어를 저장
-    ActionClass action_class;
+    // ActionClass action_class;
     int stop_count; 
     float fused_cuboid_x;
     float fused_cuboid_y;

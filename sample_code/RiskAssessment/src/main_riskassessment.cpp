@@ -280,12 +280,16 @@ void drawline(build_path_Objects path, std::vector<RiskAssessment>& risk_assessm
                 if (map_data.map_2d[y][x].road_z == 0)
                 {
                     risk_assessment.push_back({ std::make_pair(path.utm_x[count], path.utm_y[count]), std::make_pair(path.utm_x[count + 1], path.utm_y[count + 1]), SCENARIO_7, 1 });
+                    adcm::Log::Info() << "Risk assessment generated for X: " << path.utm_x[count] <<" Y: "<< path.utm_y[count] << " with flag 1 ";
+                    adcm::Log::Info() << "Now break from the loop";
                     break; //한번만 들어가도 for loop break
                 }
             }
             else if (map_data.map_2d[x][y].road_z == 0)
             {
                 risk_assessment.push_back({ std::make_pair(path.utm_x[count], path.utm_y[count]), std::make_pair(path.utm_x[count + 1], path.utm_y[count + 1]), SCENARIO_7, 1 });
+                adcm::Log::Info() << "Risk assessment generated for X: " << path.utm_x[count] <<" Y: "<< path.utm_y[count] << " with flag 1 ";
+                adcm::Log::Info() << "Now break from the loop";
                 break;
             }
 
@@ -382,7 +386,7 @@ void ThreadAct1()
                     ObstacleData obstacle_scenario3;
 
                     obstacle_scenario1.obstacle_id = 142;
-                    obstacle_scenario1.action_class = REMOVE_BLIND_SPOT;
+//                    obstacle_scenario1.action_class = REMOVE_BLIND_SPOT;
                     obstacle_scenario1.fused_position_x = 20;
                     obstacle_scenario1.fused_position_y = 10;
                     obstacle_scenario1.fused_cuboid_x = 4;
@@ -453,6 +457,8 @@ void ThreadAct1()
 
                 //=====시나리오 #1. 주행중 전역경로 근방 이동가능한 정지 장애물이 존재하는 위험 환경=====
                 //=========i) 정지상태 판정: 정해진 duration STOP_VALUE * 0.1s 만큼 정지해 있을경우
+//                std::this_thread::sleep_for(std::chrono::milliseconds(85));
+
                 std::vector<ObstacleData> obstacle_stop;
                 for (auto iter = map_data.obstacle_list.begin(); iter != map_data.obstacle_list.end(); iter++)
                 {
@@ -499,6 +505,7 @@ void ThreadAct1()
                 {
                     //=====시나리오 #2. 주행중 사각영역 존재 환경 판단=====
                     //=========i) 정지상태 판정: 시나리오 #1에서 만든 obstacle_stop + obstacle_class 가 정적 객체이고 1m 이상인 경우도 포함
+//                    std::this_thread::sleep_for(std::chrono::milliseconds(96));
                     std::vector<ObstacleData> obstacle_static_stop;
                     float distance_scenario_2;
                     float confidence_scenario_2;
@@ -546,6 +553,7 @@ void ThreadAct1()
                 {
                     //=====시나리오 #3. 주행중 경로 주변 동적 장애물 통행 환경 판단=====
                     //=========i) 특장차로부터의 거리 판정: 10<obs<30m 거리 이내인 경우
+//                    std::this_thread::sleep_for(std::chrono::milliseconds(92));
                     std::vector<ObstacleData> obstacle_near;
                     float ttc;
                     float dist_ego_obs_linear_approx;
@@ -589,6 +597,7 @@ void ThreadAct1()
                 {
                     //=====시나리오 #4. 작업 중 경로 주변 동적 장애물 통행 환경=====
                     //=========i) 20~40m 내 동적객체 추출
+//                    std::this_thread::sleep_for(std::chrono::milliseconds(87));
                     std::vector<ObstacleData> obstacle_near_20_40;
                     float confidence_scenario_4;
                     float dist_ego_obs_linear_approx;
@@ -619,183 +628,202 @@ void ThreadAct1()
                     std::vector<ObstacleData>().swap(obstacle_near_20_40);  //free memory
                 }
 
+                {
+                    //=====시나리오 #5. 주행 경로상 장애물 통행량이 과다한 환경(사람)=====
+                    //=========i) 40 < pedestrian < 50 인 보행자만 추출
+ //                   std::this_thread::sleep_for(std::chrono::milliseconds(88));
+                    std::vector<ObstacleData> obstacle_pedes;
+                    std::vector<ObstacleData> obstacle_pedes_repeated;
+                    float distance,timestamp_diff, max_distance=0, min_distance =INVALID_RETURN_VALUE;
                 
-                //=====시나리오 #5. 주행 경로상 장애물 통행량이 과다한 환경(사람)=====
-                //=========i) 40 < pedestrian < 50 인 보행자만 추출
-
-                std::vector<ObstacleData> obstacle_pedes;
-                std::vector<ObstacleData> obstacle_pedes_repeated;
-                float distance,timestamp_diff, max_distance=0, min_distance =INVALID_RETURN_VALUE;
-            
-
-                for (auto iter = map_data.obstacle_list.begin(); iter != map_data.obstacle_list.end(); iter++)
-                {
-                    float distance_ego_obs = getDistance(*iter, ego_vehicle);
-                    if (distance_ego_obs > 40 && distance_ego_obs < 50 && iter->obstacle_class == PEDESTRIAN)
+                    for (auto iter = map_data.obstacle_list.begin(); iter != map_data.obstacle_list.end(); iter++)
                     {
-                        obstacle_pedes.push_back(*iter);
+                        float distance_ego_obs = getDistance(*iter, ego_vehicle);
+                        if (distance_ego_obs > 40 && distance_ego_obs < 50 && iter->obstacle_class == PEDESTRIAN)
+                        {
+                            obstacle_pedes.push_back(*iter);
+                        }
                     }
-                }
-                //=========ii) 주행경로 반경 10 m 이내인지 계산 
+                    //=========ii) 주행경로 반경 10 m 이내인지 계산 
 
-                for (auto iter = obstacle_pedes.begin(); iter != obstacle_pedes.end();)
-                {
-                    distance = getDistance_LinearTrajectory(*iter, path);
-                    if (distance > 10 || distance == 10 || distance == INVALID_RETURN_VALUE)
+                    for (auto iter = obstacle_pedes.begin(); iter != obstacle_pedes.end();)
                     {
-                        // 10m 이상이거나 invalid 값을 지닌 사람들은 삭제
-                        iter = obstacle_pedes.erase(iter);
+                        distance = getDistance_LinearTrajectory(*iter, path);
+                        if (distance > 10 || distance == 10 || distance == INVALID_RETURN_VALUE)
+                        {
+                            // 10m 이상이거나 invalid 값을 지닌 사람들은 삭제
+                            iter = obstacle_pedes.erase(iter);
+                        }
+                        else ++iter;
+                    }
+                    
+                    if (obstacle_pedes_previous.empty())
+                    { //최초 리스트 생성시 -> 여기서 해당시나리오 종료
+                        obstacle_pedes_previous.assign(obstacle_pedes.begin(), obstacle_pedes.end());
                     }
                     else
-                        ++iter;
-                }
-                
-                if (obstacle_pedes_previous.empty())
-                { //최초 리스트 생성시 -> 여기서 해당시나리오 종료
-                    obstacle_pedes_previous.assign(obstacle_pedes.begin(), obstacle_pedes.end());
-                }
-                else
-                {
-                    // 해당 시나리오 계속 체크
-                    //=========iii) 신규 객체 생성 빈도 측정
-                    for (auto iter = obstacle_pedes.begin(); iter != obstacle_pedes.end(); iter++)
                     {
-                        for (auto iter1 = obstacle_pedes_previous.begin(); iter1 != obstacle_pedes_previous.end(); iter1++)
+                        // 해당 시나리오 계속 체크
+                        //=========iii) 신규 객체 생성 빈도 측정
+                        for (auto iter = obstacle_pedes.begin(); iter != obstacle_pedes.end(); iter++)
                         {
-                            if (iter1->obstacle_id == iter->obstacle_id)
+                            for (auto iter1 = obstacle_pedes_previous.begin(); iter1 != obstacle_pedes_previous.end(); iter1++)
                             {
-                                //동일 장애물 발견 (else 아무것도 안함) 
-                                //동일 장애물 timestamp 비교해 10s 이하만 keep 
-                                timestamp_diff = iter->timestamp - iter1->timestamp;
-                                if (timestamp_diff < 1000) // 1000ms 
+                                if (iter1->obstacle_id == iter->obstacle_id)
                                 {
-                                    obstacle_pedes_repeated.push_back(*iter);
+                                    //동일 장애물 발견 (else 아무것도 안함) 
+                                    //동일 장애물 timestamp 비교해 10s 이하만 keep 
+                                    timestamp_diff = iter->timestamp - iter1->timestamp;
+                                    if (timestamp_diff < 1000) // 1000ms 
+                                    {
+                                        obstacle_pedes_repeated.push_back(*iter);
+                                    }
                                 }
                             }
                         }
-                    }
-                    //업데이트 
-                    obstacle_pedes_previous.assign(obstacle_pedes.begin(), obstacle_pedes.end());
+                        //업데이트 
+                        obstacle_pedes_previous.assign(obstacle_pedes.begin(), obstacle_pedes.end());
 
-                    //=========iv) 객체간 최대거리 < 20m? 측정
+                        //=========iv) 객체간 최대거리 < 20m? 측정
 
-                    for (auto iter = obstacle_pedes_repeated.begin(); iter != obstacle_pedes_repeated.end(); iter++)
-                    {
-                        for (auto iter1 = obstacle_pedes_repeated.begin(); iter1 != obstacle_pedes_repeated.end(); iter1++)
-                        {
-                            if (iter->obstacle_id != iter1->obstacle_id)
-                            {
-                                distance = getDistance(*iter, *iter1);
-                                if (max_distance < distance) max_distance = distance;
-                            }
-                        }
-                    }
-
-                    if (max_distance < 20)
-                    {
-                        //=========v) 통행과다환경 지정하고 환경 내 ego 와 30m 내외인 장애물에 대해서 confidence 값 계산
                         for (auto iter = obstacle_pedes_repeated.begin(); iter != obstacle_pedes_repeated.end(); iter++)
                         {
-                            distance = getDistance(*iter, ego_vehicle);
-                            if (distance < 30)
+                            for (auto iter1 = obstacle_pedes_repeated.begin(); iter1 != obstacle_pedes_repeated.end(); iter1++)
                             {
-                                float confidence = 30 / distance * 0.7;
-                                risk_assessment.push_back({ iter->obstacle_id, SCENARIO_5, confidence });
-                            }
-                        }
-                    }
-                }
-               
-                
-                //=====시나리오 #6. 주행 경로상 통행량이 과다한 환경(차량)=====
-                //=========i) 50 < vehicle < 60 인 동적객체만 추출
-                std::vector<ObstacleData> obstacle_vehicle;
-                std::vector<ObstacleData> obstacle_vehicle_repeated;
-                distance = 0;
-                timestamp_diff = 0;
-                max_distance = 0;
-
-                for (auto iter = map_data.obstacle_list.begin(); iter != map_data.obstacle_list.end(); iter++)
-                {
-                    float distance_ego_obs = getDistance(*iter, ego_vehicle);
-                    if (distance_ego_obs > 50 && distance_ego_obs < 60 && (iter->obstacle_class == VEHICLE_LARGE || iter->obstacle_class == VEHICLE_SMALL))
-                    {
-                        obstacle_vehicle.push_back(*iter);
-                    }
-                }
-                //=========ii) 주행경로 반경 15 m 이내인지 계산 
-
-                for (auto iter = obstacle_vehicle.begin(); iter != obstacle_vehicle.end();)
-                {
-                    distance = getDistance_LinearTrajectory(*iter, path);
-                    if (distance > 15 || distance == 15 || distance == INVALID_RETURN_VALUE)
-                    {
-                        // 15m 이상이거나 invalid 값을 지닌 사람들은 삭제
-                       iter = obstacle_vehicle.erase(iter);
-                    }
-                    else ++iter;
-                }
-
-                if (obstacle_vehicle_previous.empty())
-                { //최초 리스트 생성시 -> 여기서 해당시나리오 종료
-                    obstacle_vehicle_previous.assign(obstacle_vehicle.begin(), obstacle_vehicle.end());
-                }
-                else
-                {
-                    // 해당 시나리오 계속 체크
-                    //=========iii) 신규 객체 생성 빈도 측정
-                    for (auto iter = obstacle_vehicle.begin(); iter != obstacle_vehicle.end(); iter++)
-                    {
-                        for (auto iter1 = obstacle_vehicle_previous.begin(); iter1 != obstacle_vehicle_previous.end(); iter1++)
-                        {
-                            if (iter1->obstacle_id == iter->obstacle_id)
-                            {
-                                //동일 장애물 발견 (else 아무것도 안함) 
-                                //동일 장애물 timestamp 비교해 10s 이하만 keep 
-                                timestamp_diff = iter->timestamp - iter1->timestamp;
-                                if (timestamp_diff < 1000) // 1000ms 
+                                if (iter->obstacle_id != iter1->obstacle_id)
                                 {
-                                    obstacle_vehicle_repeated.push_back(*iter);
+                                    distance = getDistance(*iter, *iter1);
+                                    if (max_distance < distance) max_distance = distance;
                                 }
                             }
-
                         }
-                    }
-                    //업데이트 
-                    obstacle_vehicle_previous.assign(obstacle_vehicle.begin(), obstacle_vehicle.end());
 
-                    //=========iv) 객체간 최대거리 < 30m? 측정
-
-                    for (auto iter = obstacle_vehicle_repeated.begin(); iter != obstacle_vehicle_repeated.end(); iter++)
-                    {
-                        for (auto iter1 = obstacle_vehicle_repeated.begin(); iter1 != obstacle_vehicle_repeated.end(); iter1++)
+                        if (max_distance < 20)
                         {
-                            if (iter->obstacle_id != iter1->obstacle_id)
+                            //=========v) 통행과다환경 지정하고 환경 내 ego 와 30m 내외인 장애물에 대해서 confidence 값 계산
+                            for (auto iter = obstacle_pedes_repeated.begin(); iter != obstacle_pedes_repeated.end(); iter++)
                             {
-                                distance = getDistance(*iter, *iter1);
-                                if (max_distance < distance) max_distance = distance;
+                                distance = getDistance(*iter, ego_vehicle);
+                                if (distance < 30)
+                                {
+                                    float confidence = 30 / distance * 0.7;
+                                    risk_assessment.push_back({ iter->obstacle_id, SCENARIO_5, confidence });
+                                    adcm::Log::Info() << "Risk assessment generated: " << iter->obstacle_id << "with confidence:  " << confidence;
+
+                                }
                             }
                         }
                     }
+                    adcm::Log::Info() << "scenario 5 DONE";
+                    std::vector<ObstacleData>().swap(obstacle_pedes);  //free memory
+                    std::vector<ObstacleData>().swap(obstacle_pedes_repeated);  //free memory
 
-                    if (max_distance < 30)
+                }
+                {
+                    //=====시나리오 #6. 주행 경로상 통행량이 과다한 환경(차량)=====
+                    //=========i) 50 < vehicle < 60 인 동적객체만 추출
+ //                   std::this_thread::sleep_for(std::chrono::milliseconds(96));
+                    std::vector<ObstacleData> obstacle_vehicle;
+                    std::vector<ObstacleData> obstacle_vehicle_repeated;
+                    float distance = 0;
+                    float timestamp_diff = 0;
+                    float max_distance = 0;
+
+                    for (auto iter = map_data.obstacle_list.begin(); iter != map_data.obstacle_list.end(); iter++)
                     {
-                        //=========v) 통행과다환경 지정하고 환경 내 ego 와 40m 내외인 장애물에 대해서 confidence 값 계산
+                        float distance_ego_obs = getDistance(*iter, ego_vehicle);
+                        if (distance_ego_obs > 50 && distance_ego_obs < 60 && (iter->obstacle_class == VEHICLE_LARGE || iter->obstacle_class == VEHICLE_SMALL))
+                        {
+                            obstacle_vehicle.push_back(*iter);
+                        }
+                    }
+                    //=========ii) 주행경로 반경 15 m 이내인지 계산 
+
+                    for (auto iter = obstacle_vehicle.begin(); iter != obstacle_vehicle.end();)
+                    {
+                        distance = getDistance_LinearTrajectory(*iter, path);
+                        if (distance > 15 || distance == 15 || distance == INVALID_RETURN_VALUE)
+                        {
+                            // 15m 이상이거나 invalid 값을 지닌 사람들은 삭제
+                        iter = obstacle_vehicle.erase(iter);
+                        }
+                        else ++iter;
+                    }
+
+                    if (obstacle_vehicle_previous.empty())
+                    { //최초 리스트 생성시 -> 여기서 해당시나리오 종료
+                        obstacle_vehicle_previous.assign(obstacle_vehicle.begin(), obstacle_vehicle.end());
+                    }
+                    else
+                    {
+                        // 해당 시나리오 계속 체크
+                        //=========iii) 신규 객체 생성 빈도 측정
+                        for (auto iter = obstacle_vehicle.begin(); iter != obstacle_vehicle.end(); iter++)
+                        {
+                            for (auto iter1 = obstacle_vehicle_previous.begin(); iter1 != obstacle_vehicle_previous.end(); iter1++)
+                            {
+                                if (iter1->obstacle_id == iter->obstacle_id)
+                                {
+                                    //동일 장애물 발견 (else 아무것도 안함) 
+                                    //동일 장애물 timestamp 비교해 10s 이하만 keep 
+                                    timestamp_diff = iter->timestamp - iter1->timestamp;
+                                    if (timestamp_diff < 1000) // 1000ms 
+                                    {
+                                        obstacle_vehicle_repeated.push_back(*iter);
+                                    }
+                                }
+
+                            }
+                        }
+                        //업데이트 
+                        obstacle_vehicle_previous.assign(obstacle_vehicle.begin(), obstacle_vehicle.end());
+
+                        //=========iv) 객체간 최대거리 < 30m? 측정
+
                         for (auto iter = obstacle_vehicle_repeated.begin(); iter != obstacle_vehicle_repeated.end(); iter++)
                         {
-                            distance = getDistance(*iter, ego_vehicle);
-                            if (distance < 40)
+                            for (auto iter1 = obstacle_vehicle_repeated.begin(); iter1 != obstacle_vehicle_repeated.end(); iter1++)
                             {
-                                float confidence = 40 / distance * 0.7;
-                                risk_assessment.push_back({ iter->obstacle_id, SCENARIO_6, confidence });
+                                if (iter->obstacle_id != iter1->obstacle_id)
+                                {
+                                    distance = getDistance(*iter, *iter1);
+                                    if (max_distance < distance) max_distance = distance;
+                                }
+                            }
+                        }
+
+                        if (max_distance < 30)
+                        {
+                            //=========v) 통행과다환경 지정하고 환경 내 ego 와 40m 내외인 장애물에 대해서 confidence 값 계산
+                            for (auto iter = obstacle_vehicle_repeated.begin(); iter != obstacle_vehicle_repeated.end(); iter++)
+                            {
+                                distance = getDistance(*iter, ego_vehicle);
+                                if (distance < 40)
+                                {
+                                    float confidence = 40 / distance * 0.7;
+                                    risk_assessment.push_back({ iter->obstacle_id, SCENARIO_6, confidence });
+                                }
                             }
                         }
                     }
+
+                    adcm::Log::Info() << "scenario 6 DONE";
+                    std::vector<ObstacleData>().swap(obstacle_vehicle);  //free memory
+                    std::vector<ObstacleData>().swap(obstacle_vehicle_repeated);  //free memory
+
                 }
 
                 //=====시나리오 #7. 미개척 지역 주행환경======
 
                 drawline(path, risk_assessment);
+ //               std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                adcm::Log::Info() << "scenario 7 DONE";
+
+                for (auto iter=risk_assessment.begin(); iter!= risk_assessment.end(); iter++)
+                {
+                    adcm::Log::Info() << "Risk assessment generated is" << iter->hazard_class;
+                }
+
 
                 //dummy output 
                 riskAssessment.hazard_index.clear();

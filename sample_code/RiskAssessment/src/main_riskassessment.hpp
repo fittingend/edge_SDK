@@ -30,12 +30,12 @@ enum VehicleClass
     SUB_VEHICLE_3,
     SUB_VEHICLE_4
 };
-enum ActionClass
-{
-    NO_ACTION,
-    REMOVE_BLIND_SPOT,
-    ALERT_OBSTACLE
-};
+// enum ActionClass
+// {
+//     NO_ACTION,
+//     REMOVE_BLIND_SPOT,
+//     ALERT_OBSTACLE
+// };
 
 struct ObstacleData
 {
@@ -43,7 +43,7 @@ struct ObstacleData
     ObstacleClass obstacle_class;
     std::time_t timestamp;
     std::vector<std::pair<unsigned short,unsigned short>> map_2d_location; //장애물이 위치한 2d 그리드 맵의 index 페어를 저장
-    ActionClass action_class;
+    // ActionClass action_class;
     int stop_count; 
     float fused_cuboid_x;
     float fused_cuboid_y;
@@ -128,7 +128,7 @@ struct RiskAssessment
     float confidence;
 
     RiskAssessment(const std::pair<float, float> utm_xy_start, const std::pair<float, float> utm_xy_end, const HazardClass hazard_class, const bool isHazard) :\
-        utm_xy_start(utm_xy_start), utm_xy_end(utm_xy_end), hazard_class(hazard_class), isHazard(isHazard) {}
+       obstacle_id(INVALID_RETURN_VALUE), utm_xy_start(utm_xy_start), utm_xy_end(utm_xy_end), hazard_class(hazard_class), isHazard(isHazard) {}
 
     RiskAssessment(const unsigned short obstacle_id, const HazardClass hazard_class, const float confidence) :\
         obstacle_id(obstacle_id),hazard_class(hazard_class), confidence(confidence) {}
