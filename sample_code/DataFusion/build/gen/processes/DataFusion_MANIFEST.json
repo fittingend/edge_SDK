@@ -1,0 +1,64 @@
+{
+    "process_name": "DataFusion",
+    "logtrace_process_id": "DAFU",
+    "logtrace_process_desc": "EDGE DataFusion Application",
+    "logtrace_log_modes":
+    [
+        "CONSOLE",
+        "NETWORK"
+    ],
+    "logtrace_default_log_level": "INFO",
+    "logtrace_file_path": "/var/redirected/DataFusion",
+    "executable":
+    {
+        "platform_application": false,
+        "timer_resolution_ns": 1000,
+        "uses_logging": true
+    },
+    "startup_configs":
+    [
+        {
+            "config_name_for_convenience": "Config #1",
+            "depends":
+            [
+            ],
+            "machine_states":
+            [
+                "Startup",
+                "Driving",
+                "Parking"
+            ],
+            "function_group_states":
+            [
+            ],
+            "resource_group": "ResourceGroupADCM",
+            "scheduling_policy": "SCHEDULING-POLICY-ROUND-ROBIN",
+            "scheduling_priority": 12,
+            "termination_behavior": "PROCESS-IS-NOT-SELF-TERMINATING",
+            "arguments":
+            [
+            ],
+            "environment":
+            [
+                "VSOMEIP_CONFIGURATION=/etc/vsomeip.json"
+            ]
+        }
+    ],
+    "service_instance_to_port_prototype_mapping":
+    [
+        {
+            "instance_specifier": "DataFusion/DataFusion/PPort_map_data",
+            "service_instance": "/adcm/Machines/AdaptiveMachine/ServiceInstances/ProvidedSomeipServiceInstance_map_data"
+        },
+        {
+            "instance_specifier": "DataFusion/DataFusion/RPort_hub_data",
+            "service_instance": "/adcm/Machines/AdaptiveMachine/ServiceInstances/RequiredSomeipServiceInstance_hub_data"
+        }
+    ],
+    "persistency_port_prototype_to_key_value_database_mapping":
+    [
+    ],
+    "persistency_port_prototype_to_file_array_mapping":
+    [
+    ]
+}

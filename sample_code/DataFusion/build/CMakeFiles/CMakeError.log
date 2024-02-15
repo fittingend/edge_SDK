@@ -1,0 +1,40 @@
+Performing C++ SOURCE FILE Test CMAKE_HAVE_LIBC_PTHREAD failed with the following output:
+Change Dir: /home/sujin/01_WORK/edge_sdk_r22-11-SDK_ori/sample_code/DataFusion/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/local/oecore-x86_64/sysroots/x86_64-oesdk-linux/usr/bin/make cmTC_1ad63/fast && /usr/local/oecore-x86_64/sysroots/x86_64-oesdk-linux/usr/bin/make -f CMakeFiles/cmTC_1ad63.dir/build.make CMakeFiles/cmTC_1ad63.dir/build
+make[1]: Entering directory '/home/sujin/01_WORK/edge_sdk_r22-11-SDK_ori/sample_code/DataFusion/build/CMakeFiles/CMakeTmp'
+Building CXX object CMakeFiles/cmTC_1ad63.dir/src.cxx.o
+/usr/local/oecore-x86_64/sysroots/x86_64-oesdk-linux/usr/bin/aarch64-oe-linux/aarch64-oe-linux-g++  -march=armv8-a -mcpu=cortex-a57 -mtune=cortex-a57 --sysroot=/usr/local/oecore-x86_64/sysroots/aarch64-oe-linux --sysroot=/usr/local/oecore-x86_64/sysroots/aarch64-oe-linux    -O2 -fomit-frame-pointer    -Wa,--noexecstack -fexpensive-optimizations   -frename-registers -ftree-vectorize   -finline-functions -finline-limit=64   -Wno-error=maybe-uninitialized -Wno-error=unused-result     -DCMAKE_HAVE_LIBC_PTHREAD   -std=c++14 -o CMakeFiles/cmTC_1ad63.dir/src.cxx.o -c /home/sujin/01_WORK/edge_sdk_r22-11-SDK_ori/sample_code/DataFusion/build/CMakeFiles/CMakeTmp/src.cxx
+Linking CXX executable cmTC_1ad63
+/usr/local/oecore-x86_64/sysroots/x86_64-oesdk-linux/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_1ad63.dir/link.txt --verbose=1
+/usr/local/oecore-x86_64/sysroots/x86_64-oesdk-linux/usr/bin/aarch64-oe-linux/aarch64-oe-linux-g++  -march=armv8-a -mcpu=cortex-a57 -mtune=cortex-a57 --sysroot=/usr/local/oecore-x86_64/sysroots/aarch64-oe-linux --sysroot=/usr/local/oecore-x86_64/sysroots/aarch64-oe-linux   -O2 -fomit-frame-pointer    -Wa,--noexecstack -fexpensive-optimizations   -frename-registers -ftree-vectorize   -finline-functions -finline-limit=64   -Wno-error=maybe-uninitialized -Wno-error=unused-result     -DCMAKE_HAVE_LIBC_PTHREAD  -Wl,-O1 -Wl,--hash-style=gnu -Wl,--as-needed  CMakeFiles/cmTC_1ad63.dir/src.cxx.o  -o cmTC_1ad63 
+CMakeFiles/cmTC_1ad63.dir/src.cxx.o: In function `main':
+src.cxx:(.text.startup+0x18): undefined reference to `pthread_create'
+src.cxx:(.text.startup+0x20): undefined reference to `pthread_detach'
+src.cxx:(.text.startup+0x2c): undefined reference to `pthread_join'
+collect2: error: ld returned 1 exit status
+make[1]: *** [CMakeFiles/cmTC_1ad63.dir/build.make:87: cmTC_1ad63] Error 1
+make[1]: Leaving directory '/home/sujin/01_WORK/edge_sdk_r22-11-SDK_ori/sample_code/DataFusion/build/CMakeFiles/CMakeTmp'
+make: *** [Makefile:121: cmTC_1ad63/fast] Error 2
+
+
+Source file was:
+#include <pthread.h>
+
+void* test_func(void* data)
+{
+  return data;
+}
+
+int main(void)
+{
+  pthread_t thread;
+  pthread_create(&thread, NULL, test_func, NULL);
+  pthread_detach(thread);
+  pthread_join(thread, NULL);
+  pthread_atfork(NULL, NULL, NULL);
+  pthread_exit(NULL);
+
+  return 0;
+}
+

@@ -147,7 +147,7 @@ void MapData_Subscriber::receivedCallback_mapData()
     // execute callback for every samples in the context of GetNewSamples
     std::shared_ptr<map_data_Objects> temp;
     auto callback = [&temp](auto sample) {
-        DEBUG("Callback: mapDataEvent ");
+        // DEBUG("Callback: mapDataEvent ");
         temp = std::make_shared<map_data_Objects>(*sample);
     };
     m_proxy->mapDataEvent.GetNewSamples(callback);

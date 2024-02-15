@@ -64,6 +64,10 @@
 namespace adcm
 {
 
+typedef void (*BuildPathCallback)(const double& source_latitude, const double& source_longitude, const double& destination_latitude, const double& destination_longitude, const std::uint8_t& mve_type);
+static BuildPathCallback mCallback = nullptr;
+static std::shared_ptr<adcm::build_path::GetBuildPathOutput> output = std::make_shared<adcm::build_path::GetBuildPathOutput>();
+
 /*!
  *  \brief Class implementing skeleton methods.
  *
@@ -86,6 +90,9 @@ public:
         m_finished = true;
         m_worker.join();
     }
+
+    virtual auto GetBuildPath(const double& source_latitude, const double& source_longitude, const double& destination_latitude, const double& destination_longitude, const std::uint8_t& mve_type)
+        -> decltype(Skeleton::GetBuildPath(source_latitude, source_longitude, destination_latitude, destination_longitude, mve_type)) override;
 
 private:
     /*!
@@ -112,6 +119,9 @@ public:
     BuildPath_Provider();
     ~BuildPath_Provider();
 
+    static void setCallback(BuildPathCallback cb);
+    static std::shared_ptr<adcm::build_path::GetBuildPathOutput> getPtrOutput();
+
     void init(std::string instance);
 
     void send(build_path_Objects& data);
@@ -119,6 +129,10 @@ public:
 protected:
 
     adcm::skeleton::build_pathSkeleton* m_skeleton;
+    String m_service_flag;
+
+    ara::core::Future<adcm::skeleton::fields::ServiceFlag::value_type> setServiceFlag(
+        adcm::skeleton::fields::ServiceFlag::value_type field);
 };
 
 }// namespace adcm

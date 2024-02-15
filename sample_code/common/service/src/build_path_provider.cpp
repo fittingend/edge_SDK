@@ -66,6 +66,32 @@ using ara::com::ComErrorDomainErrc;
 namespace adcm
 {
 
+std::shared_ptr<adcm::build_path::GetBuildPathOutput> BuildPath_Provider::getPtrOutput()
+{
+    return output;
+}
+
+void BuildPath_Provider::setCallback(BuildPathCallback cb)
+{
+    adcm::mCallback = cb;
+}
+
+ara::core::Future<adcm::build_path::GetBuildPathOutput> BuildPathImp::GetBuildPath(
+    const double& source_latitude, const double& source_longitude, 
+    const double& destination_latitude, const double& destination_longitude, const std::uint8_t& mve_type)
+{
+    if(adcm::mCallback != NULL)
+    {
+        adcm::mCallback(source_latitude, source_longitude, destination_latitude, destination_longitude, mve_type);
+    }
+    else
+        adcm::Log::Info() << "mCallback is NULL";
+
+    decltype(Skeleton::GetBuildPath(source_latitude, source_longitude, destination_latitude, destination_longitude, mve_type))::PromiseType promise;
+    promise.set_value(std::move(*output));
+    return promise.get_future();
+}
+
 void BuildPathImp::ProcessRequests()
 {
     while(!m_finished) {
@@ -99,6 +125,17 @@ BuildPath_Provider::~BuildPath_Provider()
     delete m_skeleton;
 }
 
+ara::core::Future<adcm::skeleton::fields::ServiceFlag::value_type> BuildPath_Provider::setServiceFlag(
+    adcm::skeleton::fields::ServiceFlag::value_type field)
+{
+    ara::core::Promise<adcm::skeleton::fields::ServiceFlag::value_type> promise;
+    m_service_flag = field;
+    VERBOSE("Setting the field ServiceFlag value to %s", m_service_flag);
+    promise.set_value(std::move(m_service_flag));
+    return promise.get_future();
+}
+
+
 void BuildPath_Provider::init(std::string instance)
 {
     adcm::Log::Info() << "enter BuildPath_Provider::init()";
@@ -113,6 +150,7 @@ void BuildPath_Provider::init(std::string instance)
         INFO("Service Instance offered: %s", instanceId.ToString().data());
     }
 
+    m_skeleton->ServiceFlag.Update("On");
     m_skeleton->OfferService();
     adcm::Log::Info() << "exit BuildPath_Provider::init()";
 }
@@ -124,7 +162,7 @@ void BuildPath_Provider::send(build_path_Objects& data)
         auto l_sampleData = std::move(allocation).Value();
         *l_sampleData = data;
         m_skeleton->buildPathEvent.Send(std::move(l_sampleData));
-        DEBUG("sent");
+        // DEBUG("sent");
 
     } catch(ara::com::Exception e) {
         ERROR("Exeception : %s", e.what());

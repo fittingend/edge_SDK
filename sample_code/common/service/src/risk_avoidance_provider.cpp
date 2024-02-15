@@ -124,7 +124,7 @@ void RiskAvoidance_Provider::send(risk_avoidance_Objects& data)
         auto l_sampleData = std::move(allocation).Value();
         *l_sampleData = data;
         m_skeleton->riskAvoidanceEvent.Send(std::move(l_sampleData));
-        DEBUG("sent");
+        // DEBUG("sent");
 
     } catch(ara::com::Exception e) {
         ERROR("Exeception : %s", e.what());

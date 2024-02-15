@@ -95,6 +95,50 @@ void BuildPath_Subscriber::init(std::string instance)
     adcm::Log::Info() << "exit BuildPath_Subscriber::init()";
 }
 
+void BuildPath_Subscriber::BuildPath(const double& source_latitude, const double& source_longitude, 
+        const double& destination_latitude, const double& destination_longitude, const std::uint8_t& mve_type)
+{
+    adcm::Log::Verbose() << "source_latitude / source_longitude / destination_latitude / destination_longitude / mve_type";
+    adcm::Log::Verbose() << source_latitude << " / " << source_longitude << " / " << destination_latitude << " / " << destination_longitude << " / " << mve_type;
+    auto buildPath_future = m_proxy->GetBuildPath(source_latitude, source_longitude, destination_latitude, destination_longitude, mve_type);
+
+    while (!buildPath_future.is_ready()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        adcm::Log::Verbose() << "BuildPath Data is calculating, please wait ...";
+    }
+
+    auto result = buildPath_future.GetResult();
+    if (result.HasValue()) {
+        auto mapdata_output = result.Value();
+        buildPathObject = mapdata_output.Path;
+        adcm::Log::Info() << "BuildPath method call successful";
+    }else
+        adcm::Log::Error() << "BuildPath method call fail...";
+}
+
+build_path_Objects BuildPath_Subscriber::getBuildPath()
+{
+    return buildPathObject;
+}
+
+String BuildPath_Subscriber::fieldGetter_ServiceFlag()
+{
+    auto getServiceFlagFuture = m_proxy->ServiceFlag.Get();
+    auto rServiceFlag = getServiceFlagFuture.GetResult();
+
+    if (rServiceFlag.HasValue()) {
+        auto value = rServiceFlag.Value();
+        VERBOSE("FIELDS: Current ServiceFlag is %s", value);
+        return value;
+
+    } else {
+        // while field getters itself do not return errors, networking errors are still possible
+        auto err = rServiceFlag.Error();
+        ERROR("APPLICATION_ERROR Code: %d", err.Value());
+        ERROR("APPLICATION_ERROR Message: %s", err.Message().data());
+    }
+}
+
 void BuildPath_Subscriber::subscribe_buildPath()
 {
     if(!m_proxy->buildPathEvent.IsSubscribed()) {
@@ -147,7 +191,7 @@ void BuildPath_Subscriber::receivedCallback_buildPath()
     // execute callback for every samples in the context of GetNewSamples
     std::shared_ptr<build_path_Objects> temp;
     auto callback = [&temp](auto sample) {
-        DEBUG("Callback: buildPathEvent ");
+        // DEBUG("Callback: buildPathEvent ");
         temp = std::make_shared<build_path_Objects>(*sample);
     };
     m_proxy->buildPathEvent.GetNewSamples(callback);

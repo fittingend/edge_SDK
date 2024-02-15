@@ -103,6 +103,12 @@ public:
 
     void fireAndForgetMethodCall();
 
+    void BuildPath(const double& source_latitude, const double& source_longitude, 
+        const double& destination_latitude, const double& destination_longitude, const std::uint8_t& mve_type);
+
+    build_path_Objects getBuildPath();
+    String fieldGetter_ServiceFlag();
+
 protected:
     std::shared_ptr<Proxy> m_proxy;
     std::mutex m_proxy_mutex;
@@ -113,6 +119,7 @@ protected:
     void enQueue(std::shared_ptr<build_path_Objects> item);
     std::shared_ptr<build_path_Objects> deQueue();
 
+    build_path_Objects buildPathObject;
 
     int getQueueSize();
     auto setTrigger();

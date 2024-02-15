@@ -147,7 +147,7 @@ void RiskAvoidance_Subscriber::receivedCallback_riskAvoidance()
     // execute callback for every samples in the context of GetNewSamples
     std::shared_ptr<risk_avoidance_Objects> temp;
     auto callback = [&temp](auto sample) {
-        DEBUG("Callback: riskAvoidanceEvent ");
+        // DEBUG("Callback: riskAvoidanceEvent ");
         temp = std::make_shared<risk_avoidance_Objects>(*sample);
     };
     m_proxy->riskAvoidanceEvent.GetNewSamples(callback);

@@ -65,7 +65,15 @@
 #include "map_data_subscriber.h"
 #include "risk_assessment_subscriber.h"
 #include "risk_avoidance_subscriber.h"
-#include "work_order_subscriber.h"
+
+std::shared_ptr<adcm::BuildPath_Provider> buildPath_provider;
+
+std::random_device m_rd;
+std::default_random_engine m_rand_eng(m_rd());
+std::uniform_real_distribution<double> m_ud_10000_10000(-10000, 10000);
+std::uniform_int_distribution<std::uint32_t> m_ud_0_10000(0, 10000);
+std::uniform_int_distribution<std::uint16_t> m_ud_0_1000(0, 1000);
+std::uniform_int_distribution<std::uint8_t> m_ud_0_2(0, 2);
 
 namespace
 {
@@ -75,7 +83,6 @@ std::atomic_bool continueExecution{true};
 std::atomic_uint gReceivedEvent_count_map_data{0};
 std::atomic_uint gReceivedEvent_count_risk_assessment{0};
 std::atomic_uint gReceivedEvent_count_risk_avoidance{0};
-std::atomic_uint gReceivedEvent_count_work_order{0};
 std::atomic_uint gMainthread_Loopcount{0};
 
 void SigTermHandler(int signal)
@@ -104,27 +111,50 @@ bool RegisterSigTermHandler()
 
 }  // namespace
 
+
+void setBuildPath(const double& source_latitude, const double& source_longitude, 
+    const double& destination_latitude, const double& destination_longitude, const std::uint8_t& type)
+{
+    adcm::Log::Info() << "TaskManagerPathBuilder >> setBuildPath function callback";
+    
+    auto output = buildPath_provider->getPtrOutput();
+
+    adcm::build_path_Objects Path;
+    output->Path.Seq = m_ud_0_10000(m_rand_eng);
+    output->Path.vehicle_class = m_ud_0_2(m_rand_eng);
+    output->Path.mve_id = m_ud_0_1000(m_rand_eng);
+    output->Path.mve_type = m_ud_0_2(m_rand_eng);
+    output->Path.sec = "sec";
+    output->Path.nsec = "nsec";
+    output->Path.frame_id = "frame_id";
+    output->Path.size = m_ud_0_1000(m_rand_eng);
+    output->Path.utm_x.clear();
+    output->Path.utm_x.push_back(m_ud_10000_10000(m_rand_eng));
+    output->Path.utm_x.push_back(m_ud_10000_10000(m_rand_eng));
+    output->Path.utm_x.push_back(m_ud_10000_10000(m_rand_eng));
+    output->Path.utm_y.clear();
+    output->Path.utm_y.push_back(m_ud_10000_10000(m_rand_eng));
+    output->Path.utm_y.push_back(m_ud_10000_10000(m_rand_eng));
+    output->Path.utm_y.push_back(m_ud_10000_10000(m_rand_eng));
+}
+
+
 void ThreadAct1()
 {
     adcm::Log::Info() << "TaskManagerPathBuilder ThreadAct1";
-    adcm::BuildPath_Provider buildPath_provider;
     adcm::MapData_Subscriber mapData_subscriber;
     adcm::RiskAssessment_Subscriber riskAssessment_subscriber;
     adcm::RiskAvoidance_Subscriber riskAvoidance_subscriber;
-    adcm::WorkOrder_Subscriber workOrder_subscriber;
     INFO("TaskManagerPathBuilder .init()");
-    buildPath_provider.init("TaskManagerPathBuilder/TaskManagerPathBuilder/PPort_build_path");
     mapData_subscriber.init("TaskManagerPathBuilder/TaskManagerPathBuilder/RPort_map_data");
     riskAssessment_subscriber.init("TaskManagerPathBuilder/TaskManagerPathBuilder/RPort_risk_assessment");
     riskAvoidance_subscriber.init("TaskManagerPathBuilder/TaskManagerPathBuilder/RPort_risk_avoidance");
-    workOrder_subscriber.init("TaskManagerPathBuilder/TaskManagerPathBuilder/RPort_work_order");
     INFO("After TaskManagerPathBuilder .init()");
-    std::random_device m_rd;
-    std::default_random_engine m_rand_eng(m_rd());
-    std::uniform_real_distribution<double> m_ud_10000_10000(-10000, 10000);
-    std::uniform_int_distribution<std::uint32_t> m_ud_0_10000(0, 10000);
-    std::uniform_int_distribution<std::uint16_t> m_ud_0_1000(0, 1000);
-    std::uniform_int_distribution<std::uint8_t> m_ud_0_4(0, 4);
+    
+    buildPath_provider = std::make_shared<adcm::BuildPath_Provider>();
+    buildPath_provider->init("TaskManagerPathBuilder/TaskManagerPathBuilder/PPort_build_path");
+    buildPath_provider->setCallback(setBuildPath);
+
     INFO("Thread loop start...");
 
     while (continueExecution) {
@@ -134,7 +164,6 @@ void ThreadAct1()
         bool mapData_rxEvent = mapData_subscriber.waitEvent(0); // wait event
         bool riskAssessment_rxEvent = riskAssessment_subscriber.waitEvent(0); // wait event
         bool riskAvoidance_rxEvent = riskAvoidance_subscriber.waitEvent(0); // wait event
-        bool workOrder_rxEvent = workOrder_subscriber.waitEvent(0); // wait event
 
         if(mapData_rxEvent) {
             adcm::Log::Verbose() << "[EVENT] TaskManagerPathBuilder Map Data received";
@@ -143,35 +172,111 @@ void ThreadAct1()
                 auto data = mapData_subscriber.getEvent();
                 gReceivedEvent_count_map_data++;
 
-                auto obstacle = data->obstacle;
-                auto environment = data->environment;
-                auto vehicle = data->vehicle;
+                auto map_2d = data->map_2d;
+                auto obstacle_list = data->obstacle_list;
+                auto vehicle_list = data->vehicle_list;
 
-                adcm::Log::Verbose() << "obstacle.Time_stamp : "<< obstacle.Time_stamp;
-                adcm::Log::Verbose() << "obstacle.fused_index : "<< obstacle.fused_index;
-                adcm::Log::Verbose() << "obstacle.fused_cuboid_x : "<< obstacle.fused_cuboid_x;
-                adcm::Log::Verbose() << "obstacle.fused_cuboid_y : "<< obstacle.fused_cuboid_y;
-                adcm::Log::Verbose() << "obstacle.fused_cuboid_z : "<< obstacle.fused_cuboid_z;
-                adcm::Log::Verbose() << "obstacle.fused_heading_angle : "<< obstacle.fused_heading_angle;
-                adcm::Log::Verbose() << "obstacle.fused_Position_x : "<< obstacle.fused_Position_x;
-                adcm::Log::Verbose() << "obstacle.fused_Position_y : "<< obstacle.fused_Position_y;
-                adcm::Log::Verbose() << "obstacle.fused_Position_z : "<< obstacle.fused_Position_z;
-                adcm::Log::Verbose() << "obstacle.fused_velocity_x : "<< obstacle.fused_velocity_x;
-                adcm::Log::Verbose() << "obstacle.fused_velocity_y : "<< obstacle.fused_velocity_y;
-                adcm::Log::Verbose() << "obstacle.fused_velocity_z : "<< obstacle.fused_velocity_z;
+                if(!map_2d.empty()) {
+                    adcm::Log::Verbose() << "=== map_2d ===";
+                    // sample case 1)
+                    // for (int i = 0; i < map_2d.size(); ++i)
+                    // {
+                    //     adcm::Log::Verbose() << "===== map_2dList =====";
+                    //     for(auto itr = map_2d[i].begin(); itr != map_2d[i].end(); ++itr) {
+                    //         adcm::Log::Verbose() << "obstacle_id : " << itr->obstacle_id;
+                    //         adcm::Log::Verbose() << "vehicle_class : " << itr->vehicle_class;
+                    //         adcm::Log::Verbose() << "road_z : " << itr->road_z;
+                    //     }
+                    //     adcm::Log::Verbose() << "======================";
+                    // }
 
-                adcm::Log::Verbose() << "environment.road_z : "<< environment.road_z;
+                    // sample case 2)
+                    int col = map_2d.size();
+                    int row = map_2d[0].size();
+                    for (int i = 0; i < col; ++i)
+                    {
+                        for (int j = 0; j < row; ++j)
+                        {
+                            adcm::Log::Verbose() << "[" << i << "]" << "[" << j << "]" << "obstacle_id : " << map_2d[i][j].obstacle_id;
+                            adcm::Log::Verbose() << "[" << i << "]" << "[" << j << "]" << "vehicle_class : " << map_2d[i][j].vehicle_class;
+                            adcm::Log::Verbose() << "[" << i << "]" << "[" << j << "]" << "road_z : " << map_2d[i][j].road_z;
+                        }
+                    }
+                } else {
+                    adcm::Log::Verbose() << "map_2d Vector empty!!! ";
+                }
 
-                adcm::Log::Verbose() << "vehicle.Vehicle_id : "<< vehicle.Vehicle_id;
-                adcm::Log::Verbose() << "vehicle.Position_lat : "<< vehicle.Position_lat;
-                adcm::Log::Verbose() << "vehicle.Position_long : "<< vehicle.Position_long;
-                adcm::Log::Verbose() << "vehicle.Position_Height : "<< vehicle.Position_Height;
-                adcm::Log::Verbose() << "vehicle.Yaw : "<< vehicle.Yaw;
-                adcm::Log::Verbose() << "vehicle.Roll : "<< vehicle.Roll;
-                adcm::Log::Verbose() << "vehicle.Pitch : "<< vehicle.Pitch;
-                adcm::Log::Verbose() << "vehicle.Velocity_long : "<< vehicle.Velocity_long;
-                adcm::Log::Verbose() << "vehicle.Velocity_lat : "<< vehicle.Velocity_lat;
-                adcm::Log::Verbose() << "vehicle.Velocity_ang : "<< vehicle.Velocity_ang;
+                if(!obstacle_list.empty()) {
+                    adcm::Log::Verbose() << "=== obstacle_list ===";
+                    for(auto itr = obstacle_list.begin(); itr != obstacle_list.end(); ++itr) {
+                        adcm::Log::Verbose() << "obstacle_id : " << itr->obstacle_id;
+                        adcm::Log::Verbose() << "obstacle_class : " << itr->obstacle_class;
+                        adcm::Log::Verbose() << "timestamp : " << itr->timestamp;
+
+                        auto map_2d_location = itr->map_2d_location;
+
+                        if(!map_2d_location.empty()) {
+                            adcm::Log::Verbose() << "=== map_2d_location ===";
+                            for(auto itr = map_2d_location.begin(); itr != map_2d_location.end(); ++itr) {
+                                adcm::Log::Verbose() << "x index : " << itr->x;
+                                adcm::Log::Verbose() << "y index : " << itr->y;
+                            }
+                        } else {
+                            adcm::Log::Verbose() << "obstacle_list map_2d_location Vector empty!!! ";
+                        }
+
+                        adcm::Log::Verbose() << "stop_count : " << itr->stop_count;
+                        adcm::Log::Verbose() << "fused_cuboid_x : " << itr->fused_cuboid_x;
+                        adcm::Log::Verbose() << "fused_cuboid_y : " << itr->fused_cuboid_y;
+                        adcm::Log::Verbose() << "fused_cuboid_z : " << itr->fused_cuboid_z;
+                        adcm::Log::Verbose() << "fused_heading_angle : " << itr->fused_heading_angle;
+                        adcm::Log::Verbose() << "fused_position_x : " << itr->fused_position_x;
+                        adcm::Log::Verbose() << "fused_position_y : " << itr->fused_position_y;
+                        adcm::Log::Verbose() << "fused_position_z : " << itr->fused_position_z;
+                        adcm::Log::Verbose() << "fused_velocity_x : " << itr->fused_velocity_x;
+                        adcm::Log::Verbose() << "fused_velocity_y : " << itr->fused_velocity_y;
+                        adcm::Log::Verbose() << "fused_velocity_z : " << itr->fused_velocity_z;
+                    }
+                } else {
+                    adcm::Log::Verbose() << "obstacle_list Vector empty!!! ";
+                }
+
+                if(!vehicle_list.empty()) {
+                    adcm::Log::Verbose() << "=== vehicle_list ===";
+                    for(auto itr = vehicle_list.begin(); itr != vehicle_list.end(); ++itr) {
+                        adcm::Log::Verbose() << "vehicle_class : " << itr->vehicle_class;
+                        adcm::Log::Verbose() << "timestamp : " << itr->timestamp;
+                        
+                        auto map_2d_location = itr->map_2d_location;
+
+                        if(!map_2d_location.empty()) {
+                            adcm::Log::Verbose() << "=== map_2d_location ===";
+                            for(auto itr = map_2d_location.begin(); itr != map_2d_location.end(); ++itr) {
+                                adcm::Log::Verbose() << "x index : " << itr->x;
+                                adcm::Log::Verbose() << "y index : " << itr->y;
+                            }
+                        } else {
+                            adcm::Log::Verbose() << "vehicle_list map_2d_location Vector empty!!! ";
+                        }
+
+                        adcm::Log::Verbose() << "position_long : " << itr->position_long;
+                        adcm::Log::Verbose() << "position_lat : " << itr->position_lat;
+                        adcm::Log::Verbose() << "position_height : " << itr->position_height;
+                        adcm::Log::Verbose() << "position_x : " << itr->position_x;
+                        adcm::Log::Verbose() << "position_y : " << itr->position_y;
+                        adcm::Log::Verbose() << "position_z : " << itr->position_z;
+                        adcm::Log::Verbose() << "yaw : " << itr->yaw;
+                        adcm::Log::Verbose() << "roll : " << itr->roll;
+                        adcm::Log::Verbose() << "pitch : " << itr->pitch;
+                        adcm::Log::Verbose() << "velocity_long : " << itr->velocity_long;
+                        adcm::Log::Verbose() << "velocity_lat : " << itr->velocity_lat;
+                        adcm::Log::Verbose() << "velocity_x : " << itr->velocity_x;
+                        adcm::Log::Verbose() << "velocity_y : " << itr->velocity_y;
+                        adcm::Log::Verbose() << "velocity_ang : " << itr->velocity_ang;
+                    }
+                } else {
+                    adcm::Log::Verbose() << "vehicle_list Vector empty!!! ";
+                }
             }
         }
 
@@ -182,25 +287,47 @@ void ThreadAct1()
                 auto data = riskAssessment_subscriber.getEvent();
                 gReceivedEvent_count_risk_assessment++;
 
-                auto hazard_index = data->hazard_index;
-                auto confidence = data->confidence;
+                auto riskAssessmentList = data->riskAssessmentList;
 
-                if(!hazard_index.empty()) {
-                    adcm::Log::Verbose() << "=== hazard_index ===";
-                    for(auto itr = hazard_index.begin(); itr != hazard_index.end(); ++itr) {
-                        adcm::Log::Verbose() << *itr;
+                if(!riskAssessmentList.empty()) {
+                    adcm::Log::Verbose() << "=== riskAssessmentList ===";
+                    for(auto itr = riskAssessmentList.begin(); itr != riskAssessmentList.end(); ++itr) {
+                        adcm::Log::Verbose() << "obstacle_id : " << itr->obstacle_id;
+                        
+                        auto wgs84_xy_start = itr->wgs84_xy_start;
+                        auto wgs84_xy_end = itr->wgs84_xy_end;
+
+                        if(!wgs84_xy_start.empty()) {
+                            adcm::Log::Verbose() << "=== wgs84_xy_start ===";
+                            for(auto itr = wgs84_xy_start.begin(); itr != wgs84_xy_start.end(); ++itr) {
+                                adcm::Log::Verbose() << "start position x : " << itr->x;
+                                adcm::Log::Verbose() << "start position y : " << itr->y;
+                            }
+                        } else {
+                            adcm::Log::Verbose() << "wgs84_xy_start Vector empty!!! ";
+                        }
+
+                        if(!wgs84_xy_end.empty()) {
+                            adcm::Log::Verbose() << "=== wgs84_xy_end ===";
+                            for(auto itr = wgs84_xy_end.begin(); itr != wgs84_xy_end.end(); ++itr) {
+                                adcm::Log::Verbose() << "end position x : " << itr->x;
+                                adcm::Log::Verbose() << "end position y : " << itr->y;
+                            }
+                        } else {
+                            adcm::Log::Verbose() << "wgs84_xy_end Vector empty!!! ";
+                        }
+
+                        adcm::Log::Verbose() << "hazard_class : " << itr->hazard_class;
+
+                        if(itr->isHarzard)
+                            adcm::Log::Verbose() << "isHarzard : true ";
+                        else
+                            adcm::Log::Verbose() << "isHarzard : false ";
+
+                        adcm::Log::Verbose() << "confidence : " << itr->confidence;
                     }
                 } else {
-                    adcm::Log::Verbose() << "hazard_index Vector empty!!! ";
-                }
-
-                if(!confidence.empty()) {
-                    adcm::Log::Verbose() << "=== confidence ===";
-                    for(auto itr = confidence.begin(); itr != confidence.end(); ++itr) {
-                        adcm::Log::Verbose() << *itr;
-                    }
-                } else {
-                    adcm::Log::Verbose() << "confidence Vector empty!!! ";
+                    adcm::Log::Verbose() << "riskAssessmentList Vector empty!!! ";
                 }
             }
         }
@@ -212,10 +339,10 @@ void ThreadAct1()
                 auto data = riskAvoidance_subscriber.getEvent();
                 gReceivedEvent_count_risk_avoidance++;
 
-                auto robot_id = data->robot_id;
+                auto vehicle_class = data->vehicle_class;
                 auto behavior_planning = data->behavior_planning;
 
-                adcm::Log::Verbose() << "robot_id : "<< robot_id;
+                adcm::Log::Verbose() << "vehicle_class : "<< vehicle_class;
                 adcm::Log::Verbose() << "behavior_planning.obstacle_x : "<< behavior_planning.obstacle_x;
                 adcm::Log::Verbose() << "behavior_planning.obstacle_y : "<< behavior_planning.obstacle_y;
                 adcm::Log::Verbose() << "behavior_planning.robot_position_x : "<< behavior_planning.robot_position_x;
@@ -226,35 +353,17 @@ void ThreadAct1()
             }
         }
 
-        if(workOrder_rxEvent) {
-            adcm::Log::Verbose() << "[EVENT] TaskManagerPathBuilder Risk Avoidance received";
-
-            while(!workOrder_subscriber.isEventQueueEmpty()) {
-                auto data = workOrder_subscriber.getEvent();
-                gReceivedEvent_count_work_order++;
-
-                auto command = data->command;
-                auto groupId = data->groupId;
-                auto name = data->name;
-
-                adcm::Log::Verbose() << "command : "<< command;
-                adcm::Log::Verbose() << "groupId : "<< groupId;
-                adcm::Log::Verbose() << "name : "<< name;
-            }
-        }
-
         {
             adcm::build_path_Objects Path;
 
             Path.Seq = m_ud_0_10000(m_rand_eng);
-            Path.group_id = m_ud_0_10000(m_rand_eng);
-            Path.vehicle_id = m_ud_0_10000(m_rand_eng);
+            Path.vehicle_class = m_ud_0_2(m_rand_eng);
             Path.mve_id = m_ud_0_1000(m_rand_eng);
-            Path.mve_type = "mve_type";
+            Path.mve_type = m_ud_0_2(m_rand_eng);
             Path.sec = "sec";
             Path.nsec = "nsec";
             Path.frame_id = "frame_id";
-            Path.size = m_ud_10000_10000(m_rand_eng);
+            Path.size = m_ud_0_1000(m_rand_eng);
             Path.utm_x.clear();
             Path.utm_x.push_back(m_ud_10000_10000(m_rand_eng));
             Path.utm_x.push_back(m_ud_10000_10000(m_rand_eng));
@@ -264,7 +373,7 @@ void ThreadAct1()
             Path.utm_y.push_back(m_ud_10000_10000(m_rand_eng));
             Path.utm_y.push_back(m_ud_10000_10000(m_rand_eng));
 
-            buildPath_provider.send(Path);
+            buildPath_provider->send(Path);
         }
     }
 }
@@ -302,14 +411,6 @@ void ThreadMonitor()
 
             } else {
                 adcm::Log::Info() << "risk_avoidance event timeout!!!";
-            }
-
-            if(gReceivedEvent_count_work_order != 0) {
-                adcm::Log::Info() << "work_order Received count = " << gReceivedEvent_count_work_order;
-                gReceivedEvent_count_work_order = 0;
-
-            } else {
-                adcm::Log::Info() << "work_order event timeout!!!";
             }
         }
     }
