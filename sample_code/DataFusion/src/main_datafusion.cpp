@@ -101,8 +101,8 @@ void globalToLocalcoordinate (VehicleData& vehicle)
     double velocity_x = vehicle.velocity_long;
     double velocity_y = vehicle.velocity_lat;
 
-    vehicle.position_x =  cos(theta)*(position_x - alpha) + sin(theta)*(position_y - beta);
-    vehicle.position_y = -sin(theta)*(position_x - alpha) + cos(theta)*(position_y - beta);
+    vehicle.position_x =  (cos(theta)*(position_x - alpha) + sin(theta)*(position_y - beta))*M_TO_10CM_PRECISION;
+    vehicle.position_y = (-sin(theta)*(position_x - alpha) + cos(theta)*(position_y - beta))*M_TO_10CM_PRECISION;
     vehicle.velocity_x = (velocity_ang * (-sin(theta)*(position_x - alpha)+ (cos(theta)*(position_y - beta))))\
         + (velocity_x* cos(theta)) + (velocity_y * sin(theta));
     vehicle.velocity_y = (velocity_ang * (-cos(theta)*(position_x-alpha) -(sin(theta)*(position_y - beta))))\
@@ -111,7 +111,6 @@ void globalToLocalcoordinate (VehicleData& vehicle)
     vehicle.yaw = vehicle.yaw - theta;
     adcm::Log::Info() << "차량 globalToLocalcoordinate 좌표변환 (" << vehicle.position_x <<" , " <<vehicle.position_y << " , " << vehicle.velocity_x << " , " <<vehicle.velocity_y <<")"; 
     //adcm::Log::Info() << "차량 globalToLocalcoordinate timestamp: " << vehicle.timestamp; 
-
 }
 void globalToLocalcoordinate (std::vector <ObstacleData>& obstacle_list, VehicleData main_vehicle)
 {
@@ -128,8 +127,8 @@ void globalToLocalcoordinate (std::vector <ObstacleData>& obstacle_list, Vehicle
         double velocity_x = iter->fused_velocity_x;
         double velocity_y = iter->fused_velocity_y;
 
-        iter->fused_position_x = cos(theta)*(position_x - alpha) + sin(theta)*(position_y - beta);
-        iter->fused_position_y = -sin(theta)*(position_x - alpha) + cos(theta)*(position_y - beta);
+        iter->fused_position_x = (cos(theta)*(position_x - alpha) + sin(theta)*(position_y - beta))*M_TO_10CM_PRECISION;
+        iter->fused_position_y = (-sin(theta)*(position_x - alpha) + cos(theta)*(position_y - beta))*M_TO_10CM_PRECISION;
 
         iter->fused_velocity_x = (velocity_ang * (-sin(theta)*(position_x - alpha)+ (cos(theta)*(position_y - beta))))\
         + (velocity_x* cos(theta)) + (velocity_y * sin(theta));
@@ -142,7 +141,6 @@ void globalToLocalcoordinate (std::vector <ObstacleData>& obstacle_list, Vehicle
         adcm::Log::Info() << "장애물 globalToLocalcoordinate 좌표변환 (" << iter->fused_position_x <<" , " <<iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")"; 
         //adcm::Log::Info() << "해당 timestamp: " << iter->timestamp;
     }   
-    
 }
 void relativeToGlobalcoordinate (std::vector <ObstacleData>& obstacle_list, VehicleData main_vehicle)
 {
@@ -167,7 +165,7 @@ void relativeToGlobalcoordinate (std::vector <ObstacleData>& obstacle_list, Vehi
 
         iter->fused_heading_angle = main_vehicle.yaw + iter->fused_heading_angle;
 
-        //adcm::Log::Info() << "장애물 relativeToGlobal 좌표변환 (" << iter->fused_position_x <<" , " <<iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")"; 
+        adcm::Log::Info() << "장애물 relativeToGlobal 좌표변환 (" << iter->fused_position_x <<" , " <<iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")"; 
     }
 }
 void ScanLine(long x1, long y1, long x2, long y2, long min_y, long max_y)
@@ -228,18 +226,19 @@ void ScanLine(long x1, long y1, long x2, long y2, long min_y, long max_y)
 void generateRoadZValue(VehicleData target_vehicle, std::vector<adcm::map_2dListVector>& map_2d_test)
 {
     //현재 차량의 position_x position_y 중심으로 좌우전방 5m 를 스캔해서 road_z 값을 1로 지정
+    #define SCANNING_RANGE 50
     adcm::Log::Info() << "generateRoadZValue INNN";
     if (target_vehicle.vehicle_class == EGO_VEHICLE)
     {    
-        int scanned_range_LL_x = (floor(target_vehicle.position_x - MAIN_VEHICLE_SIZE_X/2) - 5)*10;
-        int scanned_range_LL_y = (floor(target_vehicle.position_y - MAIN_VEHICLE_SIZE_Y/2) - 5)*10;
+        int scanned_range_LL_x = floor(target_vehicle.position_x - MAIN_VEHICLE_SIZE_X/2) - SCANNING_RANGE;
+        int scanned_range_LL_y = floor(target_vehicle.position_y - MAIN_VEHICLE_SIZE_Y/2) - SCANNING_RANGE;
 
-        int scanned_range_RU_x = (floor(target_vehicle.position_x + MAIN_VEHICLE_SIZE_X/2) + 5)*10;
-        int scanned_range_RU_y = (floor(target_vehicle.position_y + MAIN_VEHICLE_SIZE_Y/2) + 5)*10;
+        int scanned_range_RU_x = floor(target_vehicle.position_x + MAIN_VEHICLE_SIZE_X/2) + SCANNING_RANGE;
+        int scanned_range_RU_y = floor(target_vehicle.position_y + MAIN_VEHICLE_SIZE_Y/2) + SCANNING_RANGE;
 
-        for (int i = scanned_range_LL_x; i < scanned_range_RU_x +1; i++)
+        for (int i = scanned_range_LL_x; i < (scanned_range_RU_x +1); i++)
         {
-            for (int j = scanned_range_LL_y; j < scanned_range_RU_y +1; j++)
+            for (int j = scanned_range_LL_y; j < (scanned_range_RU_y +1); j++)
             {
                 map_2d_test[i][j].road_z= 1;
                 //adcm::Log::Info() << "main vehicle generateRoadZValue[" << i << "]["<< j << "]:" << map_2d_test[i][j].road_z;
@@ -249,15 +248,15 @@ void generateRoadZValue(VehicleData target_vehicle, std::vector<adcm::map_2dList
 
     else
     {
-        int scanned_range_LL_x = (floor(target_vehicle.position_x - SUB_VEHICLE_SIZE_X/2) - 5)*10;
-        int scanned_range_LL_y = (floor(target_vehicle.position_y - SUB_VEHICLE_SIZE_Y/2) - 5)*10;
+        int scanned_range_LL_x = floor(target_vehicle.position_x - SUB_VEHICLE_SIZE_X/2) - SCANNING_RANGE;
+        int scanned_range_LL_y = floor(target_vehicle.position_y - SUB_VEHICLE_SIZE_Y/2) - SCANNING_RANGE;
 
-        int scanned_range_RU_x = (floor(target_vehicle.position_x + SUB_VEHICLE_SIZE_X/2) + 5)*10;
-        int scanned_range_RU_y = (floor(target_vehicle.position_y + SUB_VEHICLE_SIZE_Y/2) + 5)*10;
+        int scanned_range_RU_x = floor(target_vehicle.position_x + SUB_VEHICLE_SIZE_X/2) + SCANNING_RANGE;
+        int scanned_range_RU_y = floor(target_vehicle.position_y + SUB_VEHICLE_SIZE_Y/2) + SCANNING_RANGE;
 
-        for (int i = scanned_range_LL_x; i < scanned_range_RU_x +1; i++)
+        for (int i = scanned_range_LL_x; i < (scanned_range_RU_x +1); i++)
         {
-            for (int j = scanned_range_LL_y; j < scanned_range_RU_y +1; j++)
+            for (int j = scanned_range_LL_y; j < (scanned_range_RU_y +1); j++)
             {
                 map_2d_test[i][j].road_z= 1;
                 //adcm::Log::Info() << "sub-vehicle generateRoadZValue[" << i << "]["<< j << "]:" << map_2d_test[i][j].road_z;
@@ -380,17 +379,17 @@ void find4VerticesVehicle(VehicleData &target_vehicle, std::vector<adcm::map_2dL
         #define VEHICLE_SIZE_Y SUB_VEHICLE_SIZE_Y
     }
     //step1. 4 꼭지점을 각각 찾는다
-    LU.x = (target_vehicle.position_x + (cos(theta)*VEHICLE_SIZE_X/2 - sin(theta)*VEHICLE_SIZE_Y/2))*10;
-    LU.y = (target_vehicle.position_y + (sin(theta)*VEHICLE_SIZE_X/2 + cos(theta)*VEHICLE_SIZE_Y/2))*10;
+    LU.x = target_vehicle.position_x + (cos(theta)*VEHICLE_SIZE_X/2 - sin(theta)*VEHICLE_SIZE_Y/2);
+    LU.y = target_vehicle.position_y + (sin(theta)*VEHICLE_SIZE_X/2 + cos(theta)*VEHICLE_SIZE_Y/2);
 
-    RU.x = (target_vehicle.position_x + (cos(theta)*VEHICLE_SIZE_X/2 - sin(theta)*VEHICLE_SIZE_Y/2))*10;
-    RU.y = (target_vehicle.position_y - (sin(theta)*VEHICLE_SIZE_X/2 - cos(theta)*VEHICLE_SIZE_Y/2))*10;
+    RU.x = target_vehicle.position_x + (cos(theta)*VEHICLE_SIZE_X/2 - sin(theta)*VEHICLE_SIZE_Y/2);
+    RU.y = target_vehicle.position_y - (sin(theta)*VEHICLE_SIZE_X/2 - cos(theta)*VEHICLE_SIZE_Y/2);
     
-    RL.x = (target_vehicle.position_x - (cos(theta)*VEHICLE_SIZE_X/2 - sin(theta)*VEHICLE_SIZE_Y/2))*10;
-    RL.y = (target_vehicle.position_y - (sin(theta)*VEHICLE_SIZE_X/2 + cos(theta)*VEHICLE_SIZE_Y/2))*10;
+    RL.x = target_vehicle.position_x - (cos(theta)*VEHICLE_SIZE_X/2 - sin(theta)*VEHICLE_SIZE_Y/2);
+    RL.y = target_vehicle.position_y - (sin(theta)*VEHICLE_SIZE_X/2 + cos(theta)*VEHICLE_SIZE_Y/2);
 
-    LL.x = (target_vehicle.position_x - (cos(theta)*VEHICLE_SIZE_X/2 - sin(theta)*VEHICLE_SIZE_Y/2))*10;
-    LL.y = (target_vehicle.position_y + (sin(theta)*VEHICLE_SIZE_X/2 + cos(theta)*VEHICLE_SIZE_Y/2))*10;
+    LL.x = target_vehicle.position_x - (cos(theta)*VEHICLE_SIZE_X/2 - sin(theta)*VEHICLE_SIZE_Y/2);
+    LL.y = target_vehicle.position_y + (sin(theta)*VEHICLE_SIZE_X/2 + cos(theta)*VEHICLE_SIZE_Y/2);
 
     adcm::Log::Info() << "find4VerticesVehicle: LU.x is" << LU.x;
     adcm::Log::Info() << "find4VerticesVehicle: LU.y is" << LU.y;
@@ -419,17 +418,17 @@ void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered)
         double obstacle_position_y = iter->fused_position_y;
         double theta = iter->fused_heading_angle * M_PI /180;
         
-        LU.x = (obstacle_position_x + (cos(theta)*(obstacle_size_x/2) - sin(theta)*(obstacle_size_y/2)))*10;
-        LU.y = (obstacle_position_y + (sin(theta)*(obstacle_size_x/2) + cos(theta)*(obstacle_size_y/2)))*10;
+        LU.x = obstacle_position_x + (cos(theta)*(obstacle_size_x/2) - sin(theta)*(obstacle_size_y/2));
+        LU.y = obstacle_position_y + (sin(theta)*(obstacle_size_x/2) + cos(theta)*(obstacle_size_y/2));
 
-        RU.x = (obstacle_position_x + (cos(theta)*(obstacle_size_x/2) - sin(theta)*(obstacle_size_y/2)))*10;
-        RU.y = (obstacle_position_y - (sin(theta)*(obstacle_size_x/2) + cos(theta)*(obstacle_size_y/2)))*10;
+        RU.x = obstacle_position_x + (cos(theta)*(obstacle_size_x/2) - sin(theta)*(obstacle_size_y/2));
+        RU.y = obstacle_position_y - (sin(theta)*(obstacle_size_x/2) + cos(theta)*(obstacle_size_y/2));
         
-        RL.x = (obstacle_position_x - (cos(theta)*(obstacle_size_x/2) - sin(theta)*(obstacle_size_y/2)))*10;
-        RL.y = (obstacle_position_y - (sin(theta)*(obstacle_size_x/2) + cos(theta)*(obstacle_size_y/2)))*10;
+        RL.x = obstacle_position_x - (cos(theta)*(obstacle_size_x/2) - sin(theta)*(obstacle_size_y/2));
+        RL.y = obstacle_position_y - (sin(theta)*(obstacle_size_x/2) + cos(theta)*(obstacle_size_y/2));
 
-        LL.x = (obstacle_position_x - (cos(theta)*(obstacle_size_x/2) - sin(theta)*(obstacle_size_y/2)))*10;
-        LL.y = (obstacle_position_y + (sin(theta)*(obstacle_size_x/2) + cos(theta)*(obstacle_size_y/2)))*10;
+        LL.x = obstacle_position_x - (cos(theta)*(obstacle_size_x/2) - sin(theta)*(obstacle_size_y/2));
+        LL.y = obstacle_position_y + (sin(theta)*(obstacle_size_x/2) + cos(theta)*(obstacle_size_y/2));
 
         adcm::Log::Info() << "find4VerticesObstacle: LU.x is" << LU.x;
         adcm::Log::Info() << "find4VerticesObstacle: LU.y is" << LU.y;
@@ -634,7 +633,7 @@ void ThreadKatech()
         //==============1. obstacle 로 인지된 sub 차량 제거 (OK)=================
         for (auto iter = obstacle_list.begin(); iter != obstacle_list.end();)
         {
-            if ((abs(iter->fused_cuboid_x - SUB_VEHICLE_SIZE_X)) < 0.1 && (abs(iter->fused_cuboid_y - SUB_VEHICLE_SIZE_Y)) < 0.1)
+            if ((abs(iter->fused_cuboid_x - SUB_VEHICLE_SIZE_X/10)) < 0.1 && (abs(iter->fused_cuboid_y - SUB_VEHICLE_SIZE_Y/10)) < 0.1)
             {
                 iter = obstacle_list.erase(iter);
             }
@@ -725,7 +724,6 @@ void ThreadKatech()
         bool b = checkRange(sub1_vehicle);
         bool c = checkRange(sub2_vehicle);
         bool d = checkRange(sub3_vehicle);
-
 
         if(a && b && c && d) 
         {//execute only if all true! 

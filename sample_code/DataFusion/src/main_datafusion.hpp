@@ -2,11 +2,15 @@
 #define map_m 1000
 #define ABS(x) ((x >= 0) ? x : -x)
 #define INVALID_VALUE 999
-#define MAIN_VEHICLE_SIZE_X 1
-#define MAIN_VEHICLE_SIZE_Y 1
 
-#define SUB_VEHICLE_SIZE_X 2.192
-#define SUB_VEHICLE_SIZE_Y 1.599
+#define M_TO_10CM_PRECISION 10 
+#define MAIN_VEHICLE_SIZE_X 10
+#define MAIN_VEHICLE_SIZE_Y 10
+
+#define SUB_VEHICLE_SIZE_X 21.92
+#define SUB_VEHICLE_SIZE_Y 15.99
+//사이즈는 10cm 단위 기준
+
 #define KM_TO_MS_CONVERSION 5/18
 
 enum ObstacleClass
