@@ -712,10 +712,9 @@ void ThreadKatech()
         sub_vehicle_2 = sub_vehicle_2_temp;
         adcm::Log::Info() << "map_2d size (katech):" << map_2d.size()*map_m;
 
-
         {
             //=====시나리오 #1. 주행중 전역경로 근방 이동가능한 정지 장애물이 존재하는 위험 환경=====
-            adcm::Log::Info() << "=============KATECH: 위험 시나리오1 시작==============";
+            adcm::Log::Info() << "=============KATECH: scenario 1 START==============";
             obstacleListVector obstacle_stop;
             double distance_scenario_1;
             double confidence_scenario_1;
@@ -725,7 +724,7 @@ void ThreadKatech()
             {
                 if ((iter->stop_count > STOP_VALUE || iter->stop_count == STOP_VALUE )&& (iter->obstacle_class != STRUCTURE) && (iter->obstacle_class != PEDESTRIAN))
                 {
-                    adcm::Log::Info() << "시나리오1-i)장애물 정지 상태 감지";
+                    //adcm::Log::Info() << "시나리오1-i)장애물 정지 상태 감지";
                     obstacle_stop.push_back(*iter);
                 }
             }
@@ -733,12 +732,12 @@ void ThreadKatech()
             //=========ii) 특장차로부터의 거리 판정: 30m 거리 이내인 경우
             for (auto iter = obstacle_stop.begin(); iter != obstacle_stop.end();)
             {
-                adcm::Log::Info() << "시나리오1-ii)";
+                //adcm::Log::Info() << "시나리오1-ii)";
                 float distance_ego_obs = getDistance(*iter, ego_vehicle);
                 adcm::Log::Info() << "distance_ego_obs: "<< distance_ego_obs;
                 if (distance_ego_obs > 30 || distance_ego_obs == 30) 
                 {
-                    adcm::Log::Info() << "시나리오1-ii) 특장차와 장애물 거리가 30m 이상이라 해당사항 없음";
+                    //adcm::Log::Info() << "시나리오1-ii) 특장차와 장애물 거리가 30m 이상이라 해당사항 없음";
                     iter = obstacle_stop.erase(iter); //30m 이상인 경우 해당 장애물 삭제 
                 }
                 else
@@ -749,8 +748,8 @@ void ThreadKatech()
             for (auto iter = obstacle_stop.begin(); iter != obstacle_stop.end(); iter++)
             {
                 distance_scenario_1 = getDistance_LinearTrajectory(*iter, utm_x, utm_y);
-                if (distance_scenario_1 < 10)
-                {
+//                if (distance_scenario_1 < 10)
+//                {
                     adcm::riskAssessmentStruct riskAssessment1;
                     confidence_scenario_1 = 20 / getDistance(*iter, ego_vehicle) * 0.7;
                     riskAssessment1.obstacle_id = iter->obstacle_id;
@@ -758,7 +757,7 @@ void ThreadKatech()
                     riskAssessment1.confidence = confidence_scenario_1;
                     adcm::Log::Info() << "Risk assessment generated for #1: " << iter->obstacle_id << "with confidence:  " << confidence_scenario_1;
                     riskAssessment.riskAssessmentList.push_back(riskAssessment1);
-                }
+//                }
             }
             adcm::Log::Info() << "scenario 1 DONE";
             obstacleListVector().swap(obstacle_stop);  //free memory
@@ -766,7 +765,7 @@ void ThreadKatech()
         
         {
             //=====시나리오 #2. 주행중 사각영역 존재 환경 판단=====
-            adcm::Log::Info() << "=============KATECH: 위험 시나리오2 시작==============";
+            adcm::Log::Info() << "=============KATECH: scenario 2 START==============";
             obstacleListVector obstacle_static_stop;
             double distance_scenario_2;
             double confidence_scenario_2;
@@ -776,13 +775,13 @@ void ThreadKatech()
             {
                 if ((iter->stop_count > STOP_VALUE || iter->stop_count == STOP_VALUE) && (iter->obstacle_class != STRUCTURE) && (iter->obstacle_class !=PEDESTRIAN))
                 {
-                    adcm::Log::Info() << "시나리오2-i)동적 장애물 정지 상태 감지: " << iter->obstacle_id;
+                    //adcm::Log::Info() << "시나리오2-i)동적 장애물 정지 상태 감지: " << iter->obstacle_id;
                     obstacle_static_stop.push_back(*iter);
                 }
 
                 else if (iter->obstacle_class == STRUCTURE && iter->fused_cuboid_z > 1)
                 {
-                    adcm::Log::Info() << "시나리오2-i)정적 장애물이 높이 1m 초과: " << iter->obstacle_id;
+                    //adcm::Log::Info() << "시나리오2-i)정적 장애물이 높이 1m 초과: " << iter->obstacle_id;
                     obstacle_static_stop.push_back(*iter);
                 }
             }
@@ -802,9 +801,9 @@ void ThreadKatech()
             for (auto iter = obstacle_static_stop.begin(); iter != obstacle_static_stop.end(); iter++)
             {
                 distance_scenario_2 = getDistance_LinearTrajectory(*iter, utm_x, utm_y);
-                if (distance_scenario_2 < 10)
-                {
-                    adcm::Log::Info() << "시나리오2-iii)장애물과 전역경로간 거리가 10m 이내 " << iter->obstacle_id;
+//                if (distance_scenario_2 < 10)
+//                {
+                    //adcm::Log::Info() << "시나리오2-iii)장애물과 전역경로간 거리가 10m 이내 " << iter->obstacle_id;
                     adcm::riskAssessmentStruct riskAssessment2;
                     confidence_scenario_2 = 20 / getDistance(*iter, ego_vehicle) * 0.7;
                     riskAssessment2.obstacle_id = iter->obstacle_id;
@@ -812,7 +811,7 @@ void ThreadKatech()
                     riskAssessment2.confidence = confidence_scenario_2;
                     adcm::Log::Info() << "Risk assessment generated for #2: " << iter->obstacle_id << "with confidence:  " << confidence_scenario_2;
                     riskAssessment.riskAssessmentList.push_back(riskAssessment2);
-                }
+//                }
             }
             adcm::Log::Info() << "scenario 2 DONE";
             obstacleListVector().swap(obstacle_static_stop);  //free memory            
@@ -821,7 +820,7 @@ void ThreadKatech()
 
         {
             //=====시나리오 #3. 주행중 경로 주변 동적 장애물 통행 환경 판단=====
-            adcm::Log::Info() << "=============KATECH: 위험 시나리오3 시작==============";
+            adcm::Log::Info() << "=============KATECH: scenario 3 START==============";
             obstacleListVector obstacle_near_10_30;
             double ttc;
             double dist_ego_obs_linear_approx;
@@ -836,7 +835,7 @@ void ThreadKatech()
                 if ((distance_ego_obs > 10 || distance_ego_obs == 10) && (distance_ego_obs < 30 || distance_ego_obs == 30) &&\
                 iter->obstacle_class != STRUCTURE) 
                 {
-                    adcm::Log::Info() << "시나리오3-i)10~30m 사이의 동적객체 추출: " << iter->obstacle_id;
+                    //adcm::Log::Info() << "시나리오3-i)10~30m 사이의 동적객체 추출: " << iter->obstacle_id;
                     obstacle_near_10_30.push_back(*iter);
                 }
             }
@@ -847,16 +846,17 @@ void ThreadKatech()
                 ttc = getTTC(*iter, ego_vehicle);
                 dist_ego_obs_linear_approx = getLinearApprox(*iter, ego_vehicle);
 
-                if (ttc != INVALID_RETURN_VALUE && ttc < TTC_THRESHOLD)
+//                if (ttc != INVALID_RETURN_VALUE && ttc < TTC_THRESHOLD)
+                if (ttc != INVALID_RETURN_VALUE)
                 {
-                    adcm::Log::Info() << "TTC 계산: " << ttc;
+                    //adcm::Log::Info() << "TTC 계산: " << ttc;
                     ttc_confidence = 5 / ttc * 0.7;
                 }
-                if (dist_ego_obs_linear_approx < SAFE_DISTANCE)
-                {
-                    adcm::Log::Info() << "5초 후 경로: " << iter->obstacle_id <<" , "<< dist_ego_obs_linear_approx;
+//                if (dist_ego_obs_linear_approx < SAFE_DISTANCE)
+//                {
+                    //adcm::Log::Info() << "5초 후 경로: " << iter->obstacle_id <<" , "<< dist_ego_obs_linear_approx;
                     area_confidence = 30 / dist_ego_obs_linear_approx * 0.7;
-                }
+//                }
 
                 if (ttc_confidence !=0 || area_confidence !=0)
                 {
@@ -881,7 +881,7 @@ void ThreadKatech()
 
         {
             //=====시나리오 #4. 작업 중 경로 주변 동적 장애물 통행 환경=====
-            adcm::Log::Info() << "=============KATECH: 위험 시나리오4 시작==============";
+            adcm::Log::Info() << "=============KATECH: scenario 4 START==============";
             obstacleListVector obstacle_near_20_40;
             double confidence_scenario_4;
             //double dist_ego_obs_linear_approx = INVALID_RETURN_VALUE;
@@ -893,7 +893,7 @@ void ThreadKatech()
                 double distance_ego_obs = getDistance(*iter, ego_vehicle);
                 if (distance_ego_obs > 20 && distance_ego_obs < 40 && iter->obstacle_class != STRUCTURE)
                 {
-                    adcm::Log::Info() << "시나리오4-i)20~40m 사이의 동적객체 추출: " << iter->obstacle_id;
+                    //adcm::Log::Info() << "시나리오4-i)20~40m 사이의 동적객체 추출: " << iter->obstacle_id;
                     obstacle_near_20_40.push_back(*iter);
                 }
             }
@@ -902,19 +902,19 @@ void ThreadKatech()
             for (auto iter = obstacle_near_20_40.begin(); iter != obstacle_near_20_40.end(); iter++)
             {
                 dist_ego_obs_linear_approx = getLinearApprox(*iter, ego_vehicle);
-                adcm::Log::Info() << "시나리오4-ii)5초 이내 최소 거리값: " << dist_ego_obs_linear_approx;
+                //adcm::Log::Info() << "시나리오4-ii)5초 이내 최소 거리값: " << dist_ego_obs_linear_approx;
 
-                if (dist_ego_obs_linear_approx < 40)
-                {
+//                if (dist_ego_obs_linear_approx < 40)
+//                {
                     confidence_scenario_4 = 40 / dist_ego_obs_linear_approx * 0.7;
                     adcm::riskAssessmentStruct riskAssessment4;
                     riskAssessment4.obstacle_id = iter->obstacle_id;
                     riskAssessment4.hazard_class = SCENARIO_4;
                     riskAssessment4.confidence = confidence_scenario_4;
                     riskAssessment.riskAssessmentList.push_back(riskAssessment4);
-                    adcm::Log::Info() << "Risk assessment generated for #4: " << iter->obstacle_id << "with confidence:  " << confidence_scenario_4;
-                    adcm::Log::Info() << "시나리오4-iii) 최소 거리값이 40 이내이므로 시나리오 4 해당!! " << iter->obstacle_id <<" , " << confidence_scenario_4;
-                }
+                    //adcm::Log::Info() << "Risk assessment generated for #4: " << iter->obstacle_id << "with confidence:  " << confidence_scenario_4;
+                    //adcm::Log::Info() << "시나리오4-iii) 최소 거리값이 40 이내이므로 시나리오 4 해당!! " << iter->obstacle_id <<" , " << confidence_scenario_4;
+//                }
             }
             adcm::Log::Info() << "scenario 4 DONE";
             obstacleListVector().swap(obstacle_near_20_40);  //free memory
@@ -922,7 +922,7 @@ void ThreadKatech()
 
         {
             //=====시나리오 #5. 주행 경로상 장애물 통행량이 과다한 환경(사람)=====
-            adcm::Log::Info() << "=============KATECH: 위험 시나리오5 시작==============";
+            adcm::Log::Info() << "=============KATECH: scenario 5 START==============";
 
             obstacleListVector obstacle_pedes_40_50;
             //obstacleListVector obstacle_pedes_initial;
@@ -937,7 +937,7 @@ void ThreadKatech()
                 //distance_ego_obs > 40
                 if (distance_ego_obs < 50 && iter->obstacle_class == PEDESTRIAN)
                 {
-                    adcm::Log::Info() << "시나리오5-i)40~50m 사이의 보행자 추출: " << iter->obstacle_id;
+                    //adcm::Log::Info() << "시나리오5-i)40~50m 사이의 보행자 추출: " << iter->obstacle_id;
                     obstacle_pedes_40_50.push_back(*iter);
                 }
             }
@@ -948,7 +948,7 @@ void ThreadKatech()
                 if (distance > 30|| distance == INVALID_RETURN_VALUE)
                 {
                     // 10m 이상이거나 invalid 값을 지닌 사람들은 삭제
-                    adcm::Log::Info() << "시나리오5-ii)주행경로 반경 10m 초과하므로 해당 장애물 삭제: " << iter->obstacle_id;
+                   //adcm::Log::Info() << "시나리오5-ii)주행경로 반경 10m 초과하므로 해당 장애물 삭제: " << iter->obstacle_id;
 
                     iter = obstacle_pedes_40_50.erase(iter);
                 }
@@ -957,13 +957,13 @@ void ThreadKatech()
             
             if (obstacle_pedes_initial.empty())
             { //최초 리스트 생성시 -> 여기서 해당시나리오 종료
-                adcm::Log::Info() << "시나리오5 최초 실행하므로 장애물 리스트만 생성하고 다음 loop 에 분석을 이어서 한다";
+                //adcm::Log::Info() << "시나리오5 최초 실행하므로 장애물 리스트만 생성하고 다음 loop 에 분석을 이어서 한다";
                 obstacle_pedes_initial.assign(obstacle_pedes_40_50.begin(), obstacle_pedes_40_50.end());
             }
             else
             {
                 // 해당 시나리오 계속 체크
-                adcm::Log::Info() << "시나리오5 n 번째 실행중... 위험 분석 진행";
+                //dcm::Log::Info() << "시나리오5 n 번째 실행중... 위험 분석 진행";
                 //=========iii) 신규 객체 생성 빈도 측정
 
 
@@ -976,11 +976,11 @@ void ThreadKatech()
 
                 if (obstacle_pedes_new.empty())
                 {
-                    adcm::Log::Info() << "새로운 객체 등장X. 시나리오 5 종료";
+                    //adcm::Log::Info() << "새로운 객체 등장X. 시나리오 5 종료";
                 }
                 else
                 {   
-                    adcm::Log::Info() << "새로운 객체 등장. New obstacle detected! 시나리오 5 계속";
+                    //adcm::Log::Info() << "새로운 객체 등장. New obstacle detected! 시나리오 5 계속";
                     for (auto iter = obstacle_pedes_initial.begin(); iter!= obstacle_pedes_initial.end(); iter++)
                     {
                         if(ori_timestamp_max < iter->timestamp) ori_timestamp_max = iter->timestamp;
@@ -1001,7 +1001,7 @@ void ThreadKatech()
                     //=========iv) 객체 출현시간 10s 이내일때 객체간 최대거리 계산
                     if (timestamp_diff < 2000)
                     { 
-                        adcm::Log::Info() << "10초 이내 신규객체 발견";
+                        //adcm::Log::Info() << "10초 이내 신규객체 발견";
                         for (auto iter = obstacle_pedes_initial.begin(); iter != obstacle_pedes_initial.end(); iter++)
                         {
                             for (auto iter1 = obstacle_pedes_new.begin(); iter1 != obstacle_pedes_new.end(); iter1++)
@@ -1022,9 +1022,9 @@ void ThreadKatech()
                                 distance = getDistance(*iter, ego_vehicle);
                                 //adcm::Log::Info() << "ego 와의 거리: " << distance;
 
-                                if (distance < 40)
-                                {
-                                    adcm::Log::Info() << "통행과다환경 지정!!!: " << iter->obstacle_id;
+//                                if (distance < 40)
+//                                {
+                                    //adcm::Log::Info() << "통행과다환경 지정!!!: " << iter->obstacle_id;
                                     confidence_scenario_5 = 30 / distance * 0.7;
                                     adcm::riskAssessmentStruct riskAssessment5;
                                     riskAssessment5.obstacle_id = iter->obstacle_id;
@@ -1033,7 +1033,7 @@ void ThreadKatech()
                                     riskAssessment.riskAssessmentList.push_back(riskAssessment5);
                                     adcm::Log::Info() << "Risk assessment generated for #5: " << iter->obstacle_id << "with confidence:  " << confidence_scenario_5;
 
-                                }
+//                                }
                             }
                         }
                     }
@@ -1048,7 +1048,7 @@ void ThreadKatech()
 
         {
             //=====시나리오 #6. 주행 경로상 통행량이 과다한 환경(차량)=====
-            adcm::Log::Info() << "=============KATECH: 위험 시나리오6 시작==============";
+            adcm::Log::Info() << "=============KATECH: scenario 6 START==============";
             obstacleListVector obstacle_vehicle_50_60;
             obstacleListVector obstacle_vehicle_repeated;
             obstacleListVector obstacle_vehicle_new;
@@ -1060,7 +1060,7 @@ void ThreadKatech()
                 float distance_ego_obs = getDistance(*iter, ego_vehicle);
                 if (distance_ego_obs > 50 && distance_ego_obs < 60 && (iter->obstacle_class == VEHICLE_LARGE || iter->obstacle_class == VEHICLE_SMALL))
                 {
-                    adcm::Log::Info() << "시나리오6-i)50~60m 사이의 차량 추출: " << iter->obstacle_id;
+                    //adcm::Log::Info() << "시나리오6-i)50~60m 사이의 차량 추출: " << iter->obstacle_id;
 
                     obstacle_vehicle_50_60.push_back(*iter);
                 }
@@ -1073,7 +1073,7 @@ void ThreadKatech()
                 if (distance > 15 || distance == 15 || distance == INVALID_RETURN_VALUE)
                 {
                     // 15m 이상이거나 invalid 값을 지닌 사람들은 삭제
-                    adcm::Log::Info() << "시나리오6-ii)주행경로 반경 15 이상인 장애물 삭제: " << iter->obstacle_id;
+                    //adcm::Log::Info() << "시나리오6-ii)주행경로 반경 15 이상인 장애물 삭제: " << iter->obstacle_id;
 
                     iter = obstacle_vehicle_50_60.erase(iter);
                 }
@@ -1141,11 +1141,11 @@ void ThreadKatech()
 
                 if (obstacle_vehicle_new.empty())
                 {
-                    adcm::Log::Info() << "새로운 객체 등장X. 시나리오 6 종료";
+                    adcm::Log::Info() << "NO new obstacle. #6 terminates here";
                 }
                 else
                 {   
-                    adcm::Log::Info() << "새로운 객체 등장. 시나리오 6 계속 GOOD!";
+                    //adcm::Log::Info() << "새로운 객체 등장. 시나리오 6 계속 GOOD!";
 
                     for (auto iter = obstacle_vehicle_initial.begin(); iter!= obstacle_vehicle_initial.end(); iter++)
                     {
@@ -1161,9 +1161,9 @@ void ThreadKatech()
                     }
 
                     timestamp_diff = new_timestamp_min - ori_timestamp_max;
-                    adcm::Log::Info() << "timestamp ori : " << ori_timestamp_max;
-                    adcm::Log::Info() << "timestamp new : " << new_timestamp_min;
-                    adcm::Log::Info() << "timestamp 차이: " << timestamp_diff;
+                    //adcm::Log::Info() << "timestamp ori : " << ori_timestamp_max;
+                    //adcm::Log::Info() << "timestamp new : " << new_timestamp_min;
+                    //adcm::Log::Info() << "timestamp diff: " << timestamp_diff;
 
                     //현재 시뮬레이션에서는 timetampe 1 이 10ms 이므로 이므로 10s=10000ms=>1000 값 이내면 신규객체 등장으로 인정
                     //=========iv) 객체 출현시간 10s 이내일때 객체간 최대거리 계산
@@ -1175,7 +1175,7 @@ void ThreadKatech()
                             for (auto iter1 = obstacle_vehicle_new.begin(); iter1 != obstacle_vehicle_new.end(); iter1++)
                             {
                                 distance = getDistance(*iter, *iter1);
-                                adcm::Log::Info() << "distance between " << iter->obstacle_id << " , " << iter1->obstacle_id;
+                                //adcm::Log::Info() << "distance between " << iter->obstacle_id << " , " << iter1->obstacle_id;
                                 if (max_distance < distance) max_distance = distance;
                             
                             }
@@ -1197,7 +1197,7 @@ void ThreadKatech()
                             }
                         }
 #endif
-                        adcm::Log::Info() << "객체간 최대거리: " << max_distance;
+                        //adcm::Log::Info() << "객체간 최대거리: " << max_distance;
 
                         if (max_distance < 60)
                         {
@@ -1214,7 +1214,7 @@ void ThreadKatech()
                                if (distance < 40)
                                 {
 #endif
-                                adcm::Log::Info() << "통행과다환경 지정!!! GOOD: " << iter->obstacle_id;
+                                //adcm::Log::Info() << "통행과다환경 지정!!! GOOD: " << iter->obstacle_id;
                                 confidence_scenario_6 = 40 / distance * 0.7;
                                 adcm::riskAssessmentStruct riskAssessment6;
                                 riskAssessment6.obstacle_id = iter->obstacle_id;
@@ -1238,7 +1238,7 @@ void ThreadKatech()
 
         {
             //=====시나리오 #7. 미개척 지역 주행환경======
-            adcm::Log::Info() << "=============KATECH: 위험 시나리오7 시작==============";
+            adcm::Log::Info() << "=============KATECH: scenario 7 START==============";
             //adcm::Log::Info() << "size of map_2d received (before drawline): "<<map_2d.size();
             adcm::riskAssessmentStruct riskAssessment7;
 
@@ -1263,7 +1263,17 @@ void ThreadKatech()
         }
 
 		adcm::Log::Info() << "build riskAssessment data - size "<<riskAssessment.riskAssessmentList.size();
-        adcm::Log::Info() << "========================위험판단 출력물===========================";
+        adcm::Log::Info() << "========================obstacle and vehicle info===========================";
+        for (auto iter = obstacle_list.begin(); iter != obstacle_list.end(); iter++)
+        {
+            adcm::Log::Info() << "obstacle ID:" << iter->obstacle_id << " obstacle XY position: " << iter->fused_position_x << "," << iter->fused_position_y; 
+        }
+        
+        adcm::Log::Info() << "ego-vehicle XY position: " << ego_vehicle.position_x << "," << ego_vehicle.position_y;
+        adcm::Log::Info() << "sub-vehicle-1 XY position: " << sub_vehicle_1.position_x << "," << sub_vehicle_1.position_y;
+        adcm::Log::Info() << "sub-vehicle-2 XY position: " << sub_vehicle_2.position_x << "," << sub_vehicle_2.position_y;
+        adcm::Log::Info() << "==================================================================";
+        adcm::Log::Info() << "========================RiskAssessment Output===========================";
         for (auto iter = riskAssessment.riskAssessmentList.begin(); iter < riskAssessment.riskAssessmentList.end(); iter++)
         {
             if(iter->hazard_class != SCENARIO_7)
@@ -1272,7 +1282,7 @@ void ThreadKatech()
             }
             else
             {
-                adcm::Log::Info() << "riskAssessment - 위험한 전역경로 첫번째 xy값:" << iter->wgs84_xy_start[0].x << "," << iter->wgs84_xy_start[0].y << " hazard class:" << iter->hazard_class << " isHazard:"<< iter->isHarzard;
+                adcm::Log::Info() << "riskAssessment - unscanned utm XY value:" << iter->wgs84_xy_start[0].x << "," << iter->wgs84_xy_start[0].y << " hazard class:" << iter->hazard_class << " isHazard:"<< iter->isHarzard;
             }
         }
         adcm::Log::Info() << "===============================================================";

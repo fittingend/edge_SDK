@@ -69,6 +69,8 @@
 VehicleData main_vehicle_temp;
 VehicleData sub1_vehicle_temp;
 VehicleData sub2_vehicle_temp;
+VehicleData sub3_vehicle_temp;
+
 std::vector <ObstacleData> obstacle_list_temp;
 long ContourX[map_m][2];
 bool once = 1;
@@ -107,7 +109,7 @@ void globalToLocalcoordinate (VehicleData& vehicle)
         + (velocity_x* -sin(theta)) + (velocity_y* cos(theta)); 
     
     vehicle.yaw = vehicle.yaw - theta;
-    //adcm::Log::Info() << "차량 globalToLocalcoordinate 좌표변환 (" << vehicle.position_x <<" , " <<vehicle.position_y << " , " << vehicle.velocity_x << " , " <<vehicle.velocity_y <<")"; 
+    adcm::Log::Info() << "차량 globalToLocalcoordinate 좌표변환 (" << vehicle.position_x <<" , " <<vehicle.position_y << " , " << vehicle.velocity_x << " , " <<vehicle.velocity_y <<")"; 
     //adcm::Log::Info() << "차량 globalToLocalcoordinate timestamp: " << vehicle.timestamp; 
 
 }
@@ -138,7 +140,7 @@ void globalToLocalcoordinate (std::vector <ObstacleData>& obstacle_list, Vehicle
         iter->fused_heading_angle = iter->fused_heading_angle - main_vehicle.yaw;
 
         adcm::Log::Info() << "장애물 globalToLocalcoordinate 좌표변환 (" << iter->fused_position_x <<" , " <<iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")"; 
-        adcm::Log::Info() << "해당 timestamp: " << iter->timestamp;
+        //adcm::Log::Info() << "해당 timestamp: " << iter->timestamp;
     }   
     
 }
@@ -165,7 +167,7 @@ void relativeToGlobalcoordinate (std::vector <ObstacleData>& obstacle_list, Vehi
 
         iter->fused_heading_angle = main_vehicle.yaw + iter->fused_heading_angle;
 
-        adcm::Log::Info() << "장애물 relativeToGlobal 좌표변환 (" << iter->fused_position_x <<" , " <<iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")"; 
+        //adcm::Log::Info() << "장애물 relativeToGlobal 좌표변환 (" << iter->fused_position_x <<" , " <<iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")"; 
     }
 }
 void ScanLine(long x1, long y1, long x2, long y2, long min_y, long max_y)
@@ -512,6 +514,19 @@ void ThreadAct1()
                         sub2_vehicle_temp.velocity_lat = data->velocity_lat;
                         sub2_vehicle_temp.velocity_ang = data->velocity_ang;
                         adcm::Log::Info() << "sub vehicle2 data received";
+                        sub3_vehicle_temp.vehicle_class = SUB_VEHICLE_3;
+                        sub3_vehicle_temp.timestamp = data->timestamp;
+                        // sub2_vehicle_temp.road_z = data->road_z; //vector assignment to fix? 
+                        sub3_vehicle_temp.position_lat = data->position_lat + 10;
+                        sub3_vehicle_temp.position_long = data->position_long + 10;
+                        sub3_vehicle_temp.position_height = data->position_height;
+                        sub3_vehicle_temp.yaw = data->yaw;
+                        sub3_vehicle_temp.roll = data->roll;
+                        sub3_vehicle_temp.pitch = data->pitch;
+                        sub3_vehicle_temp.velocity_long = data->velocity_long;
+                        sub3_vehicle_temp.velocity_lat = data->velocity_lat;
+                        sub3_vehicle_temp.velocity_ang = data->velocity_ang;
+                        adcm::Log::Info() << "sub vehicle3 data received";
                         break;
                         
                     default:
@@ -546,6 +561,7 @@ void ThreadKatech()
     VehicleData main_vehicle;
     VehicleData sub1_vehicle;
     VehicleData sub2_vehicle;
+    VehicleData sub3_vehicle;
     std::vector <ObstacleData> obstacle_list;
 
     while(continueExecution)
@@ -555,6 +571,7 @@ void ThreadKatech()
         main_vehicle = main_vehicle_temp;
         sub1_vehicle = sub1_vehicle_temp;
         sub2_vehicle = sub2_vehicle_temp;
+        sub3_vehicle = sub3_vehicle_temp;
         obstacle_list = obstacle_list_temp;
 
         adcm::map_2dListVector map_2dListVector;
@@ -647,18 +664,19 @@ void ThreadKatech()
 
         //==============4. 차량 좌표계 변환==================================
         //차량마다 받은 글로벌 좌표를 작업공간 local 좌표계로 변환
-
         globalToLocalcoordinate(main_vehicle); 
         globalToLocalcoordinate(sub1_vehicle);
         globalToLocalcoordinate(sub2_vehicle);
+        globalToLocalcoordinate(sub3_vehicle);
 
         bool a = checkRange(main_vehicle);
         bool b = checkRange(sub1_vehicle);
         bool c = checkRange(sub2_vehicle);
+        bool d = checkRange(sub3_vehicle);
 
-        if(a && b && c) 
+
+        if(a && b && c && d) 
         {//execute only if all true! 
-
             //==============5. 0.1 m/s 미만인 경우 장애물 정지 상태 판정 및 stop_count 값 assign =================
             for (auto iter = obstacle_list_filtered.begin(); iter!=obstacle_list_filtered.end(); iter++)
             {
@@ -721,6 +739,8 @@ void ThreadKatech()
             {
                 //sub2_vehicle 존재하므로 해당 function execution
                 find4VerticesVehicle(sub2_vehicle, map_2d_test);
+                find4VerticesVehicle(sub3_vehicle, map_2d_test);
+
             }
 
             //==============8. 현재까지의 데이터를 adcm mapData 형식으로 재구성해서 업데이트 ================
@@ -1006,10 +1026,11 @@ void ThreadKatech()
                 }
                 mapData.map_2d.push_back(map_2dListVector);
             }
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            adcm::Log::Info() << "DATA FUSION DONE";
             INFO("map_2d pushed to mapData");
             mapData_provider.send(mapData);
             INFO("mapData sent to RASS");
-            
 
         }
         else
