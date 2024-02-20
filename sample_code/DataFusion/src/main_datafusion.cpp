@@ -224,6 +224,49 @@ void ScanLine(long x1, long y1, long x2, long y2, long min_y, long max_y)
         }
     }
 }
+
+void generateRoadZValue(VehicleData target_vehicle, std::vector<adcm::map_2dListVector>& map_2d_test)
+{
+    //현재 차량의 position_x position_y 중심으로 좌우전방 5m 를 스캔해서 road_z 값을 1로 지정
+    adcm::Log::Info() << "generateRoadZValue INNN";
+    if (target_vehicle.vehicle_class == EGO_VEHICLE)
+    {    
+        int scanned_range_LL_x = (floor(target_vehicle.position_x - MAIN_VEHICLE_SIZE_X/2) - 5)*10;
+        int scanned_range_LL_y = (floor(target_vehicle.position_y - MAIN_VEHICLE_SIZE_Y/2) - 5)*10;
+
+        int scanned_range_RU_x = (floor(target_vehicle.position_x + MAIN_VEHICLE_SIZE_X/2) + 5)*10;
+        int scanned_range_RU_y = (floor(target_vehicle.position_y + MAIN_VEHICLE_SIZE_Y/2) + 5)*10;
+
+        for (int i = scanned_range_LL_x; i < scanned_range_RU_x +1; i++)
+        {
+            for (int j = scanned_range_LL_y; j < scanned_range_RU_y +1; j++)
+            {
+                map_2d_test[i][j].road_z= 1;
+                //adcm::Log::Info() << "main vehicle generateRoadZValue[" << i << "]["<< j << "]:" << map_2d_test[i][j].road_z;
+            }
+        }
+    }
+
+    else
+    {
+        int scanned_range_LL_x = (floor(target_vehicle.position_x - SUB_VEHICLE_SIZE_X/2) - 5)*10;
+        int scanned_range_LL_y = (floor(target_vehicle.position_y - SUB_VEHICLE_SIZE_Y/2) - 5)*10;
+
+        int scanned_range_RU_x = (floor(target_vehicle.position_x + SUB_VEHICLE_SIZE_X/2) + 5)*10;
+        int scanned_range_RU_y = (floor(target_vehicle.position_y + SUB_VEHICLE_SIZE_Y/2) + 5)*10;
+
+        for (int i = scanned_range_LL_x; i < scanned_range_RU_x +1; i++)
+        {
+            for (int j = scanned_range_LL_y; j < scanned_range_RU_y +1; j++)
+            {
+                map_2d_test[i][j].road_z= 1;
+                //adcm::Log::Info() << "sub-vehicle generateRoadZValue[" << i << "]["<< j << "]:" << map_2d_test[i][j].road_z;
+
+            }
+        }
+    }
+}
+
 void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, VehicleData& vehicle, std::vector<adcm::map_2dListVector>& map_2d_test)
 {
     long arr_x[] = {p0.x, p1.x, p2.x, p3.x};
@@ -337,22 +380,31 @@ void find4VerticesVehicle(VehicleData &target_vehicle, std::vector<adcm::map_2dL
         #define VEHICLE_SIZE_Y SUB_VEHICLE_SIZE_Y
     }
     //step1. 4 꼭지점을 각각 찾는다
-    LU.x = target_vehicle.position_x + (cos(theta)*VEHICLE_SIZE_X/2 - sin(theta)*VEHICLE_SIZE_Y/2);
-    LU.y = target_vehicle.position_y + (sin(theta)*VEHICLE_SIZE_X/2 + cos(theta)*VEHICLE_SIZE_Y/2);
+    LU.x = (target_vehicle.position_x + (cos(theta)*VEHICLE_SIZE_X/2 - sin(theta)*VEHICLE_SIZE_Y/2))*10;
+    LU.y = (target_vehicle.position_y + (sin(theta)*VEHICLE_SIZE_X/2 + cos(theta)*VEHICLE_SIZE_Y/2))*10;
 
-    RU.x = target_vehicle.position_x + (cos(theta)*VEHICLE_SIZE_X/2 - sin(theta)*VEHICLE_SIZE_Y/2);
-    RU.y = target_vehicle.position_y - (sin(theta)*VEHICLE_SIZE_X/2 - cos(theta)*VEHICLE_SIZE_Y/2);
+    RU.x = (target_vehicle.position_x + (cos(theta)*VEHICLE_SIZE_X/2 - sin(theta)*VEHICLE_SIZE_Y/2))*10;
+    RU.y = (target_vehicle.position_y - (sin(theta)*VEHICLE_SIZE_X/2 - cos(theta)*VEHICLE_SIZE_Y/2))*10;
     
-    RL.x = target_vehicle.position_x - (cos(theta)*VEHICLE_SIZE_X/2 - sin(theta)*VEHICLE_SIZE_Y/2);
-    RL.y = target_vehicle.position_y - (sin(theta)*VEHICLE_SIZE_X/2 + cos(theta)*VEHICLE_SIZE_Y/2);
+    RL.x = (target_vehicle.position_x - (cos(theta)*VEHICLE_SIZE_X/2 - sin(theta)*VEHICLE_SIZE_Y/2))*10;
+    RL.y = (target_vehicle.position_y - (sin(theta)*VEHICLE_SIZE_X/2 + cos(theta)*VEHICLE_SIZE_Y/2))*10;
 
-    LL.x = target_vehicle.position_x - (cos(theta)*VEHICLE_SIZE_X/2 - sin(theta)*VEHICLE_SIZE_Y/2);
-    LL.y = target_vehicle.position_y + (sin(theta)*VEHICLE_SIZE_X/2 + cos(theta)*VEHICLE_SIZE_Y/2);
+    LL.x = (target_vehicle.position_x - (cos(theta)*VEHICLE_SIZE_X/2 - sin(theta)*VEHICLE_SIZE_Y/2))*10;
+    LL.y = (target_vehicle.position_y + (sin(theta)*VEHICLE_SIZE_X/2 + cos(theta)*VEHICLE_SIZE_Y/2))*10;
 
-    //adcm::Log::Info() << "find4VerticesVehicle: LU.x is" << LU.x;
-    //adcm::Log::Info() << "find4VerticesVehicle: LU.y is" << LU.y;
+    adcm::Log::Info() << "find4VerticesVehicle: LU.x is" << LU.x;
+    adcm::Log::Info() << "find4VerticesVehicle: LU.y is" << LU.y;
 
-    //generateRoadZValue(LU, RU, RL, LL, target_vehicle, map_2d_test);
+    adcm::Log::Info() << "find4VerticesVehicle: RU.x is" << RU.x;
+    adcm::Log::Info() << "find4VerticesVehicle: RU.y is" << RU.y;
+
+    adcm::Log::Info() << "find4VerticesVehicle: RL.x is" << RL.x;
+    adcm::Log::Info() << "find4VerticesVehicle: RL.y is" << RL.y;
+
+    adcm::Log::Info() << "find4VerticesVehicle: LL.x is" << LL.x;
+    adcm::Log::Info() << "find4VerticesVehicle: LL.y is" << LL.y;
+
+    generateRoadZValue(target_vehicle, map_2d_test);
     generateOccupancyIndex(LU, RU, RL, LL, target_vehicle, map_2d_test);
 }
 void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered)
@@ -367,20 +419,20 @@ void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered)
         double obstacle_position_y = iter->fused_position_y;
         double theta = iter->fused_heading_angle * M_PI /180;
         
-        LU.x = obstacle_position_x + (cos(theta)*(obstacle_size_x/2) - sin(theta)*(obstacle_size_y/2));
-        LU.y = obstacle_position_y + (sin(theta)*(obstacle_size_x/2) + cos(theta)*(obstacle_size_y/2));
+        LU.x = (obstacle_position_x + (cos(theta)*(obstacle_size_x/2) - sin(theta)*(obstacle_size_y/2)))*10;
+        LU.y = (obstacle_position_y + (sin(theta)*(obstacle_size_x/2) + cos(theta)*(obstacle_size_y/2)))*10;
 
-        RU.x = obstacle_position_x + (cos(theta)*(obstacle_size_x/2) - sin(theta)*(obstacle_size_y/2));
-        RU.y = obstacle_position_y - (sin(theta)*(obstacle_size_x/2) + cos(theta)*(obstacle_size_y/2));
+        RU.x = (obstacle_position_x + (cos(theta)*(obstacle_size_x/2) - sin(theta)*(obstacle_size_y/2)))*10;
+        RU.y = (obstacle_position_y - (sin(theta)*(obstacle_size_x/2) + cos(theta)*(obstacle_size_y/2)))*10;
         
-        RL.x = obstacle_position_x - (cos(theta)*(obstacle_size_x/2) - sin(theta)*(obstacle_size_y/2));
-        RL.y = obstacle_position_y - (sin(theta)*(obstacle_size_x/2) + cos(theta)*(obstacle_size_y/2));
+        RL.x = (obstacle_position_x - (cos(theta)*(obstacle_size_x/2) - sin(theta)*(obstacle_size_y/2)))*10;
+        RL.y = (obstacle_position_y - (sin(theta)*(obstacle_size_x/2) + cos(theta)*(obstacle_size_y/2)))*10;
 
-        LL.x = obstacle_position_x - (cos(theta)*(obstacle_size_x/2) - sin(theta)*(obstacle_size_y/2));
-        LL.y = obstacle_position_y + (sin(theta)*(obstacle_size_x/2) + cos(theta)*(obstacle_size_y/2));
+        LL.x = (obstacle_position_x - (cos(theta)*(obstacle_size_x/2) - sin(theta)*(obstacle_size_y/2)))*10;
+        LL.y = (obstacle_position_y + (sin(theta)*(obstacle_size_x/2) + cos(theta)*(obstacle_size_y/2)))*10;
 
-        //adcm::Log::Info() << "find4VerticesObstacle: LU.x is" << LU.x;
-        //adcm::Log::Info() << "find4VerticesObstacle: LU.y is" << LU.y;
+        adcm::Log::Info() << "find4VerticesObstacle: LU.x is" << LU.x;
+        adcm::Log::Info() << "find4VerticesObstacle: LU.y is" << LU.y;
 
         generateOccupancyIndex(LU, RU, RL, LL, *(&iter));
     }
