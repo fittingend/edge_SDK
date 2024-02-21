@@ -139,8 +139,8 @@ void globalToLocalcoordinate (doubleVector& utm_x, doubleVector& utm_y)
         double old_y = utm_y[count];
 
         adcm::Log::Info() << "utm globalToLocalcoordinate 좌표변환 before :" << utm_x[count] << " , " << utm_y[count]; 
-        utm_x[count]= cos(theta)*(old_x - alpha) + sin(theta)*(old_y - beta);
-        utm_y[count]= -sin(theta)*(old_x- alpha) + cos(theta)*(old_y - beta);
+        utm_x[count]= (cos(theta)*(old_x - alpha) + sin(theta)*(old_y - beta))*M_TO_10CM_PRECISION;
+        utm_y[count]= (-sin(theta)*(old_x- alpha) + cos(theta)*(old_y - beta))*M_TO_10CM_PRECISION;
 
         adcm::Log::Info() << "utm globalToLocalcoordinate 좌표변환 after :" << utm_x[count] << " , " << utm_y[count]; 
     }
@@ -247,10 +247,10 @@ void drawline(doubleVector utm_x, doubleVector utm_y, std::vector<adcm::map_2dLi
 //        int j = 50;
 //        adcm::Log::Info() << "[" << i << "]" << "[" << j << "]" << "road_z : " << map_2d[i][j].road_z;
 //        adcm::Log::Info() << "drawline test 1: "<< utm_x.size();
-        float x_start = utm_x[count];
-        float x_end = utm_x[count + 1];
-        float y_start = utm_y[count];
-        float y_end = utm_y[count + 1];
+        int x_start = floor(utm_x[count]);
+        int x_end = floor(utm_x[count + 1]);
+        int y_start = floor(utm_y[count]);
+        int y_end = floor(utm_y[count + 1]);
 
         // Bresenham's line algorithm
         const bool steep = (fabs(y_end - y_start) > fabs(x_end - x_start));
@@ -270,9 +270,9 @@ void drawline(doubleVector utm_x, doubleVector utm_y, std::vector<adcm::map_2dLi
         float error = dx / 2.0f;
         const int ystep = (y_start < y_end) ? 1 : -1;
         int y = (int)y_start;
-        const int maxX = (int)x_end;
+        const int maxX = x_end;
 
-        for (int x = (int)x_start; x <= maxX; x++)
+        for (int x = x_start; x <= maxX; x++)
         {
             if (steep)
             {
