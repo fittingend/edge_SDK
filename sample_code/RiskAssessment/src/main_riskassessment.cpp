@@ -396,11 +396,9 @@ void ThreadAct1()
 {
     adcm::Log::Info() << "RiskAssessment ThreadAct1";
     INFO("RiskAssessment .init()");
-    //adcm::RiskAssessment_Provider riskAssessment_provider;
     adcm::MapData_Subscriber mapData_subscriber;
     adcm::BuildPathTest_Subscriber buildPathTest_subscriber;
     adcm::BuildPath_Subscriber buildPath_subscriber;
-    //riskAssessment_provider.init("RiskAssessment/RiskAssessment/PPort_risk_assessment");
     buildPath_subscriber.init("RiskAssessment/RiskAssessment/RPort_build_path");
     buildPathTest_subscriber.init("RiskAssessment/RiskAssessment/RPort_build_path_test");
     mapData_subscriber.init("RiskAssessment/RiskAssessment/RPort_map_data");
@@ -409,14 +407,7 @@ void ThreadAct1()
 
     //==========================변수생성=======================
     adcm::Log::Info() << "=============KATECH: variables created==============";
-    /*adcm::map_2dListStruct map_2dStruct_init;
 
-    map_2dStruct_init.obstacle_id = NO_OBSTACLE; 
-    map_2dStruct_init.road_z = 0;
-    map_2dStruct_init.vehicle_class = NO_VEHICLE;
-    std::vector<adcm::map_2dListVector> map_2d (map_n, adcm::map_2dListVector(map_m, map_2dStruct_init));
-    adcm::Log::Info() << "mapData 2d info initialized";
-*/
     obstacleListVector obstacle_list;
     vehicleListVector vehicle_list; 
 
@@ -466,113 +457,6 @@ void ThreadAct1()
                 }
             }
         }
-
-       
-
-
-            /*    if(!map_2d.empty()) {
-                    adcm::Log::Verbose() << "=== map_2d ===";
-                    // sample case 1)
-                    // for (int i = 0; i < map_2d.size(); ++i)
-                    // {
-                    //     adcm::Log::Verbose() << "===== map_2dList =====";
-                    //     for(auto itr = map_2d[i].begin(); itr != map_2d[i].end(); ++itr) {
-                    //         adcm::Log::Verbose() << "obstacle_id : " << itr->obstacle_id;
-                    //         adcm::Log::Verbose() << "vehicle_class : " << itr->vehicle_class;
-                    //         adcm::Log::Verbose() << "road_z : " << itr->road_z;
-                    //     }
-                    //     adcm::Log::Verbose() << "======================";
-                    // }
-
-                    // sample case 2)
-                    int col = map_2d.size();
-                    int row = map_2d[0].size();
-                    for (int i = 0; i < col; ++i)
-                    {
-                        for (int j = 0; j < row; ++j)
-                        {
-                            adcm::Log::Verbose() << "[" << i << "]" << "[" << j << "]" << "obstacle_id : " << map_2d[i][j].obstacle_id;
-                            adcm::Log::Verbose() << "[" << i << "]" << "[" << j << "]" << "vehicle_class : " << map_2d[i][j].vehicle_class;
-                            adcm::Log::Verbose() << "[" << i << "]" << "[" << j << "]" << "road_z : " << map_2d[i][j].road_z;
-                        }
-                    }
-                } else {
-                    adcm::Log::Verbose() << "map_2d Vector empty!!! ";
-                }
-
-                if(!obstacle_list.empty()) {
-                    adcm::Log::Verbose() << "=== obstacle_list ===";
-                    for(auto itr = obstacle_list.begin(); itr != obstacle_list.end(); ++itr) {
-                        adcm::Log::Verbose() << "obstacle_id : " << itr->obstacle_id;
-                        adcm::Log::Verbose() << "obstacle_class : " << itr->obstacle_class;
-                        adcm::Log::Verbose() << "timestamp : " << itr->timestamp;
-
-                        auto map_2d_location = itr->map_2d_location;
-
-                        if(!map_2d_location.empty()) {
-                            adcm::Log::Verbose() << "=== map_2d_location ===";
-                            for(auto itr = map_2d_location.begin(); itr != map_2d_location.end(); ++itr) {
-                                adcm::Log::Verbose() << "x index : " << itr->x;
-                                adcm::Log::Verbose() << "y index : " << itr->y;
-                            }
-                        } else {
-                            adcm::Log::Verbose() << "obstacle_list map_2d_location Vector empty!!! ";
-                        }
-
-                        adcm::Log::Verbose() << "stop_count : " << itr->stop_count;
-                        adcm::Log::Verbose() << "fused_cuboid_x : " << itr->fused_cuboid_x;
-                        adcm::Log::Verbose() << "fused_cuboid_y : " << itr->fused_cuboid_y;
-                        adcm::Log::Verbose() << "fused_cuboid_z : " << itr->fused_cuboid_z;
-                        adcm::Log::Verbose() << "fused_heading_angle : " << itr->fused_heading_angle;
-                        adcm::Log::Verbose() << "fused_position_x : " << itr->fused_position_x;
-                        adcm::Log::Verbose() << "fused_position_y : " << itr->fused_position_y;
-                        adcm::Log::Verbose() << "fused_position_z : " << itr->fused_position_z;
-                        adcm::Log::Verbose() << "fused_velocity_x : " << itr->fused_velocity_x;
-                        adcm::Log::Verbose() << "fused_velocity_y : " << itr->fused_velocity_y;
-                        adcm::Log::Verbose() << "fused_velocity_z : " << itr->fused_velocity_z;
-                    }
-                } else {
-                    adcm::Log::Verbose() << "obstacle_list Vector empty!!! ";
-                }
-
-                if(!vehicle_list.empty()) {
-                    adcm::Log::Verbose() << "=== vehicle_list ===";
-                    for(auto itr = vehicle_list.begin(); itr != vehicle_list.end(); ++itr) {
-                        adcm::Log::Verbose() << "vehicle_class : " << itr->vehicle_class;
-                        adcm::Log::Verbose() << "timestamp : " << itr->timestamp;
-                        
-                        auto map_2d_location = itr->map_2d_location;
-
-                        if(!map_2d_location.empty()) {
-                            adcm::Log::Verbose() << "=== map_2d_location ===";
-                            for(auto itr = map_2d_location.begin(); itr != map_2d_location.end(); ++itr) {
-                                adcm::Log::Verbose() << "x index : " << itr->x;
-                                adcm::Log::Verbose() << "y index : " << itr->y;
-                            }
-                        } else {
-                            adcm::Log::Verbose() << "vehicle_list map_2d_location Vector empty!!! ";
-                        }
-
-                        adcm::Log::Verbose() << "position_long : " << itr->position_long;
-                        adcm::Log::Verbose() << "position_lat : " << itr->position_lat;
-                        adcm::Log::Verbose() << "position_height : " << itr->position_height;
-                        adcm::Log::Verbose() << "position_x : " << itr->position_x;
-                        adcm::Log::Verbose() << "position_y : " << itr->position_y;
-                        adcm::Log::Verbose() << "position_z : " << itr->position_z;
-                        adcm::Log::Verbose() << "yaw : " << itr->yaw;
-                        adcm::Log::Verbose() << "roll : " << itr->roll;
-                        adcm::Log::Verbose() << "pitch : " << itr->pitch;
-                        adcm::Log::Verbose() << "velocity_long : " << itr->velocity_long;
-                        adcm::Log::Verbose() << "velocity_lat : " << itr->velocity_lat;
-                        adcm::Log::Verbose() << "velocity_x : " << itr->velocity_x;
-                        adcm::Log::Verbose() << "velocity_y : " << itr->velocity_y;
-                        adcm::Log::Verbose() << "velocity_ang : " << itr->velocity_ang;
-                    }
-                } else {
-                    adcm::Log::Verbose() << "vehicle_list Vector empty!!! ";
-                }
-            }
-        }*/
 
         if(buildPath_rxEvent) {
             adcm::Log::Verbose() << "[EVENT] RiskAssessment Build Path received";
@@ -654,39 +538,6 @@ void ThreadAct1()
                 }
             }
         }
-
-/*        {
-            adcm::risk_assessment_Objects riskAssessment;
-            adcm::riskAssessmentStruct riskAssementStruct;
-            adcm::globalPathPosition globalPathPosition;
-
-            riskAssessment.riskAssessmentList.clear();
-
-            riskAssementStruct.obstacle_id = m_ud_0_16(m_rand_eng);
-            riskAssementStruct.wgs84_xy_start.clear();
-            for (int i = 0; i < 3; ++i)
-            {
-                globalPathPosition.x = m_ud_10000_10000(m_rand_eng);
-                globalPathPosition.y = m_ud_10000_10000(m_rand_eng);
-                riskAssementStruct.wgs84_xy_start.push_back(globalPathPosition);
-            }
-            riskAssementStruct.wgs84_xy_end.clear();
-            for (int i = 0; i < 3; ++i)
-            {
-                globalPathPosition.x = m_ud_10000_10000(m_rand_eng);
-                globalPathPosition.y = m_ud_10000_10000(m_rand_eng);
-                riskAssementStruct.wgs84_xy_end.push_back(globalPathPosition);
-            }
-            riskAssementStruct.hazard_class = m_ud_0_8(m_rand_eng);
-            riskAssementStruct.isHarzard = (m_ud_0_8(m_rand_eng) %2 )== 0 ? true : false;
-            riskAssementStruct.confidence = m_ud_100_100(m_rand_eng);
-            riskAssessment.riskAssessmentList.push_back(riskAssementStruct);
-
-            riskAssessment_provider.send(riskAssessment);
-            
-        }
-        */
-            
     }
 }
 
@@ -695,7 +546,6 @@ void ThreadKatech()
     adcm::RiskAssessment_Provider riskAssessment_provider;
     riskAssessment_provider.init("RiskAssessment/RiskAssessment/PPort_risk_assessment");
 
-//    ListVector map_2d;
     obstacleListVector obstacle_list;
     adcm::vehicleListStruct ego_vehicle, sub_vehicle_1, sub_vehicle_2, sub_vehicle_3, sub_vehicle_4;
     adcm::risk_assessment_Objects riskAssessment;
@@ -705,7 +555,6 @@ void ThreadKatech()
     while(continueExecution) 
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
-//        map_2d = map_2d_temp;
         obstacle_list = obstacle_list_temp;
         ego_vehicle = ego_vehicle_temp;
         sub_vehicle_1 = sub_vehicle_1_temp;
@@ -1244,17 +1093,6 @@ void ThreadKatech()
 
             if (utm_x.size()!=0 && map_2d.size() != 0)
             {   
-                if ((map_2d.size() != 0) && (obstacle_list.size()== 0) && (utm_x.size() == 6))
-                {
-                    for (int i =29; i < 100; i++)
-                    {
-                        for (int j=45; j <55; j++)
-                        {
-                            map_2d[i][j].road_z = 1;
-                        }
-                    }
-                }
-
                 drawline(utm_x, utm_y, map_2d, riskAssessment);
             }
 
