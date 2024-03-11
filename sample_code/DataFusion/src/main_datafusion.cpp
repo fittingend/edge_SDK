@@ -232,7 +232,7 @@ void ScanLine(long x1, long y1, long x2, long y2, long min_y, long max_y)
 
 void generateRoadZValue(VehicleData target_vehicle, std::vector<adcm::map_2dListVector>& map_2d_test)
 {
-    //현재 차량의 position_x position_y 중심으로 좌우전방 5m 를 스캔해서 road_z 값을 1로 지정
+    //현재 차량의 position_x position_y 중심으로 좌우전방 10m 를 스캔해서 road_z 값을 1로 지정
     #define SCANNING_RANGE 50
     adcm::Log::Info() << "generateRoadZValue INNN";
     if (target_vehicle.vehicle_class == EGO_VEHICLE)
@@ -518,7 +518,6 @@ void ThreadReceive()
             while(!hubData_subscriber.isEventQueueEmpty()) {
                 auto data = hubData_subscriber.getEvent();
                 gReceivedEvent_count_hub_data++;
-                adcm::Log::Info() << "=============KATECH: received but not processed==============";
 
                  //수신된 데이터 handling 위한 추가 코드 
                 if (!(receiveFlag_main && receiveFlag_sub1 && receiveFlag_sub2))
@@ -615,6 +614,10 @@ void ThreadReceive()
                             break;
                     }
                     adcm::Log::Info() << "=============KATECH: handling of received data DONE==============";
+                }
+                else 
+                {
+                    adcm::Log::Info() << "=============KATECH: received but not processed==============";
                 }
             }
         }

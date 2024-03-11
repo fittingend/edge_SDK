@@ -82,7 +82,7 @@ struct VehicleData
     double velocity_y;// new- to assign
     double velocity_ang;
 };
-
+/*
 struct GridCellData
 {
     unsigned short obstacle_id;
@@ -104,3 +104,4 @@ struct FusionData
     std::vector<ObstacleData> obstacle_list;
     std::vector<VehicleData> vehicle_list;
 };
+*/
