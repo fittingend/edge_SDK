@@ -1056,7 +1056,9 @@ void ThreadKatech()
             for (auto iter = obstacle_list.begin(); iter != obstacle_list.end(); iter++)
             {
                 float distance_ego_obs = getDistance(*iter, ego_vehicle);
-                if (distance_ego_obs > 50 && distance_ego_obs < 60 && (iter->obstacle_class == VEHICLE_LARGE || iter->obstacle_class == VEHICLE_SMALL))
+                adcm::Log::Info() << "차량과 장애물 거리: " << distance_ego_obs;
+
+                if (distance_ego_obs > 500 && distance_ego_obs < 600 && (iter->obstacle_class == VEHICLE_LARGE || iter->obstacle_class == VEHICLE_SMALL))
                 {
                     adcm::Log::Info() << "시나리오6-i)50~60m 사이의 차량 추출: " << iter->obstacle_id;
 
@@ -1068,7 +1070,7 @@ void ThreadKatech()
             for (auto iter = obstacle_vehicle_50_60.begin(); iter != obstacle_vehicle_50_60.end();)
             {
                 distance = getDistance_LinearTrajectory(*iter, utm_x, utm_y);
-                if (distance > 15 || distance == 15 || distance == INVALID_RETURN_VALUE)
+                if (distance > 150 || distance == 150 || distance == INVALID_RETURN_VALUE)
                 {
                     // 15m 이상이거나 invalid 값을 지닌 사람들은 삭제
                     adcm::Log::Info() << "시나리오6-ii)주행경로 반경 15 이상인 장애물 삭제: " << iter->obstacle_id;
@@ -1197,7 +1199,7 @@ void ThreadKatech()
 #endif
                         //adcm::Log::Info() << "객체간 최대거리: " << max_distance;
 
-                        if (max_distance < 60)
+                        if (max_distance < 600)
                         {
                             //=========v) 통행과다환경 지정하고 환경 내 ego 와 40m 내외인 장애물에 대해서 confidence 값 계산
 #ifdef DEMO
@@ -1213,7 +1215,7 @@ void ThreadKatech()
                                 {
 #endif
                                 //adcm::Log::Info() << "통행과다환경 지정!!! GOOD: " << iter->obstacle_id;
-                                confidence_scenario_6 = 40 / distance * 0.7;
+                                confidence_scenario_6 = 400 / distance * 0.7;
                                 adcm::riskAssessmentStruct riskAssessment6;
                                 riskAssessment6.obstacle_id = iter->obstacle_id;
                                 riskAssessment6.hazard_class = SCENARIO_6;
@@ -1242,7 +1244,7 @@ void ThreadKatech()
 
             if (utm_x.size()!=0 && map_2d.size() != 0)
             {   
-                if ((map_2d.size() != 0) && (obstacle_list.size()== 0) && (utm_x.size() == 6))
+                /*if ((map_2d.size() != 0) && (obstacle_list.size()== 0) && (utm_x.size() == 6))
                 {
                     for (int i =29; i < 100; i++)
                     {
@@ -1251,13 +1253,10 @@ void ThreadKatech()
                             map_2d[i][j].road_z = 1;
                         }
                     }
-                }
-
+                }*/
                 drawline(utm_x, utm_y, map_2d, riskAssessment);
             }
-
             adcm::Log::Info() << "scenario 7 DONE";
-
         }
 
 		adcm::Log::Info() << "build riskAssessment data - size "<<riskAssessment.riskAssessmentList.size();
