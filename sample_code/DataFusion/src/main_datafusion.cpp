@@ -69,7 +69,6 @@
 VehicleData main_vehicle_temp;
 VehicleData sub1_vehicle_temp;
 VehicleData sub2_vehicle_temp;
-VehicleData sub3_vehicle_temp;
 
 std::vector <ObstacleData> obstacle_list_temp;
 long ContourX[map_m][2];
@@ -81,7 +80,7 @@ bool checkRange(VehicleData vehicle)
  
     if (vehicle.position_x > 0 && vehicle.position_x < map_n &&\
     vehicle.position_y > 0 && vehicle.position_y < map_m &&\
-    abs(vehicle.velocity_x) < 50 && abs(vehicle.velocity_y) < 500 )
+    abs(vehicle.velocity_x) < 500 && abs(vehicle.velocity_y) < 500 )
     {
         range_OK = true;
     }
@@ -89,6 +88,20 @@ bool checkRange(VehicleData vehicle)
     return range_OK;
 
 }
+
+void checkRange(Point2D& point)
+{
+
+    if (point.x > map_n)
+    {
+        point.x = map_n;
+    }
+    if (point.y > map_m)
+    {
+        point.y = map_m;
+    }
+}
+
 void globalToLocalcoordinate (VehicleData& vehicle)
 {
     //시뮬레이션의 global 좌표계를 작업환경 XY 기반의 local 좌표계로 변환하는 함수
@@ -109,7 +122,8 @@ void globalToLocalcoordinate (VehicleData& vehicle)
         + (velocity_x* -sin(theta)) + (velocity_y* cos(theta)); 
     
     vehicle.yaw = vehicle.yaw - theta;
-    adcm::Log::Info() << "차량 globalToLocalcoordinate 좌표변환 (" << vehicle.position_x <<" , " <<vehicle.position_y << " , " << vehicle.velocity_x << " , " <<vehicle.velocity_y <<")"; 
+    adcm::Log::Info() << "차량 globalToLocalcoordinate 좌표변환 before (" << position_x <<" , " << position_y << " , " << velocity_x << " , " << velocity_y <<")"; 
+    adcm::Log::Info() << "차량 globalToLocalcoordinate 좌표변환 after(" << vehicle.position_x <<" , " <<vehicle.position_y << " , " << vehicle.velocity_x << " , " <<vehicle.velocity_y <<")"; 
     //adcm::Log::Info() << "차량 globalToLocalcoordinate timestamp: " << vehicle.timestamp; 
 }
 void globalToLocalcoordinate (std::vector <ObstacleData>& obstacle_list, VehicleData main_vehicle)
@@ -226,7 +240,7 @@ void ScanLine(long x1, long y1, long x2, long y2, long min_y, long max_y)
 void generateRoadZValue(VehicleData target_vehicle, std::vector<adcm::map_2dListVector>& map_2d_test)
 {
     //현재 차량의 position_x position_y 중심으로 좌우전방 5m 를 스캔해서 road_z 값을 1로 지정
-    #define SCANNING_RANGE 50
+    #define SCANNING_RANGE 10
     adcm::Log::Info() << "generateRoadZValue INNN";
     if (target_vehicle.vehicle_class == EGO_VEHICLE)
     {    
@@ -240,9 +254,12 @@ void generateRoadZValue(VehicleData target_vehicle, std::vector<adcm::map_2dList
         {
             for (int j = scanned_range_LL_y; j < (scanned_range_RU_y +1); j++)
             {
-                map_2d_test[i][j].road_z= 1;
-                //adcm::Log::Info() << "main vehicle generateRoadZValue[" << i << "]["<< j << "]:" << map_2d_test[i][j].road_z;
-            }
+                if (i < map_n && j < map_m)
+                {
+                    map_2d_test[i][j].road_z= 1;
+                    //adcm::Log::Info() << "main vehicle generateRoadZValue[" << i << "]["<< j << "]:" << map_2d_test[i][j].road_z;
+                }
+             }               
         }
     }
 
@@ -258,9 +275,11 @@ void generateRoadZValue(VehicleData target_vehicle, std::vector<adcm::map_2dList
         {
             for (int j = scanned_range_LL_y; j < (scanned_range_RU_y +1); j++)
             {
-                map_2d_test[i][j].road_z= 1;
-                //adcm::Log::Info() << "sub-vehicle generateRoadZValue[" << i << "]["<< j << "]:" << map_2d_test[i][j].road_z;
-
+                if (i < map_n && j < map_m)
+                {
+                    map_2d_test[i][j].road_z= 1;
+                    //adcm::Log::Info() << "main vehicle generateRoadZValue[" << i << "]["<< j << "]:" << map_2d_test[i][j].road_z;
+                }
             }
         }
     }
@@ -383,13 +402,14 @@ void find4VerticesVehicle(VehicleData &target_vehicle, std::vector<adcm::map_2dL
     LU.y = target_vehicle.position_y + (sin(theta)*VEHICLE_SIZE_X/2 + cos(theta)*VEHICLE_SIZE_Y/2);
 
     RU.x = target_vehicle.position_x + (cos(theta)*VEHICLE_SIZE_X/2 - sin(theta)*VEHICLE_SIZE_Y/2);
-    RU.y = target_vehicle.position_y - (sin(theta)*VEHICLE_SIZE_X/2 - cos(theta)*VEHICLE_SIZE_Y/2);
+    RU.y = target_vehicle.position_y - (sin(theta)*VEHICLE_SIZE_X/2 + cos(theta)*VEHICLE_SIZE_Y/2);
     
     RL.x = target_vehicle.position_x - (cos(theta)*VEHICLE_SIZE_X/2 - sin(theta)*VEHICLE_SIZE_Y/2);
     RL.y = target_vehicle.position_y - (sin(theta)*VEHICLE_SIZE_X/2 + cos(theta)*VEHICLE_SIZE_Y/2);
 
     LL.x = target_vehicle.position_x - (cos(theta)*VEHICLE_SIZE_X/2 - sin(theta)*VEHICLE_SIZE_Y/2);
     LL.y = target_vehicle.position_y + (sin(theta)*VEHICLE_SIZE_X/2 + cos(theta)*VEHICLE_SIZE_Y/2);
+    
 
     adcm::Log::Info() << "find4VerticesVehicle: LU.x is" << LU.x;
     adcm::Log::Info() << "find4VerticesVehicle: LU.y is" << LU.y;
@@ -402,6 +422,11 @@ void find4VerticesVehicle(VehicleData &target_vehicle, std::vector<adcm::map_2dL
 
     adcm::Log::Info() << "find4VerticesVehicle: LL.x is" << LL.x;
     adcm::Log::Info() << "find4VerticesVehicle: LL.y is" << LL.y;
+
+    checkRange(LU);
+    checkRange(RU);
+    checkRange(RL);
+    checkRange(LL);
 
     generateRoadZValue(target_vehicle, map_2d_test);
     generateOccupancyIndex(LU, RU, RL, LL, target_vehicle, map_2d_test);
@@ -432,6 +457,20 @@ void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered)
 
         adcm::Log::Info() << "find4VerticesObstacle: LU.x is" << LU.x;
         adcm::Log::Info() << "find4VerticesObstacle: LU.y is" << LU.y;
+
+        adcm::Log::Info() << "find4VerticesObstacle: RU.x is" << RU.x;
+        adcm::Log::Info() << "find4VerticesObstacle: RU.y is" << RU.y;
+
+        adcm::Log::Info() << "find4VerticesObstacle: RL.x is" << RL.x;
+        adcm::Log::Info() << "find4VerticesObstacle: RL.y is" << RL.y;
+
+        adcm::Log::Info() << "find4VerticesObstacle: LL.x is" << LL.x;
+        adcm::Log::Info() << "find4VerticesObstacle: LL.y is" << LL.y;
+
+        checkRange(LU);
+        checkRange(RU);
+        checkRange(RL);
+        checkRange(LL);
 
         generateOccupancyIndex(LU, RU, RL, LL, *(&iter));
     }
@@ -498,7 +537,7 @@ void ThreadAct1()
                  //수신된 데이터 handling 위한 추가 코드 
                 switch (data->vehicle_class)
                 {
-                    case 0: //특장차가 보낸 인지데이터
+                    case EGO_VEHICLE: //특장차가 보낸 인지데이터
 
                         main_vehicle_temp.vehicle_class = EGO_VEHICLE;
                         main_vehicle_temp.timestamp = data->timestamp;
@@ -535,7 +574,7 @@ void ThreadAct1()
                         adcm::Log::Info() << "main vehicle data received";
                         break;
 
-                    case 1: //보조차1이 보낸 인지데이터
+                    case SUB_VEHICLE_1: //보조차1이 보낸 인지데이터
                         sub1_vehicle_temp.vehicle_class = SUB_VEHICLE_1;
                         sub1_vehicle_temp.timestamp = data->timestamp;
                         // sub1_vehicle_temp.road_z = data->road_z; //vector assignment to fix? 
@@ -551,7 +590,7 @@ void ThreadAct1()
                         adcm::Log::Info() << "sub vehicle1 data received";
                         break;
 
-                    case 2: //보조차2가 보낸 인지데이터 
+                    case SUB_VEHICLE_2: //보조차2가 보낸 인지데이터 
                         sub2_vehicle_temp.vehicle_class = SUB_VEHICLE_2;
                         sub2_vehicle_temp.timestamp = data->timestamp;
                         // sub2_vehicle_temp.road_z = data->road_z; //vector assignment to fix? 
@@ -565,19 +604,6 @@ void ThreadAct1()
                         sub2_vehicle_temp.velocity_lat = data->velocity_lat;
                         sub2_vehicle_temp.velocity_ang = data->velocity_ang;
                         adcm::Log::Info() << "sub vehicle2 data received";
-                        sub3_vehicle_temp.vehicle_class = SUB_VEHICLE_3;
-                        sub3_vehicle_temp.timestamp = data->timestamp;
-                        // sub2_vehicle_temp.road_z = data->road_z; //vector assignment to fix? 
-                        sub3_vehicle_temp.position_lat = data->position_lat + 10;
-                        sub3_vehicle_temp.position_long = data->position_long + 10;
-                        sub3_vehicle_temp.position_height = data->position_height;
-                        sub3_vehicle_temp.yaw = data->yaw;
-                        sub3_vehicle_temp.roll = data->roll;
-                        sub3_vehicle_temp.pitch = data->pitch;
-                        sub3_vehicle_temp.velocity_long = data->velocity_long;
-                        sub3_vehicle_temp.velocity_lat = data->velocity_lat;
-                        sub3_vehicle_temp.velocity_ang = data->velocity_ang;
-                        adcm::Log::Info() << "sub vehicle3 data received";
                         break;
                         
                     default:
@@ -612,7 +638,6 @@ void ThreadKatech()
     VehicleData main_vehicle;
     VehicleData sub1_vehicle;
     VehicleData sub2_vehicle;
-    VehicleData sub3_vehicle;
     std::vector <ObstacleData> obstacle_list;
 
     while(continueExecution)
@@ -622,7 +647,6 @@ void ThreadKatech()
         main_vehicle = main_vehicle_temp;
         sub1_vehicle = sub1_vehicle_temp;
         sub2_vehicle = sub2_vehicle_temp;
-        sub3_vehicle = sub3_vehicle_temp;
         obstacle_list = obstacle_list_temp;
 
         adcm::map_2dListVector map_2dListVector;
@@ -718,14 +742,12 @@ void ThreadKatech()
         globalToLocalcoordinate(main_vehicle); 
         globalToLocalcoordinate(sub1_vehicle);
         globalToLocalcoordinate(sub2_vehicle);
-        globalToLocalcoordinate(sub3_vehicle);
 
         bool a = checkRange(main_vehicle);
         bool b = checkRange(sub1_vehicle);
         bool c = checkRange(sub2_vehicle);
-        bool d = checkRange(sub3_vehicle);
 
-        if(a && b && c && d) 
+        if(a && b && c)
         {//execute only if all true! 
             //==============5. 0.1 m/s 미만인 경우 장애물 정지 상태 판정 및 stop_count 값 assign =================
             for (auto iter = obstacle_list_filtered.begin(); iter!=obstacle_list_filtered.end(); iter++)
@@ -789,8 +811,6 @@ void ThreadKatech()
             {
                 //sub2_vehicle 존재하므로 해당 function execution
                 find4VerticesVehicle(sub2_vehicle, map_2d_test);
-                find4VerticesVehicle(sub3_vehicle, map_2d_test);
-
             }
 
             //==============8. 현재까지의 데이터를 adcm mapData 형식으로 재구성해서 업데이트 ================

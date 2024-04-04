@@ -1,4 +1,4 @@
-#define map_n 2000
+#define map_n 2500
 #define map_m 1000
 #define ABS(x) ((x >= 0) ? x : -x)
 #define INVALID_VALUE 999
@@ -24,12 +24,12 @@ enum ObstacleClass
 
 enum VehicleClass
 {
-    EGO_VEHICLE,
-    SUB_VEHICLE_1,
-    SUB_VEHICLE_2,
-    SUB_VEHICLE_3,
-    SUB_VEHICLE_4,
-    NO_VEHICLE
+    EGO_VEHICLE = 240,
+    SUB_VEHICLE_1 = 0,
+    SUB_VEHICLE_2 = 1 ,
+    SUB_VEHICLE_3 = 2,
+    SUB_VEHICLE_4 = 3,
+    NO_VEHICLE = 4
 };
 
 typedef struct
