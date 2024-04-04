@@ -512,6 +512,7 @@ bool RegisterSigTermHandler()
 
 void ThreadAct1()
 {
+    adcm::Log::Info() << "SDK release_240320_interface v1.7";
     adcm::Log::Info() << "DataFusion ThreadAct1";
     //adcm::MapData_Provider mapData_provider;
     adcm::HubData_Subscriber hubData_subscriber;
