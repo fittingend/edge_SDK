@@ -1106,8 +1106,8 @@ void ThreadKatech()
         }
         else
         {
-            adcm::Log::Info() << "else executed. dummy map sent";
-            mapData_provider.send(mapData);
+            adcm::Log::Info() << "Invalid input data - no map data sent";
+            //mapData_provider.send(mapData);
         }
 
         /*

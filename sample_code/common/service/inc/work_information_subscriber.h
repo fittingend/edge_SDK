@@ -44,8 +44,8 @@
  * activity specific data access points (event sender/receiver, ...).
  */
 
-#ifndef __RISK_AVOIDANCE_SUBSCRIBER_H__
-#define __RISK_AVOIDANCE_SUBSCRIBER_H__
+#ifndef __WORK_INFORMATION_SUBSCRIBER_H__
+#define __WORK_INFORMATION_SUBSCRIBER_H__
 
 #include <mutex>
 #include <string>
@@ -55,7 +55,7 @@
 #include <utility>
 
 // includes for used services
-#include "adcm/risk_avoidance_proxy.h"
+#include "adcm/work_information_proxy.h"
 #include "logger.h"
 
 namespace adcm
@@ -69,12 +69,12 @@ namespace adcm
  *
  *  Control activity implementing control of data control.
  */
-class RiskAvoidance_Subscriber
+class WorkInformation_Subscriber
 {
-    using Proxy = adcm::proxy::risk_avoidanceProxy;
+    using Proxy = adcm::proxy::work_informationProxy;
 
 public:
-    RiskAvoidance_Subscriber();
+    WorkInformation_Subscriber();
 
     /*!
      *  \brief Initializes control activity.
@@ -85,7 +85,7 @@ public:
     bool waitEvent(int deadLine);
     bool isEventQueueEmpty();
 
-    std::shared_ptr<risk_avoidance_Objects> getEvent();
+    std::shared_ptr<work_information_Objects> getEvent();
 
     /*!
      *  \brief Callback to change to radar service offer changes.
@@ -102,7 +102,7 @@ public:
      *
      * Callback Received when the Field Update Rate is changed.
      */
-    void receivedCallback_riskAvoidance();
+    void receivedCallback_workInformation();
 
     void fireAndForgetMethodCall();
 
@@ -110,11 +110,11 @@ protected:
     std::shared_ptr<Proxy> m_proxy;
     std::mutex m_proxy_mutex;
     std::mutex m_Mutex_eventQueue;
-    std::queue<std::shared_ptr<risk_avoidance_Objects>> m_Queue_event;
+    std::queue<std::shared_ptr<work_information_Objects>> m_Queue_event;
     std::shared_ptr<ara::core::Promise<bool>> m_promise_waitEvent;
 
-    void enQueue(std::shared_ptr<risk_avoidance_Objects> item);
-    std::shared_ptr<risk_avoidance_Objects> deQueue();
+    void enQueue(std::shared_ptr<work_information_Objects> item);
+    std::shared_ptr<work_information_Objects> deQueue();
 
 
     int getQueueSize();
@@ -123,9 +123,9 @@ protected:
     /*!
      * Subscribe to service.
      */
-    void subscribe_riskAvoidance();
+    void subscribe_workInformation();
 };
 
 }  // namespace adcm
 
-#endif  // __RISK_AVOIDANCE_SUBSCRIBER_H__
+#endif  // __WORK_INFORMATION_SUBSCRIBER_H__

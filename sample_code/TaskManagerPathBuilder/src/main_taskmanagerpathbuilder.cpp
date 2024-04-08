@@ -64,25 +64,27 @@
 #include "build_path_provider.h"
 #include "map_data_subscriber.h"
 #include "risk_assessment_subscriber.h"
-#include "risk_avoidance_subscriber.h"
-
-std::shared_ptr<adcm::BuildPath_Provider> buildPath_provider;
+#include "work_information_subscriber.h"
 
 std::random_device m_rd;
 std::default_random_engine m_rand_eng(m_rd());
 std::uniform_real_distribution<double> m_ud_10000_10000(-10000, 10000);
-std::uniform_int_distribution<std::uint32_t> m_ud_0_10000(0, 10000);
-std::uniform_int_distribution<std::uint16_t> m_ud_0_1000(0, 1000);
-std::uniform_int_distribution<std::uint8_t> m_ud_0_2(0, 2);
+std::uniform_int_distribution<std::uint64_t> m_ud_0_64(0, 64);
+std::uniform_int_distribution<std::uint32_t> m_ud_0_32(0, 32);
+std::uniform_int_distribution<std::uint16_t> m_ud_0_16(0, 16);
+std::uniform_int_distribution<std::uint8_t> m_ud_0_8(0, 8);
 
-namespace
+
+namespace TaskManagerPathBuilder
 {
+
+std::shared_ptr<adcm::BuildPath_Provider> buildPath_provider;
 
 // Atomic flag for exit after SIGTERM caught
 std::atomic_bool continueExecution{true};
 std::atomic_uint gReceivedEvent_count_map_data{0};
 std::atomic_uint gReceivedEvent_count_risk_assessment{0};
-std::atomic_uint gReceivedEvent_count_risk_avoidance{0};
+std::atomic_uint gReceivedEvent_count_work_information{0};
 std::atomic_uint gMainthread_Loopcount{0};
 
 void SigTermHandler(int signal)
@@ -109,9 +111,6 @@ bool RegisterSigTermHandler()
     return true;
 }
 
-}  // namespace
-
-
 void setBuildPath(const double& source_latitude, const double& source_longitude, 
     const double& destination_latitude, const double& destination_longitude, const std::uint8_t& type)
 {
@@ -119,51 +118,40 @@ void setBuildPath(const double& source_latitude, const double& source_longitude,
     
     auto output = buildPath_provider->getPtrOutput();
 
-    adcm::build_path_Objects Path;
-    output->Path.Seq = m_ud_0_10000(m_rand_eng);
-    output->Path.vehicle_class = m_ud_0_2(m_rand_eng);
-    output->Path.mve_id = m_ud_0_1000(m_rand_eng);
-    output->Path.mve_type = m_ud_0_2(m_rand_eng);
-    output->Path.sec = "sec";
-    output->Path.nsec = "nsec";
-    output->Path.frame_id = "frame_id";
-    output->Path.size = m_ud_0_1000(m_rand_eng);
-    output->Path.utm_x.clear();
-    output->Path.utm_x.push_back(m_ud_10000_10000(m_rand_eng));
-    output->Path.utm_x.push_back(m_ud_10000_10000(m_rand_eng));
-    output->Path.utm_x.push_back(m_ud_10000_10000(m_rand_eng));
-    output->Path.utm_y.clear();
-    output->Path.utm_y.push_back(m_ud_10000_10000(m_rand_eng));
-    output->Path.utm_y.push_back(m_ud_10000_10000(m_rand_eng));
-    output->Path.utm_y.push_back(m_ud_10000_10000(m_rand_eng));
+    adcm::pathStruct ps;
+    adcm::routeStruct route;
+
+    ps.result = m_ud_0_8(m_rand_eng);
+    ps.t0 = m_ud_0_64(m_rand_eng);
+    ps.vehicle_class = m_ud_0_8(m_rand_eng);
+    ps.move_type = m_ud_0_8(m_rand_eng);
+    ps.job_type = m_ud_0_8(m_rand_eng);
+    ps.size = m_ud_0_16(m_rand_eng);
+
+    ps.route.clear();
+    for (int i = 0; i < 3; ++i){
+        route.x = m_ud_10000_10000(m_rand_eng);
+        route.y = m_ud_10000_10000(m_rand_eng);
+        route.delta_t =  m_ud_0_16(m_rand_eng);
+        ps.route.push_back(route);
+    }
+
+    output->Object.Path.clear();
+    output->Object.Path.push_back(ps);
 }
 
-
-void ThreadAct1()
+void ThreadReceiveMapData()
 {
-    adcm::Log::Info() << "TaskManagerPathBuilder ThreadAct1";
+    adcm::Log::Info() << "TaskManagerPathBuilder ThreadReceiveMapData";
     adcm::MapData_Subscriber mapData_subscriber;
-    adcm::RiskAssessment_Subscriber riskAssessment_subscriber;
-    adcm::RiskAvoidance_Subscriber riskAvoidance_subscriber;
     INFO("TaskManagerPathBuilder .init()");
     mapData_subscriber.init("TaskManagerPathBuilder/TaskManagerPathBuilder/RPort_map_data");
-    riskAssessment_subscriber.init("TaskManagerPathBuilder/TaskManagerPathBuilder/RPort_risk_assessment");
-    riskAvoidance_subscriber.init("TaskManagerPathBuilder/TaskManagerPathBuilder/RPort_risk_avoidance");
-    INFO("After TaskManagerPathBuilder .init()");
-    
-    buildPath_provider = std::make_shared<adcm::BuildPath_Provider>();
-    buildPath_provider->init("TaskManagerPathBuilder/TaskManagerPathBuilder/PPort_build_path");
-    buildPath_provider->setCallback(setBuildPath);
-
-    INFO("Thread loop start...");
+    INFO("Thread ThreadReceiveMapData start...");
 
     while (continueExecution) {
         gMainthread_Loopcount++;
-        VERBOSE("[TaskManagerPathBuilder] Application loop");
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        bool mapData_rxEvent = mapData_subscriber.waitEvent(0); // wait event
-        bool riskAssessment_rxEvent = riskAssessment_subscriber.waitEvent(0); // wait event
-        bool riskAvoidance_rxEvent = riskAvoidance_subscriber.waitEvent(0); // wait event
+        VERBOSE("[TaskManagerPathBuilder] ThreadReceiveMapData loop");
+        bool mapData_rxEvent = mapData_subscriber.waitEvent(100); // wait event
 
         if(mapData_rxEvent) {
             adcm::Log::Verbose() << "[EVENT] TaskManagerPathBuilder Map Data received";
@@ -279,6 +267,21 @@ void ThreadAct1()
                 }
             }
         }
+    }
+}
+
+void ThreadReceiveRiskAssessment()
+{
+    adcm::Log::Info() << "TaskManagerPathBuilder ThreadReceiveRiskAssessment";
+    adcm::RiskAssessment_Subscriber riskAssessment_subscriber;
+    INFO("TaskManagerPathBuilder .init()");
+    riskAssessment_subscriber.init("TaskManagerPathBuilder/TaskManagerPathBuilder/RPort_risk_assessment");
+    INFO("Thread ThreadReceiveRiskAssessment start...");
+
+    while (continueExecution) {
+        gMainthread_Loopcount++;
+        VERBOSE("[TaskManagerPathBuilder] Application loop");
+        bool riskAssessment_rxEvent = riskAssessment_subscriber.waitEvent(100); // wait event
 
         if(riskAssessment_rxEvent) {
             adcm::Log::Verbose() << "[EVENT] TaskManagerPathBuilder Risk Assessment received";
@@ -331,50 +334,92 @@ void ThreadAct1()
                 }
             }
         }
+    }
+}
 
-        if(riskAvoidance_rxEvent) {
-            adcm::Log::Verbose() << "[EVENT] TaskManagerPathBuilder Risk Avoidance received";
+void ThreadReceiveWorkInformation()
+{
+    adcm::Log::Info() << "TaskManagerPathBuilder ThreadReceiveWorkInformation";
+    adcm::WorkInformation_Subscriber workInformation_subscriber;
+    workInformation_subscriber.init("TaskManagerPathBuilder/TaskManagerPathBuilder/RPort_work_information");
 
-            while(!riskAvoidance_subscriber.isEventQueueEmpty()) {
-                auto data = riskAvoidance_subscriber.getEvent();
-                gReceivedEvent_count_risk_avoidance++;
+    while (continueExecution) {
+        gMainthread_Loopcount++;
+        VERBOSE("[TaskManagerPathBuilder] ThreadReceiveWorkInformation loop");
+        bool workInformation_rxEvent = workInformation_subscriber.waitEvent(100); // wait event
 
-                auto vehicle_class = data->vehicle_class;
-                auto behavior_planning = data->behavior_planning;
+        if(workInformation_rxEvent) {
+            adcm::Log::Verbose() << "[EVENT] TaskManagerPathBuilder Hub Data received";
 
-                adcm::Log::Verbose() << "vehicle_class : "<< vehicle_class;
-                adcm::Log::Verbose() << "behavior_planning.obstacle_x : "<< behavior_planning.obstacle_x;
-                adcm::Log::Verbose() << "behavior_planning.obstacle_y : "<< behavior_planning.obstacle_y;
-                adcm::Log::Verbose() << "behavior_planning.robot_position_x : "<< behavior_planning.robot_position_x;
-                adcm::Log::Verbose() << "behavior_planning.robot_position_y : "<< behavior_planning.robot_position_y;
-                adcm::Log::Verbose() << "behavior_planning.robot_orientation_theta : "<< behavior_planning.robot_orientation_theta;
-                adcm::Log::Verbose() << "behavior_planning.safety_area : "<< behavior_planning.safety_area;
+            while(!workInformation_subscriber.isEventQueueEmpty()) {
+                auto data = workInformation_subscriber.getEvent();
+                gReceivedEvent_count_work_information++;
 
+                auto main_vehicle = data->main_vehicle;
+                auto sub_vehicle = data->sub_vehicle;
+                auto working_area_boundary = data->working_area_boundary;
+                
+                adcm::Log::Verbose() << "main_vehicle.length : "<< main_vehicle.length;
+                adcm::Log::Verbose() << "main_vehicle.width : "<< main_vehicle.width;
+
+                if(!sub_vehicle.empty()) {
+                    adcm::Log::Verbose() << "=== sub_vehicle ===";
+                    for(auto itr = sub_vehicle.begin(); itr != sub_vehicle.end(); ++itr) {
+                        adcm::Log::Verbose() << "sub_vehicle.length : "<< itr->length;
+                        adcm::Log::Verbose() << "sub_vehicle.width : "<< itr->width;
+                    }
+                } else {
+                    adcm::Log::Verbose() << "sub_vehicle Vector empty!!! ";
+                }
+
+                if(!working_area_boundary.empty()) {
+                    adcm::Log::Verbose() << "=== working_area_boundary ===";
+                    for(auto itr = working_area_boundary.begin(); itr != working_area_boundary.end(); ++itr) {
+                        adcm::Log::Verbose() << "working_area_boundary.x : "<< itr->x;
+                        adcm::Log::Verbose() << "working_area_boundary.y : "<< itr->y;
+                    }
+                } else {
+                    adcm::Log::Verbose() << "working_area_boundary Vector empty!!! ";
+                }
             }
         }
+    }
+}
 
-        {
-            adcm::build_path_Objects Path;
+void ThreadSendBuildPath()
+{
+    adcm::Log::Info() << "TaskManagerPathBuilder ThreadSendBuildPath";    
+    buildPath_provider = std::make_shared<adcm::BuildPath_Provider>();
+    buildPath_provider->init("TaskManagerPathBuilder/TaskManagerPathBuilder/PPort_build_path");
+    buildPath_provider->setCallback(setBuildPath);
+    INFO("Thread ThreadSendBuildPath start...");
 
-            Path.Seq = m_ud_0_10000(m_rand_eng);
-            Path.vehicle_class = m_ud_0_2(m_rand_eng);
-            Path.mve_id = m_ud_0_1000(m_rand_eng);
-            Path.mve_type = m_ud_0_2(m_rand_eng);
-            Path.sec = "sec";
-            Path.nsec = "nsec";
-            Path.frame_id = "frame_id";
-            Path.size = m_ud_0_1000(m_rand_eng);
-            Path.utm_x.clear();
-            Path.utm_x.push_back(m_ud_10000_10000(m_rand_eng));
-            Path.utm_x.push_back(m_ud_10000_10000(m_rand_eng));
-            Path.utm_x.push_back(m_ud_10000_10000(m_rand_eng));
-            Path.utm_y.clear();
-            Path.utm_y.push_back(m_ud_10000_10000(m_rand_eng));
-            Path.utm_y.push_back(m_ud_10000_10000(m_rand_eng));
-            Path.utm_y.push_back(m_ud_10000_10000(m_rand_eng));
+    while (continueExecution) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        
+        adcm::build_path_Objects buildPath;
+        adcm::pathStruct ps;
+        adcm::routeStruct route;
 
-            buildPath_provider->send(Path);
+        ps.result = m_ud_0_8(m_rand_eng);
+        ps.t0 = m_ud_0_64(m_rand_eng);
+        ps.vehicle_class = m_ud_0_8(m_rand_eng);
+        ps.move_type = m_ud_0_8(m_rand_eng);
+        ps.job_type = m_ud_0_8(m_rand_eng);
+        ps.size = m_ud_0_16(m_rand_eng);
+
+        ps.route.clear();
+        for (int i = 0; i < 5; ++i){
+            route.x = m_ud_10000_10000(m_rand_eng);
+            route.y = m_ud_10000_10000(m_rand_eng);
+            route.delta_t =  m_ud_0_16(m_rand_eng);
+            ps.route.push_back(route);
         }
+
+        buildPath.Path.clear();
+        buildPath.Path.push_back(ps);
+
+        buildPath_provider->send(buildPath);
     }
 }
 
@@ -405,20 +450,23 @@ void ThreadMonitor()
                 adcm::Log::Info() << "risk_assessment event timeout!!!";
             }
 
-            if(gReceivedEvent_count_risk_avoidance != 0) {
-                adcm::Log::Info() << "risk_avoidance Received count = " << gReceivedEvent_count_risk_avoidance;
-                gReceivedEvent_count_risk_avoidance = 0;
+            if(gReceivedEvent_count_work_information != 0) {
+                adcm::Log::Info() << "work_information Received count = " << gReceivedEvent_count_work_information;
+                gReceivedEvent_count_work_information = 0;
 
             } else {
-                adcm::Log::Info() << "risk_avoidance event timeout!!!";
+                adcm::Log::Info() << "work_information event timeout!!!";
             }
         }
     }
 }
 
+}  // namespace
+
 
 int main(int argc, char* argv[])
 {
+    std::vector<std::thread> thread_list;
     UNUSED(argc);
     UNUSED(argv);
 
@@ -430,7 +478,7 @@ int main(int argc, char* argv[])
     ara::exec::ExecutionClient exec_client;
     exec_client.ReportExecutionState(ara::exec::ExecutionState::kRunning);
 
-    if(!RegisterSigTermHandler()) {
+    if(!TaskManagerPathBuilder::RegisterSigTermHandler()) {
         adcm::Log::Error() << "Unable to register signal handler";
     }
 
@@ -443,11 +491,18 @@ int main(int argc, char* argv[])
     adcm::Log::Info() << "TaskManagerPathBuilder: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
     adcm::Log::Info() << "Ok, let's produce some TaskManagerPathBuilder data...";
-    std::thread act1(ThreadAct1);
-    std::thread monitor(ThreadMonitor);
+
+    thread_list.push_back(std::thread(TaskManagerPathBuilder::ThreadReceiveMapData));
+    thread_list.push_back(std::thread(TaskManagerPathBuilder::ThreadReceiveRiskAssessment));
+    thread_list.push_back(std::thread(TaskManagerPathBuilder::ThreadReceiveWorkInformation));
+    thread_list.push_back(std::thread(TaskManagerPathBuilder::ThreadSendBuildPath));
+    thread_list.push_back(std::thread(TaskManagerPathBuilder::ThreadMonitor));
+
     adcm::Log::Info() << "Thread join";
-    act1.join();
-    monitor.join();
+    for(int i = 0; i < static_cast<int>(thread_list.size()); i++) {
+        thread_list[i].join();
+    }
+
     adcm::Log::Info() << "done.";
 
     if(!ara::core::Deinitialize()) {

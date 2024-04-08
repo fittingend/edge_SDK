@@ -170,6 +170,7 @@ set(APPLICATION_src
     ${PROJECT_SOURCE_DIR}/../common/logger/src/logger.cpp
     ${PROJECT_SOURCE_DIR}/../common/service/src/hub_data_provider.cpp
     ${PROJECT_SOURCE_DIR}/../common/service/src/build_path_test_provider.cpp
+    ${PROJECT_SOURCE_DIR}/../common/service/src/work_information_provider.cpp
     ${PROJECT_SOURCE_DIR}/../common/service/src/build_path_subscriber.cpp
 )
 

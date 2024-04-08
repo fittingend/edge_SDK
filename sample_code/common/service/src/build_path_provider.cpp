@@ -125,17 +125,6 @@ BuildPath_Provider::~BuildPath_Provider()
     delete m_skeleton;
 }
 
-ara::core::Future<adcm::skeleton::fields::ServiceFlag::value_type> BuildPath_Provider::setServiceFlag(
-    adcm::skeleton::fields::ServiceFlag::value_type field)
-{
-    ara::core::Promise<adcm::skeleton::fields::ServiceFlag::value_type> promise;
-    m_service_flag = field;
-    VERBOSE("Setting the field ServiceFlag value to %s", m_service_flag);
-    promise.set_value(std::move(m_service_flag));
-    return promise.get_future();
-}
-
-
 void BuildPath_Provider::init(std::string instance)
 {
     adcm::Log::Info() << "enter BuildPath_Provider::init()";
@@ -150,7 +139,6 @@ void BuildPath_Provider::init(std::string instance)
         INFO("Service Instance offered: %s", instanceId.ToString().data());
     }
 
-    m_skeleton->ServiceFlag.Update("On");
     m_skeleton->OfferService();
     adcm::Log::Info() << "exit BuildPath_Provider::init()";
 }

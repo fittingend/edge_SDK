@@ -45,8 +45,8 @@
  * activity specific data access points (event sender/receiver, ...).
  */
 
-#ifndef __RISK_AVOIDANCE_PROVIDER_H__
-#define __RISK_AVOIDANCE_PROVIDER_H__
+#ifndef __WORK_INFORMATION_PROVIDER_H__
+#define __WORK_INFORMATION_PROVIDER_H__
 
 #include <string>
 #include <random>
@@ -55,7 +55,7 @@
 #include "ara/core/promise.h"
 
 // includes for used services
-#include "adcm/risk_avoidance_skeleton.h"
+#include "adcm/work_information_skeleton.h"
 
 #include "ara/core/future.h"
 #include "ara/core/promise.h"
@@ -66,21 +66,21 @@ namespace adcm
 /*!
  *  \brief Class implementing skeleton methods.
  *
- *  risk_avoidance's implementation.
+ *  work_information's implementation.
  *
  *  \uptrace{SWS_CM_00191}
  */
-class RiskAvoidanceImp : public adcm::skeleton::risk_avoidanceSkeleton
+class WorkInformationImp : public adcm::skeleton::work_informationSkeleton
 {
-    using Skeleton = adcm::skeleton::risk_avoidanceSkeleton;
+    using Skeleton = adcm::skeleton::work_informationSkeleton;
 
 public:
-    RiskAvoidanceImp(ara::core::InstanceSpecifier instanceSpec, ara::com::MethodCallProcessingMode mode)
+    WorkInformationImp(ara::core::InstanceSpecifier instanceSpec, ara::com::MethodCallProcessingMode mode)
         : Skeleton(std::move(instanceSpec), mode)
-        , m_worker(&RiskAvoidanceImp::ProcessRequests, this)
+        , m_worker(&WorkInformationImp::ProcessRequests, this)
     {}
 
-    virtual ~RiskAvoidanceImp()
+    virtual ~WorkInformationImp()
     {
         m_finished = true;
         m_worker.join();
@@ -101,24 +101,24 @@ private:
 };
 
 /*!
- *  \brief Class implementing RiskAvoidance activity.
+ *  \brief Class implementing WorkInformation activity.
  *
- *  Radar activity implementing function of RiskAvoidance.
+ *  Radar activity implementing function of WorkInformation.
  */
-class RiskAvoidance_Provider
+class WorkInformation_Provider
 {
 public:
-    RiskAvoidance_Provider();
-    ~RiskAvoidance_Provider();
+    WorkInformation_Provider();
+    ~WorkInformation_Provider();
 
     void init(std::string instance);
 
-    void send(risk_avoidance_Objects& data);
+    void send(work_information_Objects& data);
 
 protected:
 
-    adcm::skeleton::risk_avoidanceSkeleton* m_skeleton;
+    adcm::skeleton::work_informationSkeleton* m_skeleton;
 };
 
 }// namespace adcm
-#endif  // __RISK_AVOIDANCE_PROVIDER_H__
+#endif  // __WORK_INFORMATION_PROVIDER_H__

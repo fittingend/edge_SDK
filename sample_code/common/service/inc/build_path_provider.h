@@ -129,10 +129,6 @@ public:
 protected:
 
     adcm::skeleton::build_pathSkeleton* m_skeleton;
-    String m_service_flag;
-
-    ara::core::Future<adcm::skeleton::fields::ServiceFlag::value_type> setServiceFlag(
-        adcm::skeleton::fields::ServiceFlag::value_type field);
 };
 
 }// namespace adcm

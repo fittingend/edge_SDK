@@ -24,6 +24,16 @@ enum ObstacleClass
 
 enum VehicleClass
 {
+    EGO_VEHICLE,
+    SUB_VEHICLE_1,
+    SUB_VEHICLE_2,
+    SUB_VEHICLE_3,
+    SUB_VEHICLE_4,
+    NO_VEHICLE
+};
+/*
+enum VehicleClass
+{
     EGO_VEHICLE = 240,
     SUB_VEHICLE_1 = 0,
     SUB_VEHICLE_2 = 1 ,
@@ -31,7 +41,7 @@ enum VehicleClass
     SUB_VEHICLE_4 = 3,
     NO_VEHICLE = 4
 };
-
+*/
 typedef struct
 {
     long x, y;

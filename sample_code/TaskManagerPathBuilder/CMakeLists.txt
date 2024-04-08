@@ -171,7 +171,7 @@ set(APPLICATION_src
     ${PROJECT_SOURCE_DIR}/../common/service/src/build_path_provider.cpp
     ${PROJECT_SOURCE_DIR}/../common/service/src/map_data_subscriber.cpp
     ${PROJECT_SOURCE_DIR}/../common/service/src/risk_assessment_subscriber.cpp
-    ${PROJECT_SOURCE_DIR}/../common/service/src/risk_avoidance_subscriber.cpp
+    ${PROJECT_SOURCE_DIR}/../common/service/src/work_information_subscriber.cpp
 )
 
 if(HAS_VSOMEIP_BINDING OR HAS_WRSOMEIP_BINDING)

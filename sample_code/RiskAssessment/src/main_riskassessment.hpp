@@ -19,7 +19,16 @@ enum ObstacleClass
     PEDESTRIAN,
     STRUCTURE
 };
-
+enum VehicleClass
+{
+    EGO_VEHICLE,
+    SUB_VEHICLE_1,
+    SUB_VEHICLE_2,
+    SUB_VEHICLE_3,
+    SUB_VEHICLE_4,
+    NO_VEHICLE
+};
+/*
 enum VehicleClass
 {
     EGO_VEHICLE = 240,
@@ -29,7 +38,7 @@ enum VehicleClass
     SUB_VEHICLE_4 = 3,
     NO_VEHICLE = 4
 };
-
+*/
 enum HazardClass
 {
     NO_HAZARD,

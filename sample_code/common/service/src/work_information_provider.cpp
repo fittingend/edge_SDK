@@ -42,14 +42,14 @@
 // to the communication API
 ///////////////////////////////////////////////////////////////////////
 
-#include "risk_avoidance_provider.h"
+#include "work_information_provider.h"
 
 #include <stdint.h>
 #include <cstdlib>
 #include <cstring>
 #include <stdexcept>
 
-#include "adcm/risk_avoidance_skeleton.h"
+#include "adcm/work_information_skeleton.h"
 #include "ara/com/com_error_domain.h"
 #include "ara/core/instance_specifier.h"
 #include "logger.h"
@@ -66,7 +66,7 @@ using ara::com::ComErrorDomainErrc;
 namespace adcm
 {
 
-void RiskAvoidanceImp::ProcessRequests()
+void WorkInformationImp::ProcessRequests()
 {
     while(!m_finished) {
         std::chrono::time_point<std::chrono::system_clock> deadline
@@ -89,22 +89,22 @@ void RiskAvoidanceImp::ProcessRequests()
     }
 }
 
-RiskAvoidance_Provider::RiskAvoidance_Provider()
+WorkInformation_Provider::WorkInformation_Provider()
 {
     DEBUG("object address : %p", static_cast<void*>(this));
 }
 
-RiskAvoidance_Provider::~RiskAvoidance_Provider()
+WorkInformation_Provider::~WorkInformation_Provider()
 {
     delete m_skeleton;
 }
 
-void RiskAvoidance_Provider::init(std::string instance)
+void WorkInformation_Provider::init(std::string instance)
 {
-    adcm::Log::Info() << "enter RiskAvoidance_Provider::init()";
+    adcm::Log::Info() << "enter WorkInformation_Provider::init()";
     ara::core::InstanceSpecifier instanceSpec = ara::core::InstanceSpecifier(instance.c_str());
     INFO("Port In Executable Ref: %s", instanceSpec.ToString().data());
-    m_skeleton = new RiskAvoidanceImp(instanceSpec, ara::com::MethodCallProcessingMode::kPoll);
+    m_skeleton = new WorkInformationImp(instanceSpec, ara::com::MethodCallProcessingMode::kPoll);
     // The instance id resolution is not mandatory for service creation (but could be an option)
     // here it's intended to list ids for the offered service instances
     auto instanceIDs = ara::com::runtime::ResolveInstanceIDs(instanceSpec);
@@ -114,16 +114,16 @@ void RiskAvoidance_Provider::init(std::string instance)
     }
 
     m_skeleton->OfferService();
-    adcm::Log::Info() << "exit RiskAvoidance_Provider::init()";
+    adcm::Log::Info() << "exit WorkInformation_Provider::init()";
 }
 
-void RiskAvoidance_Provider::send(risk_avoidance_Objects& data)
+void WorkInformation_Provider::send(work_information_Objects& data)
 {
     try {
-        auto allocation = m_skeleton->riskAvoidanceEvent.Allocate();
+        auto allocation = m_skeleton->workInformationEvent.Allocate();
         auto l_sampleData = std::move(allocation).Value();
         *l_sampleData = data;
-        m_skeleton->riskAvoidanceEvent.Send(std::move(l_sampleData));
+        m_skeleton->workInformationEvent.Send(std::move(l_sampleData));
         // DEBUG("sent");
 
     } catch(ara::com::Exception e) {

@@ -170,6 +170,7 @@ set(APPLICATION_src
     ${PROJECT_SOURCE_DIR}/../common/logger/src/logger.cpp
     ${PROJECT_SOURCE_DIR}/../common/service/src/map_data_provider.cpp
     ${PROJECT_SOURCE_DIR}/../common/service/src/hub_data_subscriber.cpp
+    ${PROJECT_SOURCE_DIR}/../common/service/src/work_information_subscriber.cpp
 )
 
 if(HAS_VSOMEIP_BINDING OR HAS_WRSOMEIP_BINDING)

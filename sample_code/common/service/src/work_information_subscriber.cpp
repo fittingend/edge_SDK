@@ -42,7 +42,7 @@
 // to the communication API
 ///////////////////////////////////////////////////////////////////////
 
-#include "risk_avoidance_subscriber.h"
+#include "work_information_subscriber.h"
 
 #include <stdint.h>
 
@@ -54,7 +54,7 @@
 #include <stdexcept>
 
 // includes for used services
-#include "adcm/risk_avoidance_proxy.h"
+#include "adcm/work_information_proxy.h"
 
 #include "ara/com/e2exf/types.h"
 #include "ara/com/e2e_helper.h"
@@ -67,16 +67,16 @@ using namespace std::chrono_literals;
 namespace adcm
 {
 
-RiskAvoidance_Subscriber::RiskAvoidance_Subscriber()
+WorkInformation_Subscriber::WorkInformation_Subscriber()
 {
     m_proxy = nullptr;
     m_promise_waitEvent = nullptr;
     DEBUG("object address %p", static_cast<void*>(this));
 }
 
-void RiskAvoidance_Subscriber::init(std::string instance)
+void WorkInformation_Subscriber::init(std::string instance)
 {
-    adcm::Log::Info() << "enter RiskAvoidance_Subscriber::init()";
+    adcm::Log::Info() << "enter WorkInformation_Subscriber::init()";
     ara::core::InstanceSpecifier portSpecifier = ara::core::InstanceSpecifier(instance.c_str());
     INFO("Port In Executable Ref: %s", (std::string(portSpecifier.ToString().data())).c_str());
     auto instanceIDs = ara::com::runtime::ResolveInstanceIDs(portSpecifier);
@@ -89,26 +89,26 @@ void RiskAvoidance_Subscriber::init(std::string instance)
     INFO("Searching for Service Instance: %s", (std::string(instanceIDs[0].ToString().data())).c_str());
     Proxy::StartFindService(
     [this](ara::com::ServiceHandleContainer<Proxy::HandleType> handles, ara::com::FindServiceHandle handler) {
-        RiskAvoidance_Subscriber::serviceAvailabilityCallback(std::move(handles), handler);
+        WorkInformation_Subscriber::serviceAvailabilityCallback(std::move(handles), handler);
     },
     instanceIDs[0]);
-    adcm::Log::Info() << "exit RiskAvoidance_Subscriber::init()";
+    adcm::Log::Info() << "exit WorkInformation_Subscriber::init()";
 }
 
-void RiskAvoidance_Subscriber::subscribe_riskAvoidance()
+void WorkInformation_Subscriber::subscribe_workInformation()
 {
-    if(!m_proxy->riskAvoidanceEvent.IsSubscribed()) {
+    if(!m_proxy->workInformationEvent.IsSubscribed()) {
         // m_proxy got initialized via callback.
-        m_proxy->riskAvoidanceEvent.SetReceiveHandler([this]() {
-            RiskAvoidance_Subscriber::receivedCallback_riskAvoidance();
+        m_proxy->workInformationEvent.SetReceiveHandler([this]() {
+            WorkInformation_Subscriber::receivedCallback_workInformation();
         });
         // subscribe to event
-        m_proxy->riskAvoidanceEvent.Subscribe(1);
-        INFO("RiskAvoidance_Subscriber::subscribe_riskAvoidance() complete");
+        m_proxy->workInformationEvent.Subscribe(1);
+        INFO("WorkInformation_Subscriber::subscribe_workInformation() complete");
     }
 }
 
-void RiskAvoidance_Subscriber::serviceAvailabilityCallback(ara::com::ServiceHandleContainer<Proxy::HandleType> handles,
+void WorkInformation_Subscriber::serviceAvailabilityCallback(ara::com::ServiceHandleContainer<Proxy::HandleType> handles,
         ara::com::FindServiceHandle handler)
 {
     UNUSED(handler);
@@ -136,38 +136,38 @@ void RiskAvoidance_Subscriber::serviceAvailabilityCallback(ara::com::ServiceHand
                 INFO("Check handle::operator<: %d", static_cast<uint8_t>(aux_handle < first_handle));
             }
 
-            INFO("subscribe riskAvoidance service");
-            subscribe_riskAvoidance();
+            INFO("subscribe workInformation service");
+            subscribe_workInformation();
         }
     }
 }
 
-void RiskAvoidance_Subscriber::receivedCallback_riskAvoidance()
+void WorkInformation_Subscriber::receivedCallback_workInformation()
 {
     // execute callback for every samples in the context of GetNewSamples
-    std::shared_ptr<risk_avoidance_Objects> temp;
+    std::shared_ptr<work_information_Objects> temp;
     auto callback = [&temp](auto sample) {
-        // DEBUG("Callback: riskAvoidanceEvent ");
-        temp = std::make_shared<risk_avoidance_Objects>(*sample);
+        // DEBUG("Callback: workInformationEvent ");
+        temp = std::make_shared<work_information_Objects>(*sample);
     };
-    m_proxy->riskAvoidanceEvent.GetNewSamples(callback);
+    m_proxy->workInformationEvent.GetNewSamples(callback);
     this->enQueue(temp);
 }
 
-int RiskAvoidance_Subscriber::getQueueSize()
+int WorkInformation_Subscriber::getQueueSize()
 {
     std::lock_guard<std::mutex> guard(m_Mutex_eventQueue);
     return static_cast<int>(m_Queue_event.size());
 }
 
-auto RiskAvoidance_Subscriber::setTrigger()
+auto WorkInformation_Subscriber::setTrigger()
 {
     std::lock_guard<std::mutex> guard(m_Mutex_eventQueue);
     m_promise_waitEvent = std::make_shared< ara::core::Promise<bool>>();
     return m_promise_waitEvent->get_future();
 }
 
-bool RiskAvoidance_Subscriber::waitEvent(int deadLine)
+bool WorkInformation_Subscriber::waitEvent(int deadLine)
 {
     if(isEventQueueEmpty() && (deadLine != 0)) {
         auto future_wait = setTrigger();
@@ -178,7 +178,7 @@ bool RiskAvoidance_Subscriber::waitEvent(int deadLine)
 }
 
 
-void RiskAvoidance_Subscriber::enQueue(std::shared_ptr<risk_avoidance_Objects> item)
+void WorkInformation_Subscriber::enQueue(std::shared_ptr<work_information_Objects> item)
 {
     std::lock_guard<std::mutex> guard(m_Mutex_eventQueue);
     m_Queue_event.push(item);
@@ -195,18 +195,18 @@ void RiskAvoidance_Subscriber::enQueue(std::shared_ptr<risk_avoidance_Objects> i
     }
 }
 
-std::shared_ptr<risk_avoidance_Objects> RiskAvoidance_Subscriber::deQueue()
+std::shared_ptr<work_information_Objects> WorkInformation_Subscriber::deQueue()
 {
-    std::shared_ptr<risk_avoidance_Objects> temp;
+    std::shared_ptr<work_information_Objects> temp;
     std::lock_guard<std::mutex> guard(m_Mutex_eventQueue);
     temp = m_Queue_event.front();
     m_Queue_event.pop();
     return temp;
 }
 
-std::shared_ptr<risk_avoidance_Objects> RiskAvoidance_Subscriber::getEvent()
+std::shared_ptr<work_information_Objects> WorkInformation_Subscriber::getEvent()
 {
-    std::shared_ptr<risk_avoidance_Objects> result;
+    std::shared_ptr<work_information_Objects> result;
 
     if(isEventQueueEmpty()) {
         result = nullptr;
@@ -218,7 +218,7 @@ std::shared_ptr<risk_avoidance_Objects> RiskAvoidance_Subscriber::getEvent()
     return result;
 }
 
-bool RiskAvoidance_Subscriber::isEventQueueEmpty()
+bool WorkInformation_Subscriber::isEventQueueEmpty()
 {
     std::lock_guard<std::mutex> guard(m_Mutex_eventQueue);
     if(static_cast<int>(m_Queue_event.size()) != 0)
