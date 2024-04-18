@@ -1,4 +1,4 @@
-#define map_n 2500
+#define map_n 2000
 #define map_m 1000
 #define ABS(x) ((x >= 0) ? x : -x)
 #define INVALID_VALUE 999
@@ -11,7 +11,7 @@
 #define SUB_VEHICLE_SIZE_Y 15.99
 //사이즈는 10cm 단위 기준
 
-#define KM_TO_MS_CONVERSION 5/18
+//#define KM_TO_MS_CONVERSION 5/18
 
 enum ObstacleClass
 {
@@ -21,7 +21,7 @@ enum ObstacleClass
     PEDESTRIAN,
     STRUCTURE
 };
-
+/*
 enum VehicleClass
 {
     EGO_VEHICLE,
@@ -31,7 +31,8 @@ enum VehicleClass
     SUB_VEHICLE_4,
     NO_VEHICLE
 };
-/*
+*/
+
 enum VehicleClass
 {
     EGO_VEHICLE = 240,
@@ -41,7 +42,7 @@ enum VehicleClass
     SUB_VEHICLE_4 = 3,
     NO_VEHICLE = 4
 };
-*/
+
 typedef struct
 {
     long x, y;

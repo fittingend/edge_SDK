@@ -163,6 +163,8 @@ void relativeToGlobalcoordinate (std::vector <ObstacleData>& obstacle_list, Vehi
 
     for (auto iter= obstacle_list.begin(); iter!=obstacle_list.end(); iter++)
     {
+        adcm::Log::Info() << "장애물 relativeToGlobal 좌표변환 전 (" << iter->fused_position_x <<" , " <<iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")"; 
+
         double obstacle_position_x = iter->fused_position_x;
         double obstacle_position_y = iter->fused_position_y;
         double obstacle_velocity_x = iter->fused_velocity_x;
@@ -566,9 +568,9 @@ void ThreadAct1()
                             obstacle_to_push.fused_position_x= data->obstacle[i].position_x;
                             obstacle_to_push.fused_position_y= data->obstacle[i].position_y;
                             obstacle_to_push.fused_position_z= data->obstacle[i].position_z;
-                            obstacle_to_push.fused_velocity_x= data->obstacle[i].velocity_x*KM_TO_MS_CONVERSION;
-                            obstacle_to_push.fused_velocity_y= data->obstacle[i].velocity_y*KM_TO_MS_CONVERSION;
-                            obstacle_to_push.fused_velocity_z= data->obstacle[i].velocity_z*KM_TO_MS_CONVERSION;
+                            obstacle_to_push.fused_velocity_x= data->obstacle[i].velocity_x;
+                            obstacle_to_push.fused_velocity_y= data->obstacle[i].velocity_y;
+                            obstacle_to_push.fused_velocity_z= data->obstacle[i].velocity_z;
                             obstacle_list_temp.push_back(obstacle_to_push);
                         }
 

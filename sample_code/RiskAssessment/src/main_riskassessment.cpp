@@ -527,8 +527,8 @@ void ThreadKatech()
         sub_vehicle_2 = sub_vehicle_2_temp;
         adcm::Log::Info() << "map_2d size (katech):" << map_2d.size()*map_m;
 
-//        if (map_2d.size() != 0)
-//        {
+        if (map_2d.size() != 0)
+        {
             {
                 //=====시나리오 #1. 주행중 전역경로 근방 이동가능한 정지 장애물이 존재하는 위험 환경=====
                 adcm::Log::Info() << "=============KATECH: scenario 1 START==============";
@@ -1082,12 +1082,12 @@ void ThreadKatech()
             adcm::Log::Info() << "========================obstacle and vehicle info===========================";
             for (auto iter = obstacle_list.begin(); iter != obstacle_list.end(); iter++)
             {
-                adcm::Log::Info() << "obstacle ID:" << iter->obstacle_id << " obstacle XY position: " << iter->fused_position_x << "," << iter->fused_position_y; 
+                adcm::Log::Info() << "obstacle ID:" << iter->obstacle_id << " obstacle XY position: " << iter->fused_position_x << "," << iter->fused_position_y << " obstacle XY velocity: " << iter->fused_velocity_x << "," << iter->fused_velocity_y; 
             }
             
-            adcm::Log::Info() << "ego-vehicle XY position: " << ego_vehicle.position_x << "," << ego_vehicle.position_y;
-            adcm::Log::Info() << "sub-vehicle-1 XY position: " << sub_vehicle_1.position_x << "," << sub_vehicle_1.position_y;
-            adcm::Log::Info() << "sub-vehicle-2 XY position: " << sub_vehicle_2.position_x << "," << sub_vehicle_2.position_y;
+            adcm::Log::Info() << "ego-vehicle XY position: " << ego_vehicle.position_x << "," << ego_vehicle.position_y << " ego-vehicle XY velocity: " << ego_vehicle.velocity_x << "," << ego_vehicle.velocity_y;
+            adcm::Log::Info() << "sub-vehicle-1 XY position: " << sub_vehicle_1.position_x << "," << sub_vehicle_1.position_y << " sub-vehicle_1 XY velocity: " << sub_vehicle_1.velocity_x << "," << sub_vehicle_1.velocity_y;
+            adcm::Log::Info() << "sub-vehicle-2 XY position: " << sub_vehicle_2.position_x << "," << sub_vehicle_2.position_y << " sub-vehicle_2 XY velocity: " << sub_vehicle_2.velocity_x << "," << sub_vehicle_2.velocity_y;;
             adcm::Log::Info() << "==================================================================";
             adcm::Log::Info() << "========================RiskAssessment Output===========================";
             for (auto iter = riskAssessment.riskAssessmentList.begin(); iter < riskAssessment.riskAssessmentList.end(); iter++)
@@ -1105,7 +1105,7 @@ void ThreadKatech()
 
             riskAssessment_provider.send(riskAssessment);
             riskAssessment.riskAssessmentList.clear();
-//        }
+        }
 
         // risk_assessmentDataQueue.push(riskAssessment);
         // riskAssDataQueueCondition.notify_one();   
