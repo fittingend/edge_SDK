@@ -242,7 +242,7 @@ void ScanLine(long x1, long y1, long x2, long y2, long min_y, long max_y)
 void generateRoadZValue(VehicleData target_vehicle, std::vector<adcm::map_2dListVector>& map_2d_test)
 {
     //현재 차량의 position_x position_y 중심으로 좌우전방 5m 를 스캔해서 road_z 값을 1로 지정
-    #define SCANNING_RANGE 10
+    #define SCANNING_RANGE 30
     adcm::Log::Info() << "generateRoadZValue INNN";
     if (target_vehicle.vehicle_class == EGO_VEHICLE)
     {    
