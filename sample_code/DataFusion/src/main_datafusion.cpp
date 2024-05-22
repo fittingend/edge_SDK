@@ -721,10 +721,25 @@ void ThreadKatech()
             unsigned short rand_id = (unsigned short) rand();
             for (auto iter1 = obstacle_list.begin(); iter1 != obstacle_list.end(); iter1++)
             {
+                bool idcheck = false;
+                //TO DO:id 중복여부 duplicate 체크 해야함 *추후 수정
+                //추가: id 중복 없을 시 idcheck->true, 중복체크 완료 후 rand_id 값으로 id 지정
+                while(!idcheck)
+                {
+                    idcheck=true;
+                    for (auto iter2 = obstacle_list_filtered.begin(); iter2 != obstacle_list_filtered.end(); iter2++)
+                    {
+                        if (iter2->obstacle_id == rand_id)
+                        {
+                            idcheck = false;
+                            rand_id++;
+                            break;
+                        }
+                    }
+                }
                 //타임스탬프 값으로 장애물 id assign
                 iter1->obstacle_id = rand_id;
                 adcm::Log::Info() << "obstacle newly assigned is " << iter1->obstacle_id;
-                //TO DO:id 중복여부 duplicate 체크 해야함 *추후 수정
                 obstacle_list_filtered.push_back(*iter1);
                 rand_id++;
             }
