@@ -401,7 +401,7 @@ void GetRiskAssDataFromQueue(std::vector<adcm::risk_assessment_Objects> &dataBat
 }
 void ThreadAct1()
 {
-    adcm::Log::Info() << "SDK release_240320_interface v1.7";
+    adcm::Log::Info() << "SDK release_240522_interface v1.7";
     adcm::Log::Info() << "RiskAssessment ThreadAct1";
     INFO("RiskAssessment .init()");
     // adcm::RiskAssessment_Provider riskAssessment_provider;
