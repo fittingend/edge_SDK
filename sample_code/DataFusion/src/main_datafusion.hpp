@@ -1,5 +1,5 @@
-#define map_n 2000
-#define map_m 1000
+#define map_n 4000
+#define map_m 1500
 #define ABS(x) ((x >= 0) ? x : -x)
 #define INVALID_VALUE 999
 
