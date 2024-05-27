@@ -68,6 +68,18 @@ struct ObstacleData
     double fused_velocity_z;
 };
 
+struct VehicleSizeData
+{
+    std::uint16_t length;
+    std::uint16_t width;
+};
+
+struct BoundaryData
+{
+    double x;
+    double y;
+};
+
 struct VehicleData
 {
     unsigned char vehicle_class;
