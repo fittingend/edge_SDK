@@ -80,6 +80,7 @@ std::uint16_t main_vehicle_size_length;
 std::uint16_t main_vehicle_size_width;
 std::vector<VehicleSizeData> sub_vehicle_size;
 std::vector<BoundaryData> work_boundary;
+double min_x, min_y, max_x, max_y;
 
 bool checkRange(VehicleData vehicle)
 {
@@ -106,6 +107,25 @@ void checkRange(Point2D &point)
     {
         point.y = map_m;
     }
+}
+// map배열의 한 점이 실제 다각형 map내부에 있는지 확인
+
+bool isValid(int x, int y)
+{
+    int cross = 0;
+    std::vector<BoundaryData> p = work_boundary;
+
+    for (int i = 0; i < p.size(); i++)
+    {
+        int j = (i + 1) % p.size();
+        if ((p[i].y > y) != (p[j].y > y))
+        {
+            double meetX = (p[j].x - p[i].x) * (y - p[i].y) / (p[j].y - p[i].y) + p[i].x;
+            if (x < meetX)
+                cross++;
+        }
+    }
+    return cross % 2 > 0;
 }
 
 void globalToLocalcoordinate(VehicleData &vehicle)
@@ -617,8 +637,7 @@ void ThreadReceiveHudData()
     }
 }
 
-// work_information 수신
-/*
+/* work_information 수신
 void ThreadReceiveWorkInfo()
 {
     adcm::Log::Info() << "DataFusion ThreadAct2";
@@ -639,25 +658,47 @@ void ThreadReceiveWorkInfo()
             {
                 auto data = workInformation_subscriber.getEvent();
 
-                main_vehicle_size_length=data->main_vehicle.length;
-                main_vehicle_size_width=data->main_vehicle.width;
-                for(int i=0; i<data->sub_vehicle.size();i++) {
+                main_vehicle_size_length = data->main_vehicle.length;
+                main_vehicle_size_width = data->main_vehicle.width;
+                for (int i = 0; i < data->sub_vehicle.size(); i++)
+                {
                     VehicleSizeData vehicle_to_push;
-                    vehicle_to_push.length=data->sub_vehicle[i].length;
-                    vehicle_to_push.width=data->sub_vehicle[i].width;
+                    vehicle_to_push.length = data->sub_vehicle[i].length;
+                    vehicle_to_push.width = data->sub_vehicle[i].width;
                     sub_vehicle_size.push_back(vehicle_to_push);
                 }
-                for(int i=0; i<data->working_area_boundary.size();i++) {
+                for (int i = 0; i < data->working_area_boundary.size(); i++)
+                {
                     BoundaryData boundary_to_push;
-                    boundary_to_push.x=data->working_area_boundary.x;
-                    boundary_to_push.y=data->working_area_boundary.y;
+                    boundary_to_push.x = data->working_area_boundary.x;
+                    boundary_to_push.y = data->working_area_boundary.y;
                     work_boundary.push_back(boundary_to_push);
                 }
             }
         }
+
+        // 좌표계 변환 전 map 범위 둘러싸는 사각형 좌표
+        min_x = work_boundary[0].x;
+        min_y = work_boundary[0].y;
+        max_x = work_boundary[0].x;
+        max_y = work_boundary[0].y;
+
+        for (int i = 1; i < work_boundary.size(); i++)
+        {
+            min_x = work_boundary[i].x < min_x ? work_boundary[i].x : min_x;
+            min_y = work_boundary[i].y < min_y ? work_boundary[i].y : min_y;
+            max_x = work_boundary[i].x > max_x ? work_boundary[i].x : max_x;
+            max_y = work_boundary[i].y > max_y ? work_boundary[i].y : max_y;
+        }
+
+        for (int i = 0; i < work_boundary.size(); i++)
+        {
+            work_boundary[i].x -= min_x;
+            work_boundary[j].y -= min_y;
+        }
+
     }
-}
-*/
+}*/
 
 void ThreadKatech()
 {
@@ -672,6 +713,17 @@ void ThreadKatech()
     map_2dStruct_init.vehicle_class = NO_VEHICLE; // 시뮬레이션 데이터 설정때문에 부득이 NO_VEHICLE =5 로 바꿈
 
     std::vector<adcm::map_2dListVector> map_2d_test(map_n, adcm::map_2dListVector(map_m, map_2dStruct_init));
+
+    /* 좌표계 변환 전 map
+    std::vector<adcm::map_2dListVector> map_2d_test(max_x-min_x, adcm::map_2dListVector(max_y-min_y, map_2dStruct_init));
+    for (int i = 0; i < max_x - min_x; i++)
+    {
+        for (int j = 0; j < max_y - min_y; j++)
+        {
+            map_2d_test[i][j].isvalid=isValid(i,j);
+        }
+    }
+    */
     adcm::Log::Info() << "mapData 2d info initialized";
 
     //=============mapData provider 여기다 해보기==================
