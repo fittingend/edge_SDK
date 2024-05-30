@@ -80,7 +80,7 @@ std::uint16_t main_vehicle_size_length;
 std::uint16_t main_vehicle_size_width;
 std::vector<VehicleSizeData> sub_vehicle_size;
 std::vector<BoundaryData> work_boundary;
-double min_x, min_y, max_x, max_y;
+double min_a, min_b, max_a, max_b;
 
 bool checkRange(VehicleData vehicle)
 {
@@ -108,9 +108,9 @@ void checkRange(Point2D &point)
         point.y = map_m;
     }
 }
-// map배열의 한 점이 실제 다각형 map내부에 있는지 확인
+//-------------------------boundary 맵 대상 코드-------------------------//
 
-bool isValid(int x, int y)
+bool checkRange(int x, int y)
 {
     int cross = 0;
     std::vector<BoundaryData> p = work_boundary;
@@ -127,7 +127,47 @@ bool isValid(int x, int y)
     }
     return cross % 2 > 0;
 }
+/*
+bool checkRange(VehicleData vehicle)
+{
+    double x = vehicle.position_x;
+    double y = vehicle.position_y;
+    int cross = 0;
+    std::vector<BoundaryData> p = work_boundary;
 
+    for (int i = 0; i < p.size(); i++)
+    {
+        int j = (i + 1) % p.size();
+        if ((p[i].y > y) != (p[j].y > y))
+        {
+            double meetX = (p[j].x - p[i].x) * (y - p[i].y) / (p[j].y - p[i].y) + p[i].x;
+            if (x < meetX)
+                cross++;
+        }
+    }
+    return cross % 2 > 0;
+}
+
+bool checkRange(Point2D point)
+{
+    long x = point.x;
+    long y = point.y;
+    int cross = 0;
+    std::vector<BoundaryData> p = work_boundary;
+
+    for (int i = 0; i < p.size(); i++)
+    {
+        int j = (i + 1) % p.size();
+        if ((p[i].y > y) != (p[j].y > y))
+        {
+            double meetX = (p[j].x - p[i].x) * (y - p[i].y) / (p[j].y - p[i].y) + p[i].x;
+            if (x < meetX)
+                cross++;
+        }
+    }
+    return cross % 2 > 0;
+}
+*/
 void globalToLocalcoordinate(VehicleData &vehicle)
 {
     // 시뮬레이션의 global 좌표계를 작업환경 XY 기반의 local 좌표계로 변환하는 함수
@@ -294,7 +334,7 @@ void generateRoadZValue(VehicleData target_vehicle, std::vector<adcm::map_2dList
     }
     adcm::Log::Info() << "generateRoadZValue finish";
 }
-
+// map 내부에 있을 시 어떤 역할??
 void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, VehicleData &vehicle, std::vector<adcm::map_2dListVector> &map_2d_test)
 {
     long arr_x[] = {p0.x, p1.x, p2.x, p3.x};
@@ -400,15 +440,16 @@ void find4VerticesVehicle(VehicleData &target_vehicle, std::vector<adcm::map_2dL
 // 특장차일 경우
 #define VEHICLE_SIZE_X MAIN_VEHICLE_SIZE_X
 #define VEHICLE_SIZE_Y MAIN_VEHICLE_SIZE_Y
-        // #define VEHICLE_SIZE_X
-        // #define VEHICLE_SIZE_Y
+        // #define VEHICLE_SIZE_X main_vehicle_size_length
+        // #define VEHICLE_SIZE_Y main_vehicle_size_width
     }
     else
     {
+
 #define VEHICLE_SIZE_X SUB_VEHICLE_SIZE_X
 #define VEHICLE_SIZE_Y SUB_VEHICLE_SIZE_Y
-        // #define VEHICLE_SIZE_X
-        // #define VEHICLE_SIZE_Y
+        // #define VEHICLE_SIZE_X sub_vehicle_size[target_vehicle.vehicle_class].length
+        // #define VEHICLE_SIZE_Y sub_vehicle_size[target_vehicle.vehicle_class].width
     }
     // step1. 4 꼭지점을 각각 찾는다
     LU.x = target_vehicle.position_x + (cos(theta) * VEHICLE_SIZE_X / 2 - sin(theta) * VEHICLE_SIZE_Y / 2);
@@ -434,11 +475,12 @@ void find4VerticesVehicle(VehicleData &target_vehicle, std::vector<adcm::map_2dL
 
     adcm::Log::Info() << "find4VerticesVehicle: LL.x is" << LL.x;
     adcm::Log::Info() << "find4VerticesVehicle: LL.y is" << LL.y;
-
+    // 사각형 map안에 들어와있는지 확인 후 밖으로 나와있으면 범위 안으로 조정
     checkRange(LU);
     checkRange(RU);
     checkRange(RL);
     checkRange(LL);
+    // 다각형 map안에 들어와있는지 확인 후 알림
 
     generateRoadZValue(target_vehicle, map_2d_test);
     generateOccupancyIndex(LU, RU, RL, LL, target_vehicle, map_2d_test);
@@ -534,7 +576,6 @@ void ThreadReceiveHudData()
     // mapData_provider.init("DataFusion/DataFusion/PPort_map_data");
     hubData_subscriber.init("DataFusion/DataFusion/RPort_hub_data");
     INFO("ThreadReceiveHudData start...");
-
     while (continueExecution)
     {
         gMainthread_Loopcount++;
@@ -637,7 +678,7 @@ void ThreadReceiveHudData()
     }
 }
 
-/* work_information 수신
+// work_information 수신
 void ThreadReceiveWorkInfo()
 {
     adcm::Log::Info() << "DataFusion ThreadAct2";
@@ -660,45 +701,53 @@ void ThreadReceiveWorkInfo()
 
                 main_vehicle_size_length = data->main_vehicle.length;
                 main_vehicle_size_width = data->main_vehicle.width;
+                adcm::Log::Info() << "main vehicle size : (" << main_vehicle_size_length << ", " << main_vehicle_size_width << ")";
                 for (int i = 0; i < data->sub_vehicle.size(); i++)
                 {
                     VehicleSizeData vehicle_to_push;
                     vehicle_to_push.length = data->sub_vehicle[i].length;
                     vehicle_to_push.width = data->sub_vehicle[i].width;
                     sub_vehicle_size.push_back(vehicle_to_push);
+                    adcm::Log::Info() << "sub vehicle " << i << " size : (" << main_vehicle_size_length << ", " << main_vehicle_size_width << ")";
                 }
                 for (int i = 0; i < data->working_area_boundary.size(); i++)
                 {
                     BoundaryData boundary_to_push;
-                    boundary_to_push.x = data->working_area_boundary.x;
-                    boundary_to_push.y = data->working_area_boundary.y;
+                    boundary_to_push.x = data->working_area_boundary[i].x;
+                    boundary_to_push.y = data->working_area_boundary[i].y;
                     work_boundary.push_back(boundary_to_push);
+                    adcm::Log::Info() << "boundary(" << i << ") : (" << work_boundary[i].x << ", " << work_boundary[i].y << ")";
                 }
             }
+            // 좌표계 변환 전 map 범위 둘러싸는 사각형 좌표
+
+            min_a = work_boundary[0].x;
+            min_b = work_boundary[0].y;
+
+            max_a = work_boundary[0].x;
+            max_b = work_boundary[0].y;
+
+            for (int i = 1; i < work_boundary.size(); i++)
+            {
+                min_a = work_boundary[i].x < min_a ? work_boundary[i].x : min_a;
+                min_b = work_boundary[i].y < min_b ? work_boundary[i].y : min_b;
+                max_a = work_boundary[i].x > max_a ? work_boundary[i].x : max_a;
+                max_b = work_boundary[i].y > max_b ? work_boundary[i].y : max_b;
+            }
+            adcm::Log::Info() << "map의 min 값: (" << min_a << ", " << min_b << "), max 값 : (" << max_a << ", " << max_b << ")";
+
+            for (int i = 0; i < work_boundary.size(); i++)
+            {
+                work_boundary[i].x -= min_a;
+                work_boundary[i].y -= min_b;
+                adcm::Log::Info() << "변경한 boundary(" << i << ") : (" << work_boundary[i].x << ", " << work_boundary[i].y << ")";
+            }
+            sub_vehicle_size.clear();
+            work_boundary.clear();
+            break;
         }
-
-        // 좌표계 변환 전 map 범위 둘러싸는 사각형 좌표
-        min_x = work_boundary[0].x;
-        min_y = work_boundary[0].y;
-        max_x = work_boundary[0].x;
-        max_y = work_boundary[0].y;
-
-        for (int i = 1; i < work_boundary.size(); i++)
-        {
-            min_x = work_boundary[i].x < min_x ? work_boundary[i].x : min_x;
-            min_y = work_boundary[i].y < min_y ? work_boundary[i].y : min_y;
-            max_x = work_boundary[i].x > max_x ? work_boundary[i].x : max_x;
-            max_y = work_boundary[i].y > max_y ? work_boundary[i].y : max_y;
-        }
-
-        for (int i = 0; i < work_boundary.size(); i++)
-        {
-            work_boundary[i].x -= min_x;
-            work_boundary[j].y -= min_y;
-        }
-
     }
-}*/
+}
 
 void ThreadKatech()
 {
@@ -720,7 +769,7 @@ void ThreadKatech()
     {
         for (int j = 0; j < max_y - min_y; j++)
         {
-            map_2d_test[i][j].isvalid=isValid(i,j);
+            map_2d_test[i][j].isvalid=checkRange(i,j);
         }
     }
     */
@@ -1303,7 +1352,7 @@ int main(int argc, char *argv[])
     thread_list.push_back(std::thread(ThreadReceiveHudData));
     thread_list.push_back(std::thread(ThreadMonitor));
     thread_list.push_back(std::thread(ThreadKatech));
-    // thread_list.push_back(std::thread(DataFusion::ThreadReceiveWorkInfo));
+    //thread_list.push_back(std::thread(ThreadReceiveWorkInfo));
     adcm::Log::Info() << "Thread join";
     for (int i = 0; i < static_cast<int>(thread_list.size()); i++)
     {
