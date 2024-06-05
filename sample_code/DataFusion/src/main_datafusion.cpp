@@ -186,8 +186,8 @@ void globalToLocalcoordinate(VehicleData &vehicle)
     vehicle.velocity_y = (velocity_ang * (-cos(theta) * (position_x - alpha) - (sin(theta) * (position_y - beta)))) + (velocity_x * -sin(theta)) + (velocity_y * cos(theta));
 
     vehicle.yaw = vehicle.yaw - theta;
-    adcm::Log::Info() << "차량 globalToLocalcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
-    adcm::Log::Info() << "차량 globalToLocalcoordinate 좌표변환 after(" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.velocity_x << " , " << vehicle.velocity_y << ")";
+    adcm::Log::Info() << "차량" << vehicle.vehicle_class << "globalToLocalcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
+    adcm::Log::Info() << "차량" << vehicle.vehicle_class << "globalToLocalcoordinate 좌표변환 after(" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.velocity_x << " , " << vehicle.velocity_y << ")";
     // adcm::Log::Info() << "차량 globalToLocalcoordinate timestamp: " << vehicle.timestamp;
 }
 void globalToLocalcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData main_vehicle)
@@ -628,7 +628,6 @@ void ThreadReceiveHudData()
                         obstacle_to_push.fused_velocity_z = data->obstacle[i].velocity_z;
                         obstacle_list_temp.push_back(obstacle_to_push);
                     }
-
                     adcm::Log::Info() << "main vehicle data received";
                     break;
 
@@ -744,7 +743,6 @@ void ThreadReceiveWorkInfo()
             }
             sub_vehicle_size.clear();
             work_boundary.clear();
-            break;
         }
     }
 }
@@ -1352,7 +1350,7 @@ int main(int argc, char *argv[])
     thread_list.push_back(std::thread(ThreadReceiveHudData));
     thread_list.push_back(std::thread(ThreadMonitor));
     thread_list.push_back(std::thread(ThreadKatech));
-    //thread_list.push_back(std::thread(ThreadReceiveWorkInfo));
+    // thread_list.push_back(std::thread(ThreadReceiveWorkInfo));
     adcm::Log::Info() << "Thread join";
     for (int i = 0; i < static_cast<int>(thread_list.size()); i++)
     {
