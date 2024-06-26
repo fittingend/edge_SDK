@@ -435,6 +435,7 @@ void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, Vehi
             }
         }
     }
+
     adcm::Log::Info() << "Vehicle class " << vehicle.vehicle_class << " generateOccupancyIndex";
 }
 void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std::vector<ObstacleData>::iterator iter)
@@ -1190,8 +1191,8 @@ void ThreadKatech()
                 main_vehicle_final.vehicle_class = main_vehicle.vehicle_class;
                 main_vehicle_final.timestamp = main_vehicle.timestamp;
                 main_vehicle_final.map_2d_location.clear();
-                adcm::Log::Info() << "main_vehicle push to mapData (x:" << main_vehicle.map_2d_location.begin()->x << " ~ " << main_vehicle.map_2d_location.end()->x << " )";
-                adcm::Log::Info() << "main_vehicle push to mapData (y:" << main_vehicle.map_2d_location.begin()->y << " ~ " << main_vehicle.map_2d_location.end()->y << " )";
+                adcm::Log::Info() << "main_vehicle push to mapData (x:" << main_vehicle.map_2d_location[0].x << " ~ " << main_vehicle.map_2d_location[main_vehicle.map_2d_location.size() - 1].x << " )";
+                adcm::Log::Info() << "main_vehicle push to mapData (y:" << main_vehicle.map_2d_location[0].y << " ~ " << main_vehicle.map_2d_location[main_vehicle.map_2d_location.size() - 1].y << " )";
                 for (auto iter1 = main_vehicle.map_2d_location.begin(); iter1 < main_vehicle.map_2d_location.end(); iter1++)
                 {
                     adcm::map2dIndex index_to_push;
@@ -1199,6 +1200,7 @@ void ThreadKatech()
                     index_to_push.y = iter1->y;
                     map_2d_test[index_to_push.x][index_to_push.y].vehicle_class = main_vehicle_final.vehicle_class;
                     map_2d_test[index_to_push.x][index_to_push.y].road_z = 1;
+                    // adcm::Log::Info() << "(" << index_to_push.x << ", " << index_to_push.y << ") pushed to vehicle " << main_vehicle.vehicle_class;
                     // adcm::Log::Info() << "map_2d_test[" << index_to_push.x << "][" <<index_to_push.y << "] = " <<  map_2d_test[index_to_push.x][index_to_push.y].vehicle_class;
                     // adcm::Log::Info() << "map_2d_test[" << index_to_push.x << "][" <<index_to_push.y << "] = " <<  map_2d_test[index_to_push.x][index_to_push.y].road_z;
                     main_vehicle_final.map_2d_location.push_back(index_to_push);
@@ -1312,9 +1314,12 @@ void ThreadKatech()
                 {
                     map_2dStruct.obstacle_id = map_2d_test[i][j].obstacle_id;
                     map_2d_test[i][j].obstacle_id = NO_OBSTACLE;
+
                     // obstacle_id 초기화
+
                     map_2dStruct.vehicle_class = map_2d_test[i][j].vehicle_class;
                     map_2d_test[i][j].vehicle_class = NO_VEHICLE;
+
                     // vehicle_class 초기화
                     map_2dStruct.road_z = map_2d_test[i][j].road_z;
                     // road_z 정보는 계속 가져간다
@@ -1322,7 +1327,6 @@ void ThreadKatech()
                 }
                 mapData.map_2d.push_back(map_2dListVector);
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
             adcm::Log::Info() << "DATA FUSION DONE";
             INFO("map_2d pushed to mapData");
             mapData_provider.send(mapData);
