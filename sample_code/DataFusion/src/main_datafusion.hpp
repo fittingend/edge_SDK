@@ -1,5 +1,5 @@
-#define map_n 4000
-#define map_m 1500
+#define map_n 2000
+#define map_m 1000
 #define ABS(x) ((x >= 0) ? x : -x)
 #define INVALID_VALUE 999
 
@@ -9,6 +9,7 @@
 
 #define SUB_VEHICLE_SIZE_X 21.92
 #define SUB_VEHICLE_SIZE_Y 15.99
+#define MAP_ANGLE -86
 //사이즈는 10cm 단위 기준
 
 //#define KM_TO_MS_CONVERSION 5/18

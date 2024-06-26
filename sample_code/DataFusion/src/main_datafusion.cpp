@@ -76,12 +76,51 @@ std::vector<ObstacleData> obstacle_list_temp;
 long ContourX[map_m][2];
 bool once = 1;
 // 차량 크기(work_information data)
+// 시뮬레이터 기준점 utm좌표
+double origin_x = 278296.968;
+double origin_y = 3980466.846;
+double utmOrigin_x, utmOrigin_y;
+
 std::uint16_t main_vehicle_size_length;
 std::uint16_t main_vehicle_size_width;
 std::vector<VehicleSizeData> sub_vehicle_size;
 std::vector<BoundaryData> work_boundary;
 double min_a, min_b, max_a, max_b;
 
+void LLtoUTM(double lat, double lon, double &utmX, double &utmY)
+{
+    // WGS84 Parameters
+    const double WGS84_A = 6378137.0;    // Major semiaxis [m]
+    const double WGS84_E = 0.0818191908; // First Eccentricity
+    // Constants
+    const double k0 = 0.9996;
+    const double eSquared = WGS84_E * WGS84_E;
+    const double ePrimeSquared = eSquared / (1 - eSquared);
+    const double RADIANS_PER_DEGREE = M_PI / 180.0;
+    int zone = 52;
+    // Calculate the Central Meridian of the Zone
+    double lonOrigin = (zone - 1) * 6 - 180 + 3;
+
+    // Convert lat/lon to radians
+    double latRad = lat * RADIANS_PER_DEGREE;
+    double lonRad = lon * RADIANS_PER_DEGREE;
+    double lonOriginRad = lonOrigin * RADIANS_PER_DEGREE;
+
+    // Calculate UTM coordinates
+    double N = WGS84_A / sqrt(1 - eSquared * sin(latRad) * sin(latRad));
+    double T = tan(latRad) * tan(latRad);
+    double C = ePrimeSquared * cos(latRad) * cos(latRad);
+    double A = cos(latRad) * (lonRad - lonOriginRad);
+
+    double M = WGS84_A * ((1 - eSquared / 4 - 3 * pow(eSquared, 2) / 64 - 5 * pow(eSquared, 3) / 256) * latRad - (3 * eSquared / 8 + 3 * pow(eSquared, 2) / 32 + 45 * pow(eSquared, 3) / 1024) * sin(2 * latRad) + (15 * pow(eSquared, 2) / 256 + 45 * pow(eSquared, 3) / 1024) * sin(4 * latRad) - (35 * pow(eSquared, 3) / 3072) * sin(6 * latRad));
+    utmX = (k0 * N * (A + (1 - T + C) * A * A * A / 6 + (5 - 18 * T + T * T + 72 * C - 58 * ePrimeSquared) * A * A * A * A * A / 120) + 500000.0);
+    utmY = (k0 * (M + N * tan(latRad) * (A * A / 2 + (5 - T + 9 * C + 4 * C * C) * A * A * A * A / 24 + (61 - 58 * T + T * T + 600 * C - 330 * ePrimeSquared) * A * A * A * A * A * A / 720)));
+
+    if (lat < 0)
+    {
+        utmY += 10000000.0; // 10000000 meter offset for southern hemisphere
+    }
+}
 bool checkRange(VehicleData vehicle)
 {
     bool range_OK = false;
@@ -168,26 +207,34 @@ bool checkRange(Point2D point)
     return cross % 2 > 0;
 }
 */
-void globalToLocalcoordinate(VehicleData &vehicle)
+void gpsToMapcoordinate(VehicleData &vehicle)
 {
-    // 시뮬레이션의 global 좌표계를 작업환경 XY 기반의 local 좌표계로 변환하는 함수
+    // wps84기반 gps(global)좌표계를 작업환경 XY 기반의 local 좌표계로 변환하는 함수
+    // 시뮬레이터 map 기준 원점 utm좌표
+    double mapOrigin_x = 453.088714;
+    double mapOrigin_y = 507.550078;
+    double angle_radians = -MAP_ANGLE * M_PI / 180.0;
     double alpha = 537.92;
     double beta = -416.58;
     double theta = vehicle.yaw * M_PI / 180;
     double velocity_ang = vehicle.velocity_ang;
     double position_x = vehicle.position_long;
     double position_y = vehicle.position_lat;
+    // 차량 utm 좌표로 변환
+    double distance_x, distance_y; // 차량의 utm x,y 좌표
+    LLtoUTM(position_x, position_y, distance_x, distance_y);
+    distance_x -= mapOrigin_x;
+    distance_y -= mapOrigin_y;
+    // 속도
     double velocity_x = vehicle.velocity_long;
     double velocity_y = vehicle.velocity_lat;
-
-    vehicle.position_x = (cos(theta) * (position_x - alpha) + sin(theta) * (position_y - beta)) * M_TO_10CM_PRECISION;
-    vehicle.position_y = (-sin(theta) * (position_x - alpha) + cos(theta) * (position_y - beta)) * M_TO_10CM_PRECISION;
+    vehicle.position_x = (distance_x * cos(angle_radians) - distance_y * sin(angle_radians)) * M_TO_10CM_PRECISION;
+    vehicle.position_y = (distance_x * sin(angle_radians) + distance_y * cos(angle_radians)) * M_TO_10CM_PRECISION;
     vehicle.velocity_x = (velocity_ang * (-sin(theta) * (position_x - alpha) + (cos(theta) * (position_y - beta)))) + (velocity_x * cos(theta)) + (velocity_y * sin(theta));
     vehicle.velocity_y = (velocity_ang * (-cos(theta) * (position_x - alpha) - (sin(theta) * (position_y - beta)))) + (velocity_x * -sin(theta)) + (velocity_y * cos(theta));
-
     vehicle.yaw = vehicle.yaw - theta;
-    adcm::Log::Info() << "차량" << vehicle.vehicle_class << "globalToLocalcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
-    adcm::Log::Info() << "차량" << vehicle.vehicle_class << "globalToLocalcoordinate 좌표변환 after(" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.velocity_x << " , " << vehicle.velocity_y << ")";
+    adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
+    adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after(" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.velocity_x << " , " << vehicle.velocity_y << ")";
     // adcm::Log::Info() << "차량 globalToLocalcoordinate timestamp: " << vehicle.timestamp;
 }
 void globalToLocalcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData main_vehicle)
@@ -897,9 +944,9 @@ void ThreadKatech()
 
         //==============4. 차량 좌표계 변환==================================
         // 차량마다 받은 글로벌 좌표를 작업공간 local 좌표계로 변환
-        globalToLocalcoordinate(main_vehicle);
-        globalToLocalcoordinate(sub1_vehicle);
-        globalToLocalcoordinate(sub2_vehicle);
+        gpsToMapcoordinate(main_vehicle);
+        gpsToMapcoordinate(sub1_vehicle);
+        gpsToMapcoordinate(sub2_vehicle);
 
         bool a = checkRange(main_vehicle);
         bool b = checkRange(sub1_vehicle);
