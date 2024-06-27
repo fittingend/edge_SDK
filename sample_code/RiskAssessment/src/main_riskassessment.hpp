@@ -1,4 +1,4 @@
-#define map_n 2000
+#define map_n 3000
 #define map_m 1000
 #define MAP_TILT_ANGLE -86
 #define STOP_VALUE 10 // 1초간 정지시 정지 장애물로 판단
