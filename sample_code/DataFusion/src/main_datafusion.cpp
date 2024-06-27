@@ -87,7 +87,7 @@ std::vector<VehicleSizeData> sub_vehicle_size;
 std::vector<BoundaryData> work_boundary;
 double min_a, min_b, max_a, max_b;
 
-void LLtoUTM(double lat, double lon, double &utmX, double &utmY)
+void GPStoUTM(double lat, double lon, double &utmX, double &utmY)
 {
     // WGS84 Parameters
     const double WGS84_A = 6378137.0;    // Major semiaxis [m]
@@ -209,21 +209,18 @@ bool checkRange(Point2D point)
 */
 void gpsToMapcoordinate(VehicleData &vehicle)
 {
-    // wps84기반 gps(global)좌표계를 작업환경 XY 기반의 local 좌표계로 변환하는 함수
-    // 시뮬레이터 map 기준 원점 utm좌표
+    // wps84기반 gps(global)좌표계를 작업환경 XY 기반의 Map 좌표계로 변환
+    // 시뮬레이터 map 기준 원점(0,0) utm좌표
     double mapOrigin_x = 453.088714;
     double mapOrigin_y = 507.550078;
     double angle_radians = -MAP_ANGLE * M_PI / 180.0;
-    double alpha = 537.92;
-    double beta = -416.58;
-    double theta = vehicle.yaw * M_PI / 180;
     double velocity_ang = vehicle.velocity_ang;
     double position_x = vehicle.position_long;
     double position_y = vehicle.position_lat;
     double mapVehicle_theta = (vehicle.yaw + MAP_ANGLE) * M_PI / 180.0; // 시뮬레이터 상에서 차량이 바라보는 각도
     // 차량 utm 좌표로 변환
     double distance_x, distance_y; // 차량의 utm x,y 좌표
-    LLtoUTM(position_y, position_x, distance_x, distance_y);
+    GPStoUTM(position_y, position_x, distance_x, distance_y);
     distance_x -= origin_x;
     distance_y -= origin_y;
     vehicle.position_x = (distance_x * cos(angle_radians) - distance_y * sin(angle_radians) - mapOrigin_x) * M_TO_10CM_PRECISION;
@@ -238,7 +235,6 @@ void gpsToMapcoordinate(VehicleData &vehicle)
     vehicle.yaw = vehicle.yaw + MAP_ANGLE;
     adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
     adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after(" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.velocity_x << " , " << vehicle.velocity_y << ")";
-    // adcm::Log::Info() << "차량 globalToLocalcoordinate timestamp: " << vehicle.timestamp;
 }
 // void gpsToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData main_vehicle)
 // {
