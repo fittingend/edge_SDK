@@ -478,6 +478,7 @@ void ThreadAct1()
         }
         if (buildPathTest_rxEvent)
         {
+            adcm::Log::Info() << "Build Path Test 수신";
             adcm::Log::Verbose() << "[EVENT] RiskAssessment Build Path Test received";
             while (!buildPathTest_subscriber.isEventQueueEmpty())
             {
@@ -516,6 +517,21 @@ void ThreadAct1()
                 {
                     adcm::Log::Info() << "utm_y Vector empty!!! ";
                 }
+            }
+        }
+
+        if (buildPath_rxEvent)
+        {
+            adcm::Log::Info() << "Build Path 수신";
+            adcm::Log::Verbose() << "[EVENT] RiskAssessment Build Path received";
+            // if (buildPath_subscriber.isEventQueueEmpty())
+            // {
+            //     adcm::Log::Info() << "Build Path 비어있음";
+            //     buildPath_subscriber.deQueue();
+            // }
+            while (!buildPath_subscriber.isEventQueueEmpty())
+            {
+                auto data = buildPath_subscriber.getEvent();
             }
         }
     }
@@ -636,7 +652,7 @@ void ThreadKatech()
                     //                if (distance_scenario_2 < 10)
                     if (!distance_scenario_2)
                     {
-                        adcm::Log::Info() << "시나리오2-iii) 장애물과 전역경로간 거리가 10m 이내 판별 불가 " << iter->obstacle_id;
+                        // adcm::Log::Info() << "시나리오2-iii) 장애물과 전역경로간 거리가 10m 이내 판별 불가 " << iter->obstacle_id;
                     }
                     else
                     {
