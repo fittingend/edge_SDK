@@ -167,7 +167,7 @@ double getDistance(adcm::obstacleListStruct obstacle1, adcm::obstacleListStruct 
 
 float getDistance_LinearTrajectory(adcm::obstacleListStruct obstacle, doubleVector utm_x, doubleVector utm_y)
 {
-    float distance;
+    float distance = 0;
     for (int count = 0; count < utm_x.size(); count++)
     {
         float x_start = utm_x[count];
@@ -634,16 +634,21 @@ void ThreadKatech()
                 {
                     distance_scenario_2 = getDistance_LinearTrajectory(*iter, utm_x, utm_y);
                     //                if (distance_scenario_2 < 10)
-                    //                {
-                    adcm::Log::Info() << "시나리오2-iii) 장애물과 전역경로간 거리가 10m 이내 " << iter->obstacle_id;
-                    adcm::riskAssessmentStruct riskAssessment2;
-                    confidence_scenario_2 = 200 / getDistance(*iter, ego_vehicle) * 0.7;
-                    riskAssessment2.obstacle_id = iter->obstacle_id;
-                    riskAssessment2.hazard_class = SCENARIO_2;
-                    riskAssessment2.confidence = confidence_scenario_2;
-                    adcm::Log::Info() << "Risk assessment generated for #2: " << iter->obstacle_id << "with confidence:  " << confidence_scenario_2;
-                    riskAssessment.riskAssessmentList.push_back(riskAssessment2);
-                    //                }
+                    if (!distance_scenario_2)
+                    {
+                        adcm::Log::Info() << "시나리오2-iii) 장애물과 전역경로간 거리가 10m 이내 판별 불가 " << iter->obstacle_id;
+                    }
+                    else
+                    {
+                        adcm::Log::Info() << "시나리오2-iii) 장애물과 전역경로간 거리가 10m 이내 " << iter->obstacle_id;
+                        adcm::riskAssessmentStruct riskAssessment2;
+                        confidence_scenario_2 = 200 / getDistance(*iter, ego_vehicle) * 0.7;
+                        riskAssessment2.obstacle_id = iter->obstacle_id;
+                        riskAssessment2.hazard_class = SCENARIO_2;
+                        riskAssessment2.confidence = confidence_scenario_2;
+                        adcm::Log::Info() << "Risk assessment generated for #2: " << iter->obstacle_id << "with confidence:  " << confidence_scenario_2;
+                        riskAssessment.riskAssessmentList.push_back(riskAssessment2);
+                    }
                 }
                 adcm::Log::Info() << "scenario 2 DONE";
                 obstacleListVector().swap(obstacle_static_stop); // free memory

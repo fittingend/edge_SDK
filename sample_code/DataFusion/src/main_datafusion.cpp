@@ -76,9 +76,7 @@ std::vector<ObstacleData> obstacle_list_temp;
 long ContourX[map_m][2];
 bool once = 1;
 // 차량 크기(work_information data)
-// 시뮬레이터 기준점 utm좌표
-double origin_x = 278296.968;
-double origin_y = 3980466.846;
+
 double utmOrigin_x, utmOrigin_y;
 
 std::uint16_t main_vehicle_size_length;
@@ -210,9 +208,12 @@ bool checkRange(Point2D point)
 void gpsToMapcoordinate(VehicleData &vehicle)
 {
     // wps84기반 gps(global)좌표계를 작업환경 XY 기반의 Map 좌표계로 변환
-    // 시뮬레이터 map 기준 원점(0,0) utm좌표
+    // 시뮬레이터 map 기준 원점(0,0) global좌표
     double mapOrigin_x = 453.088714;
     double mapOrigin_y = 507.550078;
+    // 시뮬레이터 기준점 utm좌표
+    double origin_x = 278296.968;
+    double origin_y = 3980466.846;
     double angle_radians = -MAP_ANGLE * M_PI / 180.0;
     double velocity_ang = vehicle.velocity_ang;
     double position_x = vehicle.position_long;
