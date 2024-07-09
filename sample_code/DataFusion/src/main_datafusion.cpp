@@ -233,9 +233,9 @@ void gpsToMapcoordinate(VehicleData &vehicle)
     vehicle.velocity_y = velocity_x * sin(angle_radians) + velocity_y * cos(angle_radians);
     // vehicle.velocity_x = (velocity_ang * (-sin(theta) * (position_x - alpha) + (cos(theta) * (position_y - beta)))) + (velocity_x * cos(theta)) + (velocity_y * sin(theta));
     // vehicle.velocity_y = (velocity_ang * (-cos(theta) * (position_x - alpha) - (sin(theta) * (position_y - beta)))) + (velocity_x * -sin(theta)) + (velocity_y * cos(theta));
-    vehicle.yaw = vehicle.yaw + MAP_ANGLE;
-    adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
-    adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after(" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.velocity_x << " , " << vehicle.velocity_y << ")";
+    vehicle.yaw = - (vehicle.yaw + MAP_ANGLE); // 맵에 맞춰 차량 각도 회전
+    // adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
+    adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.velocity_x << " , " << vehicle.velocity_y << ")";
 }
 // void gpsToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData main_vehicle)
 // {
@@ -267,31 +267,54 @@ void gpsToMapcoordinate(VehicleData &vehicle)
 //         // adcm::Log::Info() << "해당 timestamp: " << iter->timestamp;
 //     }
 // }
-// 차량기준 obstacle 좌표를 global-> map(회전변환)까지 한번에 변환
-void relativeToGlobalcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData main_vehicle)
+// void relativeToGlobalcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData main_vehicle)
+// {
+//     double theta = main_vehicle.yaw * M_PI / 180;
+//     double velocity_ang = main_vehicle.velocity_ang;
+
+//     for (auto iter = obstacle_list.begin(); iter != obstacle_list.end(); iter++)
+//     {
+//         // adcm::Log::Info() << "장애물 relativeToGlobal 좌표변환 before (" << iter->fused_position_x << " , " << iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
+
+//         double obstacle_position_x = iter->fused_position_x;
+//         double obstacle_position_y = iter->fused_position_y;
+//         double obstacle_velocity_x = iter->fused_velocity_x;
+//         double obstacle_velocity_y = iter->fused_velocity_y;
+
+//         iter->fused_position_x = main_vehicle.global_x + ((obstacle_position_x)*cos(theta) - (obstacle_position_y)*sin(theta)) * M_TO_10CM_PRECISION;
+//         iter->fused_position_y = main_vehicle.global_y + ((obstacle_position_x)*sin(theta) + (obstacle_position_y)*cos(theta)) * M_TO_10CM_PRECISION;
+
+//         adcm::Log::Info() << "장애물 relativeToGlobal 좌표변환 after (" << iter->fused_position_x << " , " << iter->fused_position_y << ")";
+//     }
+// }
+void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData main_vehicle)
 {
-    double theta = main_vehicle.yaw * M_PI / 180;
+    double theta = main_vehicle.yaw * M_PI / 180.0;
     double velocity_ang = main_vehicle.velocity_ang;
 
     for (auto iter = obstacle_list.begin(); iter != obstacle_list.end(); iter++)
     {
-        adcm::Log::Info() << "장애물 relativeToGlobal 좌표변환 전 (" << iter->fused_position_x << " , " << iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
+        // adcm::Log::Info() << "장애물 relativeToGlobal 좌표변환 before (" << iter->fused_position_x << " , " << iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
 
         double obstacle_position_x = iter->fused_position_x;
         double obstacle_position_y = iter->fused_position_y;
-        double obstacle_velocity_x = iter->fused_velocity_x;
+        double obstacle_velocity_x = iter->fused_velocity_x; // 시뮬 로그 속도의 단위는 m/s인데, 결과 값의 단위는 미정
         double obstacle_velocity_y = iter->fused_velocity_y;
 
-        iter->fused_position_x = main_vehicle.position_x + (obstacle_position_x)*cos(theta) - (obstacle_position_y)*sin(theta);
-        iter->fused_position_y = main_vehicle.position_y + (obstacle_position_x)*sin(theta) - (obstacle_position_y)*cos(theta);
+        // iter->fused_position_x = (obstacle_position_x * cos(angle_radians) - obstacle_position_y * sin(angle_radians) - mapOrigin_x) * M_TO_10CM_PRECISION;
+        // iter->fused_position_y = (obstacle_position_x * sin(angle_radians) + obstacle_position_y * cos(angle_radians) - mapOrigin_y) * M_TO_10CM_PRECISION;
+        // adcm::Log::Info() << "장애물 relativeToMap 좌표변환 before (" << iter->fused_position_x << " , " << iter->fused_position_y << ", " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
+        // adcm::Log::Info() << main_vehicle.yaw << "각 회전한 값 : (" << (obstacle_position_x)*cos(theta) - (obstacle_position_y)*sin(theta) << ", " << (obstacle_position_x)*sin(theta) + (obstacle_position_y)*cos(theta) << ")";
 
-        iter->fused_velocity_x = main_vehicle.velocity_x + (obstacle_velocity_x * cos(theta)) - (velocity_ang * obstacle_position_x * sin(theta)) - ((obstacle_velocity_y)*sin(theta)) - (velocity_ang * obstacle_position_y * cos(theta));
+        iter->fused_position_x = main_vehicle.position_x + ((obstacle_position_x)*cos(theta) - (obstacle_position_y)*sin(theta)) * M_TO_10CM_PRECISION;
+        iter->fused_position_y = main_vehicle.position_y + ((obstacle_position_x)*sin(theta) + (obstacle_position_y)*cos(theta)) * M_TO_10CM_PRECISION;
 
-        iter->fused_velocity_y = main_vehicle.velocity_y + (obstacle_velocity_x * sin(theta)) + (velocity_ang * obstacle_position_x * cos(theta)) + (obstacle_velocity_y * cos(theta)) - (velocity_ang * obstacle_position_y * sin(theta));
+        iter->fused_velocity_x = obstacle_velocity_x + main_vehicle.velocity_x;
+        iter->fused_velocity_y = obstacle_velocity_x + main_vehicle.velocity_y;
 
         iter->fused_heading_angle = main_vehicle.yaw + iter->fused_heading_angle;
 
-        adcm::Log::Info() << "장애물 relativeToGlobal 좌표변환 (" << iter->fused_position_x << " , " << iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
+        adcm::Log::Info() << "장애물 relativeToMap 좌표변환 after (" << iter->fused_position_x << " , " << iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
     }
 }
 void ScanLine(long x1, long y1, long x2, long y2, long min_y, long max_y)
@@ -515,17 +538,17 @@ void find4VerticesVehicle(VehicleData &target_vehicle, std::vector<adcm::map_2dL
     LL.x = target_vehicle.position_x - (cos(theta) * VEHICLE_SIZE_X / 2 - sin(theta) * VEHICLE_SIZE_Y / 2);
     LL.y = target_vehicle.position_y + (sin(theta) * VEHICLE_SIZE_X / 2 + cos(theta) * VEHICLE_SIZE_Y / 2);
 
-    adcm::Log::Info() << "find4VerticesVehicle: LU.x is" << LU.x;
-    adcm::Log::Info() << "find4VerticesVehicle: LU.y is" << LU.y;
+    // adcm::Log::Info() << "find4VerticesVehicle: LU.x is" << LU.x;
+    // adcm::Log::Info() << "find4VerticesVehicle: LU.y is" << LU.y;
 
-    adcm::Log::Info() << "find4VerticesVehicle: RU.x is" << RU.x;
-    adcm::Log::Info() << "find4VerticesVehicle: RU.y is" << RU.y;
+    // adcm::Log::Info() << "find4VerticesVehicle: RU.x is" << RU.x;
+    // adcm::Log::Info() << "find4VerticesVehicle: RU.y is" << RU.y;
 
-    adcm::Log::Info() << "find4VerticesVehicle: RL.x is" << RL.x;
-    adcm::Log::Info() << "find4VerticesVehicle: RL.y is" << RL.y;
+    // adcm::Log::Info() << "find4VerticesVehicle: RL.x is" << RL.x;
+    // adcm::Log::Info() << "find4VerticesVehicle: RL.y is" << RL.y;
 
-    adcm::Log::Info() << "find4VerticesVehicle: LL.x is" << LL.x;
-    adcm::Log::Info() << "find4VerticesVehicle: LL.y is" << LL.y;
+    // adcm::Log::Info() << "find4VerticesVehicle: LL.x is" << LL.x;
+    // adcm::Log::Info() << "find4VerticesVehicle: LL.y is" << LL.y;
     // 사각형 map안에 들어와있는지 확인 후 밖으로 나와있으면 범위 안으로 조정
     checkRange(LU);
     checkRange(RU);
@@ -560,17 +583,17 @@ void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered)
         LL.x = obstacle_position_x - (cos(theta) * (obstacle_size_x / 2) - sin(theta) * (obstacle_size_y / 2));
         LL.y = obstacle_position_y + (sin(theta) * (obstacle_size_x / 2) + cos(theta) * (obstacle_size_y / 2));
 
-        adcm::Log::Info() << "find4VerticesObstacle: LU.x is" << LU.x;
-        adcm::Log::Info() << "find4VerticesObstacle: LU.y is" << LU.y;
+        // adcm::Log::Info() << "find4VerticesObstacle: LU.x is" << LU.x;
+        // adcm::Log::Info() << "find4VerticesObstacle: LU.y is" << LU.y;
 
-        adcm::Log::Info() << "find4VerticesObstacle: RU.x is" << RU.x;
-        adcm::Log::Info() << "find4VerticesObstacle: RU.y is" << RU.y;
+        // adcm::Log::Info() << "find4VerticesObstacle: RU.x is" << RU.x;
+        // adcm::Log::Info() << "find4VerticesObstacle: RU.y is" << RU.y;
 
-        adcm::Log::Info() << "find4VerticesObstacle: RL.x is" << RL.x;
-        adcm::Log::Info() << "find4VerticesObstacle: RL.y is" << RL.y;
+        // adcm::Log::Info() << "find4VerticesObstacle: RL.x is" << RL.x;
+        // adcm::Log::Info() << "find4VerticesObstacle: RL.y is" << RL.y;
 
-        adcm::Log::Info() << "find4VerticesObstacle: LL.x is" << LL.x;
-        adcm::Log::Info() << "find4VerticesObstacle: LL.y is" << LL.y;
+        // adcm::Log::Info() << "find4VerticesObstacle: LL.x is" << LL.x;
+        // adcm::Log::Info() << "find4VerticesObstacle: LL.y is" << LL.y;
 
         checkRange(LU);
         checkRange(RU);
@@ -677,6 +700,8 @@ void ThreadReceiveHudData()
                         obstacle_to_push.fused_velocity_x = data->obstacle[i].velocity_x;
                         obstacle_to_push.fused_velocity_y = data->obstacle[i].velocity_y;
                         obstacle_to_push.fused_velocity_z = data->obstacle[i].velocity_z;
+
+                        adcm::Log::Info() << "메인 차 기준 장애물 위치 : (" << obstacle_to_push.fused_position_x << ", " << obstacle_to_push.fused_position_y << ")";
                         obstacle_list_temp.push_back(obstacle_to_push);
                     }
                     adcm::Log::Info() << "main vehicle data received";
@@ -950,7 +975,7 @@ void ThreadKatech()
 
         //==============4. 장애물 좌표계 변환=================
         // 차량 기준 장애물 좌표를 작업공간 map 좌표계로 변환
-        relativeToGlobalcoordinate(obstacle_list_filtered, main_vehicle);
+        relativeToMapcoordinate(obstacle_list_filtered, main_vehicle);
 
         bool a = checkRange(main_vehicle);
         bool b = checkRange(sub1_vehicle);
@@ -1087,8 +1112,8 @@ void ThreadKatech()
                         index_to_push.x = iter1->x;
                         index_to_push.y = iter1->y;
                         map_2d_test[index_to_push.x][index_to_push.y].obstacle_id = iter->obstacle_id;
-                        adcm::Log::Info() << "obstacle id : " << iter->obstacle_id;
-                        adcm::Log::Info() << "obstacle2 map_2d_location : (" << index_to_push.x << ", " << index_to_push.y << ")";
+                        // adcm::Log::Info() << "obstacle id : " << iter->obstacle_id;
+                        // adcm::Log::Info() << "obstacle2 map_2d_location : (" << index_to_push.x << ", " << index_to_push.y << ")";
                         // adcm::Log::Info() << "occupancy index pair of obstacle 2 is " << index_to_push.x << " , " << index_to_push.y;
                         // adcm::Log::Info() << "occupancy index of obstacle id " << iter->obstacle_id;
                         obstacle2.map_2d_location.push_back(index_to_push);
@@ -1150,7 +1175,7 @@ void ThreadKatech()
                         index_to_push.x = iter1->x;
                         index_to_push.y = iter1->y;
                         map_2d_test[index_to_push.x][index_to_push.y].obstacle_id = iter->obstacle_id;
-                        mapData.map_2d[iter1->x][iter1->y].obstacle_id = iter->obstacle_id;
+                        // mapData.map_2d[iter1->x][iter1->y].obstacle_id = iter->obstacle_id;
                         obstacle4.map_2d_location.push_back(index_to_push);
                     }
                     obstacle4.stop_count = iter->stop_count;
@@ -1188,8 +1213,8 @@ void ThreadKatech()
                 main_vehicle_final.vehicle_class = main_vehicle.vehicle_class;
                 main_vehicle_final.timestamp = main_vehicle.timestamp;
                 main_vehicle_final.map_2d_location.clear();
-                adcm::Log::Info() << "main_vehicle push to mapData (x:" << main_vehicle.map_2d_location[0].x << " ~ " << main_vehicle.map_2d_location[main_vehicle.map_2d_location.size() - 1].x << " )";
-                adcm::Log::Info() << "main_vehicle push to mapData (y:" << main_vehicle.map_2d_location[0].y << " ~ " << main_vehicle.map_2d_location[main_vehicle.map_2d_location.size() - 1].y << " )";
+                // adcm::Log::Info() << "main_vehicle push to mapData (x:" << main_vehicle.map_2d_location[0].x << " ~ " << main_vehicle.map_2d_location[main_vehicle.map_2d_location.size() - 1].x << " )";
+                // adcm::Log::Info() << "main_vehicle push to mapData (y:" << main_vehicle.map_2d_location[0].y << " ~ " << main_vehicle.map_2d_location[main_vehicle.map_2d_location.size() - 1].y << " )";
                 for (auto iter1 = main_vehicle.map_2d_location.begin(); iter1 < main_vehicle.map_2d_location.end(); iter1++)
                 {
                     adcm::map2dIndex index_to_push;
@@ -1223,8 +1248,8 @@ void ThreadKatech()
             if (sub1_vehicle.vehicle_class == SUB_VEHICLE_1)
             // 테스트용 sub1 값이 있을때만 아래 수행
             {
-                adcm::Log::Info() << "sub1_vehicle push to mapData (x:" << sub1_vehicle.map_2d_location.begin()->x << " ~ " << sub1_vehicle.map_2d_location.end()->x << " )";
-                adcm::Log::Info() << "sub1_vehicle push to mapData (y:" << sub1_vehicle.map_2d_location.begin()->y << " ~ " << sub1_vehicle.map_2d_location.end()->y << " )";
+                // adcm::Log::Info() << "sub1_vehicle push to mapData (x:" << sub1_vehicle.map_2d_location.begin()->x << " ~ " << sub1_vehicle.map_2d_location[sub1_vehicle.map_2d_location.size() - 1].x << " )";
+                // adcm::Log::Info() << "sub1_vehicle push to mapData (y:" << sub1_vehicle.map_2d_location.begin()->y << " ~ " << sub1_vehicle.map_2d_location[sub1_vehicle.map_2d_location.size() - 1].y << " )";
                 sub1_vehicle_final.vehicle_class = sub1_vehicle.vehicle_class;
                 sub1_vehicle_final.timestamp = sub1_vehicle.timestamp;
                 sub1_vehicle_final.map_2d_location.clear();
@@ -1261,8 +1286,8 @@ void ThreadKatech()
                 sub2_vehicle_final.vehicle_class = sub2_vehicle.vehicle_class;
                 sub2_vehicle_final.timestamp = sub2_vehicle.timestamp;
                 sub2_vehicle_final.map_2d_location.clear();
-                adcm::Log::Info() << "sub2_vehicle push to mapData (x:" << sub2_vehicle.map_2d_location.begin()->x << " ~ " << sub2_vehicle.map_2d_location.end()->x << " )";
-                adcm::Log::Info() << "sub2_vehicle push to mapData (y:" << sub2_vehicle.map_2d_location.begin()->y << " ~ " << sub2_vehicle.map_2d_location.end()->y << " )";
+                // adcm::Log::Info() << "sub2_vehicle push to mapData (x:" << sub2_vehicle.map_2d_location.begin()->x << " ~ " << sub2_vehicle.map_2d_location[sub2_vehicle.map_2d_location.size() - 1].x << " )";
+                // adcm::Log::Info() << "sub2_vehicle push to mapData (y:" << sub2_vehicle.map_2d_location.begin()->y << " ~ " << sub2_vehicle.map_2d_location[sub2_vehicle.map_2d_location.size() - 1].y << " )";
                 for (auto iter1 = sub2_vehicle.map_2d_location.begin(); iter1 < sub2_vehicle.map_2d_location.end(); iter1++)
                 {
                     adcm::map2dIndex index_to_push;

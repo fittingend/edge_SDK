@@ -522,7 +522,7 @@ void ThreadAct1()
 
         if (buildPath_rxEvent)
         {
-            adcm::Log::Info() << "Build Path 수신";
+            // adcm::Log::Info() << "Build Path 수신";
             adcm::Log::Verbose() << "[EVENT] RiskAssessment Build Path received";
             // if (buildPath_subscriber.isEventQueueEmpty())
             // {
