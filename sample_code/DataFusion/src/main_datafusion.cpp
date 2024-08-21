@@ -232,7 +232,7 @@ void gpsToMapcoordinate(VehicleData &vehicle)
     vehicle.velocity_y = velocity_x * sin(angle_radians) + velocity_y * cos(angle_radians);
     // vehicle.velocity_x = (velocity_ang * (-sin(theta) * (position_x - alpha) + (cos(theta) * (position_y - beta)))) + (velocity_x * cos(theta)) + (velocity_y * sin(theta));
     // vehicle.velocity_y = (velocity_ang * (-cos(theta) * (position_x - alpha) - (sin(theta) * (position_y - beta)))) + (velocity_x * -sin(theta)) + (velocity_y * cos(theta));
-    vehicle.yaw = -(vehicle.yaw + MAP_ANGLE); // 맵에 맞춰 차량 각도 회전
+    vehicle.yaw = -(vehicle.yaw + MAP_ANGLE - 90); // 맵에 맞춰 차량 각도 회전
     adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
     adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.velocity_x << " , " << vehicle.velocity_y << ")";
 }
@@ -293,7 +293,7 @@ void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleDa
 
     for (auto iter = obstacle_list.begin(); iter != obstacle_list.end(); iter++)
     {
-        // adcm::Log::Info() << "장애물 relativeToGlobal 좌표변환 before (" << iter->fused_position_x << " , " << iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
+        adcm::Log::Info() << "장애물 relativeToGlobal 좌표변환 before (" << iter->fused_position_x << " , " << iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
 
         double obstacle_position_x = iter->fused_position_x;
         double obstacle_position_y = iter->fused_position_y;
@@ -715,25 +715,26 @@ void ThreadReceiveHudData()
                     sub1_vehicle_temp.velocity_ang = data->velocity_ang;
                     adcm::Log::Info() << "sub vehicle1 data received";
                     obstacle_list_temp.clear();
-                    // for (int i = 0; i < data->obstacle.size(); i++)
-                    // {
-                    //     ObstacleData obstacle_to_push;
-                    //     obstacle_to_push.obstacle_class = data->obstacle[i].obstacle_class;
-                    //     obstacle_to_push.timestamp = data->timestamp;
-                    //     obstacle_to_push.fused_cuboid_x = data->obstacle[i].cuboid_x;
-                    //     obstacle_to_push.fused_cuboid_y = data->obstacle[i].cuboid_y;
-                    //     obstacle_to_push.fused_cuboid_z = data->obstacle[i].cuboid_z;
-                    //     obstacle_to_push.fused_heading_angle = data->obstacle[i].heading_angle;
-                    //     obstacle_to_push.fused_position_x = data->obstacle[i].position_x;
-                    //     obstacle_to_push.fused_position_y = data->obstacle[i].position_y;
-                    //     obstacle_to_push.fused_position_z = data->obstacle[i].position_z;
-                    //     obstacle_to_push.fused_velocity_x = data->obstacle[i].velocity_x;
-                    //     obstacle_to_push.fused_velocity_y = data->obstacle[i].velocity_y;
-                    //     obstacle_to_push.fused_velocity_z = data->obstacle[i].velocity_z;
 
-                    //     adcm::Log::Info() << "보조 차량1 기준 장애물 위치 : (" << obstacle_to_push.fused_position_x << ", " << obstacle_to_push.fused_position_y << ")";
-                    //     obstacle_list_temp.push_back(obstacle_to_push);
-                    // }
+                    for (int i = 0; i < data->obstacle.size(); i++)
+                    {
+                        ObstacleData obstacle_to_push;
+                        obstacle_to_push.obstacle_class = data->obstacle[i].obstacle_class;
+                        obstacle_to_push.timestamp = data->timestamp;
+                        obstacle_to_push.fused_cuboid_x = data->obstacle[i].cuboid_x;
+                        obstacle_to_push.fused_cuboid_y = data->obstacle[i].cuboid_y;
+                        obstacle_to_push.fused_cuboid_z = data->obstacle[i].cuboid_z;
+                        obstacle_to_push.fused_heading_angle = data->obstacle[i].heading_angle;
+                        obstacle_to_push.fused_position_x = data->obstacle[i].position_x;
+                        obstacle_to_push.fused_position_y = data->obstacle[i].position_y;
+                        obstacle_to_push.fused_position_z = data->obstacle[i].position_z;
+                        obstacle_to_push.fused_velocity_x = data->obstacle[i].velocity_x;
+                        obstacle_to_push.fused_velocity_y = data->obstacle[i].velocity_y;
+                        obstacle_to_push.fused_velocity_z = data->obstacle[i].velocity_z;
+
+                        adcm::Log::Info() << "보조 차량1 기준 장애물 위치 : (" << obstacle_to_push.fused_position_x << ", " << obstacle_to_push.fused_position_y << ")";
+                        obstacle_list_temp.push_back(obstacle_to_push);
+                    }
                     break;
 
                 case SUB_VEHICLE_2: // 보조차2가 보낸 인지데이터
@@ -1067,155 +1068,191 @@ void ThreadKatech()
             adcm::obstacleListStruct obstacle2;
             adcm::obstacleListStruct obstacle3;
             adcm::obstacleListStruct obstacle4; // 우선 장애물 최대 4개만 있다고 가정하고 진행
-            adcm::obstacleListStruct obstacle_map;
 
             adcm::vehicleListStruct main_vehicle_final;
             adcm::vehicleListStruct sub1_vehicle_final;
             adcm::vehicleListStruct sub2_vehicle_final;
 
             int count = 1;
-            int max_count = obstacle_list_filtered.size() + 1;
-            adcm::Log::Info() << "장애물 mapdata 반영 예정 개수 : " << max_count - 1;
+            int max_count = obstacle_list_filtered.size();
+            adcm::Log::Info() << "장애물 mapdata 반영 예정 개수 : " << max_count;
             for (auto iter = obstacle_list_filtered.begin(); iter != obstacle_list_filtered.end(); iter++)
             {
-
-                switch (count)
+                adcm::obstacleListStruct obstacle_map; // 장애물 개수 무시
+                adcm::Log::Info() << "obstacle " << count << " start pushing";
+                obstacle_map.obstacle_id = iter->obstacle_id;
+                obstacle_map.obstacle_class = iter->obstacle_class;
+                obstacle_map.timestamp = iter->timestamp;
+                obstacle_map.map_2d_location.clear();
+                for (auto iter1 = iter->map_2d_location.begin(); iter1 < iter->map_2d_location.end(); iter1++)
                 {
-                case 1:
-                    adcm::Log::Info() << "obstacle 1 start pushing";
-                    obstacle1.obstacle_id = iter->obstacle_id;
-                    obstacle1.obstacle_class = iter->obstacle_class;
-                    obstacle1.timestamp = iter->timestamp;
-                    obstacle1.map_2d_location.clear();
-                    for (auto iter1 = iter->map_2d_location.begin(); iter1 < iter->map_2d_location.end(); iter1++)
-                    {
-                        adcm::map2dIndex index_to_push;
-                        index_to_push.x = iter1->x;
-                        index_to_push.y = iter1->y;
-                        map_2d_test[index_to_push.x][index_to_push.y].obstacle_id = iter->obstacle_id;
-                        // adcm::Log::Info() << "occupancy index pair of obstacle 1 is " << index_to_push.x << " , " << index_to_push.y;
-                        // adcm::Log::Info() << "occupancy index of obstacle id " << iter->obstacle_id;
-                        // adcm::Log::Info() << "map_2d_test[" << index_to_push.x << "][" <<index_to_push.y << "] = " <<  map_2d_test[index_to_push.x][index_to_push.y].obstacle_id;
-                        obstacle1.map_2d_location.push_back(index_to_push);
-                    }
-                    obstacle1.stop_count = iter->stop_count;
-                    obstacle1.fused_cuboid_x = iter->fused_cuboid_x;
-                    obstacle1.fused_cuboid_y = iter->fused_cuboid_y;
-                    obstacle1.fused_cuboid_z = iter->fused_cuboid_z;
-                    obstacle1.fused_heading_angle = iter->fused_heading_angle;
-                    obstacle1.fused_position_x = iter->fused_position_x;
-                    obstacle1.fused_position_y = iter->fused_position_y;
-                    obstacle1.fused_position_z = iter->fused_position_z;
-                    obstacle1.fused_velocity_x = iter->fused_velocity_x;
-                    obstacle1.fused_velocity_y = iter->fused_velocity_y;
-                    obstacle1.fused_velocity_z = iter->fused_velocity_z;
-
-                    mapData.obstacle_list.push_back(obstacle1);
-                    adcm::Log::Info() << "obstacle 1 is pushed to the mapData";
-                    break;
-
-                case 2:
-                    adcm::Log::Info() << "obstacle 2 start pushing";
-                    obstacle2.obstacle_id = iter->obstacle_id;
-                    obstacle2.obstacle_class = iter->obstacle_class;
-                    obstacle2.timestamp = iter->timestamp;
-                    obstacle2.map_2d_location.clear();
-                    adcm::Log::Info() << "check1";
-                    for (auto iter1 = iter->map_2d_location.begin(); iter1 < iter->map_2d_location.end(); iter1++)
-                    {
-                        adcm::map2dIndex index_to_push;
-                        index_to_push.x = iter1->x;
-                        index_to_push.y = iter1->y;
-                        map_2d_test[index_to_push.x][index_to_push.y].obstacle_id = iter->obstacle_id;
-                        // adcm::Log::Info() << "obstacle id : " << iter->obstacle_id;
-                        // adcm::Log::Info() << "obstacle2 map_2d_location : (" << index_to_push.x << ", " << index_to_push.y << ")";
-                        // adcm::Log::Info() << "occupancy index pair of obstacle 2 is " << index_to_push.x << " , " << index_to_push.y;
-                        // adcm::Log::Info() << "occupancy index of obstacle id " << iter->obstacle_id;
-                        obstacle2.map_2d_location.push_back(index_to_push);
-                    }
-                    adcm::Log::Info() << "check2";
-                    obstacle2.stop_count = iter->stop_count;
-                    obstacle2.fused_cuboid_x = iter->fused_cuboid_x;
-                    obstacle2.fused_cuboid_y = iter->fused_cuboid_y;
-                    obstacle2.fused_cuboid_z = iter->fused_cuboid_z;
-                    obstacle2.fused_heading_angle = iter->fused_heading_angle;
-                    obstacle2.fused_position_x = iter->fused_position_x;
-                    obstacle2.fused_position_y = iter->fused_position_y;
-                    obstacle2.fused_position_z = iter->fused_position_z;
-                    obstacle2.fused_velocity_x = iter->fused_velocity_x;
-                    obstacle2.fused_velocity_y = iter->fused_velocity_y;
-                    obstacle2.fused_velocity_z = iter->fused_velocity_z;
-                    mapData.obstacle_list.push_back(obstacle2);
-                    adcm::Log::Info() << "obstacle 2 is pushed to the mapData";
-                    break;
-
-                case 3:
-                    adcm::Log::Info() << "obstacle 3 start pushing";
-                    obstacle3.obstacle_id = iter->obstacle_id;
-                    obstacle3.obstacle_class = iter->obstacle_class;
-                    obstacle3.timestamp = iter->timestamp;
-                    obstacle3.map_2d_location.clear();
-                    for (auto iter1 = iter->map_2d_location.begin(); iter1 < iter->map_2d_location.end(); iter1++)
-                    {
-                        adcm::map2dIndex index_to_push;
-                        index_to_push.x = iter1->x;
-                        index_to_push.y = iter1->y;
-                        map_2d_test[index_to_push.x][index_to_push.y].obstacle_id = iter->obstacle_id;
-                        obstacle3.map_2d_location.push_back(index_to_push);
-                    }
-                    obstacle3.stop_count = iter->stop_count;
-                    obstacle3.fused_cuboid_x = iter->fused_cuboid_x;
-                    obstacle3.fused_cuboid_y = iter->fused_cuboid_y;
-                    obstacle3.fused_cuboid_z = iter->fused_cuboid_z;
-                    obstacle3.fused_heading_angle = iter->fused_heading_angle;
-                    obstacle3.fused_position_x = iter->fused_position_x;
-                    obstacle3.fused_position_y = iter->fused_position_y;
-                    obstacle3.fused_position_z = iter->fused_position_z;
-                    obstacle3.fused_velocity_x = iter->fused_velocity_x;
-                    obstacle3.fused_velocity_y = iter->fused_velocity_y;
-                    obstacle3.fused_velocity_z = iter->fused_velocity_z;
-                    mapData.obstacle_list.push_back(obstacle3);
-                    adcm::Log::Info() << "obstacle 3 is pushed to the mapData";
-                    break;
-
-                case 4:
-                    adcm::Log::Info() << "obstacle 4 start pushing";
-                    obstacle4.obstacle_id = iter->obstacle_id;
-                    obstacle4.obstacle_class = iter->obstacle_class;
-                    obstacle4.timestamp = iter->timestamp;
-                    obstacle4.map_2d_location.clear();
-                    for (auto iter1 = iter->map_2d_location.begin(); iter1 < iter->map_2d_location.end(); iter1++)
-                    {
-                        adcm::map2dIndex index_to_push;
-                        index_to_push.x = iter1->x;
-                        index_to_push.y = iter1->y;
-                        map_2d_test[index_to_push.x][index_to_push.y].obstacle_id = iter->obstacle_id;
-                        // mapData.map_2d[iter1->x][iter1->y].obstacle_id = iter->obstacle_id;
-                        obstacle4.map_2d_location.push_back(index_to_push);
-                    }
-                    obstacle4.stop_count = iter->stop_count;
-                    obstacle4.fused_cuboid_x = iter->fused_cuboid_x;
-                    obstacle4.fused_cuboid_y = iter->fused_cuboid_y;
-                    obstacle4.fused_cuboid_z = iter->fused_cuboid_z;
-                    obstacle4.fused_heading_angle = iter->fused_heading_angle;
-                    obstacle4.fused_position_x = iter->fused_position_x;
-                    obstacle4.fused_position_y = iter->fused_position_y;
-                    obstacle4.fused_position_z = iter->fused_position_z;
-                    obstacle4.fused_velocity_x = iter->fused_velocity_x;
-                    obstacle4.fused_velocity_y = iter->fused_velocity_y;
-                    obstacle4.fused_velocity_z = iter->fused_velocity_z;
-                    adcm::Log::Info() << "obstacle 4 is pushed to the mapData";
-
-                default:
-                    adcm::Log::Info() << "drop obstacle";
-                    break;
+                    adcm::map2dIndex index_to_push;
+                    index_to_push.x = iter1->x;
+                    index_to_push.y = iter1->y;
+                    map_2d_test[index_to_push.x][index_to_push.y].obstacle_id = iter->obstacle_id;
+                    // adcm::Log::Info() << "occupancy index pair of obstacle 1 is " << index_to_push.x << " , " << index_to_push.y;
+                    // adcm::Log::Info() << "occupancy index of obstacle id " << iter->obstacle_id;
+                    // adcm::Log::Info() << "map_2d_test[" << index_to_push.x << "][" <<index_to_push.y << "] = " <<  map_2d_test[index_to_push.x][index_to_push.y].obstacle_id;
+                    obstacle_map.map_2d_location.push_back(index_to_push);
                 }
-                if (count < max_count)
-                {
-                    count++;
-                }
-                else
-                    break;
+                obstacle_map.stop_count = iter->stop_count;
+                obstacle_map.fused_cuboid_x = iter->fused_cuboid_x;
+                obstacle_map.fused_cuboid_y = iter->fused_cuboid_y;
+                obstacle_map.fused_cuboid_z = iter->fused_cuboid_z;
+                obstacle_map.fused_heading_angle = iter->fused_heading_angle;
+                obstacle_map.fused_position_x = iter->fused_position_x;
+                obstacle_map.fused_position_y = iter->fused_position_y;
+                obstacle_map.fused_position_z = iter->fused_position_z;
+                obstacle_map.fused_velocity_x = iter->fused_velocity_x;
+                obstacle_map.fused_velocity_y = iter->fused_velocity_y;
+                obstacle_map.fused_velocity_z = iter->fused_velocity_z;
+
+                mapData.obstacle_list.push_back(obstacle_map);
+                adcm::Log::Info() << "obstacle " << count << " is pushed to the mapData";
+
+                // if (count < max_count)
+                // {
+                //     count++;
+                // }
+                // else
+                //     break;
+                // switch (count)
+                // {
+                // case 1:
+                //     adcm::Log::Info() << "obstacle 1 start pushing";
+                //     obstacle1.obstacle_id = iter->obstacle_id;
+                //     obstacle1.obstacle_class = iter->obstacle_class;
+                //     obstacle1.timestamp = iter->timestamp;
+                //     obstacle1.map_2d_location.clear();
+                //     for (auto iter1 = iter->map_2d_location.begin(); iter1 < iter->map_2d_location.end(); iter1++)
+                //     {
+                //         adcm::map2dIndex index_to_push;
+                //         index_to_push.x = iter1->x;
+                //         index_to_push.y = iter1->y;
+                //         map_2d_test[index_to_push.x][index_to_push.y].obstacle_id = iter->obstacle_id;
+                //         // adcm::Log::Info() << "occupancy index pair of obstacle 1 is " << index_to_push.x << " , " << index_to_push.y;
+                //         // adcm::Log::Info() << "occupancy index of obstacle id " << iter->obstacle_id;
+                //         // adcm::Log::Info() << "map_2d_test[" << index_to_push.x << "][" <<index_to_push.y << "] = " <<  map_2d_test[index_to_push.x][index_to_push.y].obstacle_id;
+                //         obstacle1.map_2d_location.push_back(index_to_push);
+                //     }
+                //     obstacle1.stop_count = iter->stop_count;
+                //     obstacle1.fused_cuboid_x = iter->fused_cuboid_x;
+                //     obstacle1.fused_cuboid_y = iter->fused_cuboid_y;
+                //     obstacle1.fused_cuboid_z = iter->fused_cuboid_z;
+                //     obstacle1.fused_heading_angle = iter->fused_heading_angle;
+                //     obstacle1.fused_position_x = iter->fused_position_x;
+                //     obstacle1.fused_position_y = iter->fused_position_y;
+                //     obstacle1.fused_position_z = iter->fused_position_z;
+                //     obstacle1.fused_velocity_x = iter->fused_velocity_x;
+                //     obstacle1.fused_velocity_y = iter->fused_velocity_y;
+                //     obstacle1.fused_velocity_z = iter->fused_velocity_z;
+
+                //     mapData.obstacle_list.push_back(obstacle1);
+                //     adcm::Log::Info() << "obstacle 1 is pushed to the mapData";
+                //     break;
+
+                // case 2:
+                //     adcm::Log::Info() << "obstacle 2 start pushing";
+                //     obstacle2.obstacle_id = iter->obstacle_id;
+                //     obstacle2.obstacle_class = iter->obstacle_class;
+                //     obstacle2.timestamp = iter->timestamp;
+                //     obstacle2.map_2d_location.clear();
+                //     adcm::Log::Info() << "check1";
+                //     for (auto iter1 = iter->map_2d_location.begin(); iter1 < iter->map_2d_location.end(); iter1++)
+                //     {
+                //         adcm::map2dIndex index_to_push;
+                //         index_to_push.x = iter1->x;
+                //         index_to_push.y = iter1->y;
+                //         map_2d_test[index_to_push.x][index_to_push.y].obstacle_id = iter->obstacle_id;
+                //         // adcm::Log::Info() << "obstacle id : " << iter->obstacle_id;
+                //         // adcm::Log::Info() << "obstacle2 map_2d_location : (" << index_to_push.x << ", " << index_to_push.y << ")";
+                //         // adcm::Log::Info() << "occupancy index pair of obstacle 2 is " << index_to_push.x << " , " << index_to_push.y;
+                //         // adcm::Log::Info() << "occupancy index of obstacle id " << iter->obstacle_id;
+                //         obstacle2.map_2d_location.push_back(index_to_push);
+                //     }
+                //     adcm::Log::Info() << "check2";
+                //     obstacle2.stop_count = iter->stop_count;
+                //     obstacle2.fused_cuboid_x = iter->fused_cuboid_x;
+                //     obstacle2.fused_cuboid_y = iter->fused_cuboid_y;
+                //     obstacle2.fused_cuboid_z = iter->fused_cuboid_z;
+                //     obstacle2.fused_heading_angle = iter->fused_heading_angle;
+                //     obstacle2.fused_position_x = iter->fused_position_x;
+                //     obstacle2.fused_position_y = iter->fused_position_y;
+                //     obstacle2.fused_position_z = iter->fused_position_z;
+                //     obstacle2.fused_velocity_x = iter->fused_velocity_x;
+                //     obstacle2.fused_velocity_y = iter->fused_velocity_y;
+                //     obstacle2.fused_velocity_z = iter->fused_velocity_z;
+                //     mapData.obstacle_list.push_back(obstacle2);
+                //     adcm::Log::Info() << "obstacle 2 is pushed to the mapData";
+                //     break;
+
+                // case 3:
+                //     adcm::Log::Info() << "obstacle 3 start pushing";
+                //     obstacle3.obstacle_id = iter->obstacle_id;
+                //     obstacle3.obstacle_class = iter->obstacle_class;
+                //     obstacle3.timestamp = iter->timestamp;
+                //     obstacle3.map_2d_location.clear();
+                //     for (auto iter1 = iter->map_2d_location.begin(); iter1 < iter->map_2d_location.end(); iter1++)
+                //     {
+                //         adcm::map2dIndex index_to_push;
+                //         index_to_push.x = iter1->x;
+                //         index_to_push.y = iter1->y;
+                //         map_2d_test[index_to_push.x][index_to_push.y].obstacle_id = iter->obstacle_id;
+                //         obstacle3.map_2d_location.push_back(index_to_push);
+                //     }
+                //     obstacle3.stop_count = iter->stop_count;
+                //     obstacle3.fused_cuboid_x = iter->fused_cuboid_x;
+                //     obstacle3.fused_cuboid_y = iter->fused_cuboid_y;
+                //     obstacle3.fused_cuboid_z = iter->fused_cuboid_z;
+                //     obstacle3.fused_heading_angle = iter->fused_heading_angle;
+                //     obstacle3.fused_position_x = iter->fused_position_x;
+                //     obstacle3.fused_position_y = iter->fused_position_y;
+                //     obstacle3.fused_position_z = iter->fused_position_z;
+                //     obstacle3.fused_velocity_x = iter->fused_velocity_x;
+                //     obstacle3.fused_velocity_y = iter->fused_velocity_y;
+                //     obstacle3.fused_velocity_z = iter->fused_velocity_z;
+                //     mapData.obstacle_list.push_back(obstacle3);
+                //     adcm::Log::Info() << "obstacle 3 is pushed to the mapData";
+                //     break;
+
+                // case 4:
+                //     adcm::Log::Info() << "obstacle 4 start pushing";
+                //     obstacle4.obstacle_id = iter->obstacle_id;
+                //     obstacle4.obstacle_class = iter->obstacle_class;
+                //     obstacle4.timestamp = iter->timestamp;
+                //     obstacle4.map_2d_location.clear();
+                //     for (auto iter1 = iter->map_2d_location.begin(); iter1 < iter->map_2d_location.end(); iter1++)
+                //     {
+                //         adcm::map2dIndex index_to_push;
+                //         index_to_push.x = iter1->x;
+                //         index_to_push.y = iter1->y;
+                //         map_2d_test[index_to_push.x][index_to_push.y].obstacle_id = iter->obstacle_id;
+                //         // mapData.map_2d[iter1->x][iter1->y].obstacle_id = iter->obstacle_id;
+                //         obstacle4.map_2d_location.push_back(index_to_push);
+                //     }
+                //     obstacle4.stop_count = iter->stop_count;
+                //     obstacle4.fused_cuboid_x = iter->fused_cuboid_x;
+                //     obstacle4.fused_cuboid_y = iter->fused_cuboid_y;
+                //     obstacle4.fused_cuboid_z = iter->fused_cuboid_z;
+                //     obstacle4.fused_heading_angle = iter->fused_heading_angle;
+                //     obstacle4.fused_position_x = iter->fused_position_x;
+                //     obstacle4.fused_position_y = iter->fused_position_y;
+                //     obstacle4.fused_position_z = iter->fused_position_z;
+                //     obstacle4.fused_velocity_x = iter->fused_velocity_x;
+                //     obstacle4.fused_velocity_y = iter->fused_velocity_y;
+                //     obstacle4.fused_velocity_z = iter->fused_velocity_z;
+                //     adcm::Log::Info() << "obstacle 4 is pushed to the mapData";
+
+                // default:
+                //     adcm::Log::Info() << "drop obstacle";
+                //     break;
+                // }
+                // if (count < max_count)
+                // {
+                //     count++;
+                // }
+                // else
+                //     break;
             }
             adcm::Log::Info() << "mapData obstacle list size is " << mapData.obstacle_list.size();
 
