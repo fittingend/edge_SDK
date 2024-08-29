@@ -137,11 +137,11 @@ void checkRange(Point2D &point)
 
     if (point.x > map_n)
     {
-        point.x = map_n;
+        point.x = map_n - 1;
     }
     if (point.y > map_m)
     {
-        point.y = map_m;
+        point.y = map_m - 1;
     }
 }
 //-------------------------boundary 맵 대상 코드-------------------------//
@@ -234,7 +234,7 @@ void gpsToMapcoordinate(VehicleData &vehicle)
     // vehicle.velocity_y = (velocity_ang * (-cos(theta) * (position_x - alpha) - (sin(theta) * (position_y - beta)))) + (velocity_x * -sin(theta)) + (velocity_y * cos(theta));
     vehicle.yaw = -(vehicle.yaw + MAP_ANGLE - 90); // 맵에 맞춰 차량 각도 회전
     // adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
-    adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.velocity_x << " , " << vehicle.velocity_y << ")";
+    adcm::Log::Info() << "timestamp: " << vehicle.timestamp << " 차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.yaw << ")";
 }
 // void gpsToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData main_vehicle)
 // {
@@ -288,6 +288,7 @@ void gpsToMapcoordinate(VehicleData &vehicle)
 // }
 void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData vehicle)
 {
+    srand((unsigned int)time(NULL));
     double theta = vehicle.yaw * M_PI / 180.0;
     double velocity_ang = vehicle.velocity_ang;
 
@@ -313,10 +314,14 @@ void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleDa
 
         iter->fused_heading_angle = vehicle.yaw + iter->fused_heading_angle;
         if (iter->fused_position_x < 0)
-            iter->fused_position_x = 0;
+        {
+            iter->fused_position_x = rand() % 3;
+        }
 
         if (iter->fused_position_y < 0)
-            iter->fused_position_y = 0;
+        {
+            iter->fused_position_y = rand() % 3;
+        }
 
         adcm::Log::Info() << "장애물 relativeToMap 좌표변환 after (" << iter->fused_position_x << " , " << iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
     }
@@ -411,7 +416,7 @@ void generateRoadZValue(VehicleData target_vehicle, std::vector<adcm::map_2dList
     }
     adcm::Log::Info() << "generateRoadZValue finish";
 }
-// map 내부에 있을 시 어떤 역할??
+
 void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, VehicleData &vehicle, std::vector<adcm::map_2dListVector> &map_2d_test)
 {
     long arr_x[] = {p0.x, p1.x, p2.x, p3.x};
@@ -462,6 +467,7 @@ void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, Vehi
 
     adcm::Log::Info() << "Vehicle class " << vehicle.vehicle_class << " generateOccupancyIndex";
 }
+/*
 void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std::vector<ObstacleData>::iterator iter)
 {
     long arr_x[] = {p0.x, p1.x, p2.x, p3.x};
@@ -503,6 +509,48 @@ void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std:
         }
     }
 }
+*/
+// 기존 map_2d_location 반영 함수 수정
+void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std::vector<ObstacleData>::iterator iter)
+{
+    long arr_x[] = {p0.x, p1.x, p2.x, p3.x};
+    long arr_y[] = {p0.y, p1.y, p2.y, p3.y};
+    // find max x&y and min x&y of the rectangle
+    int n = sizeof(arr_y) / sizeof(arr_y[0]);
+    // Implemented inbuilt function to sort array
+    std::sort(arr_x, arr_x + n);
+    std::sort(arr_y, arr_y + n);
+    long min_x = arr_x[0];
+    long max_x = arr_x[n - 1];
+    long min_y = arr_y[0];
+    long max_y = arr_y[n - 1];
+
+    Point2D p[] = {p0, p1, p2, p3};
+    Point2D index;
+
+    for (index.x = min_x; index.x < max_x; index.x++)
+    {
+        for (index.y = min_y; index.y < max_y; index.y++)
+        {
+            int cross = 0;
+            for (int i = 0; i < 4; i++)
+            {
+                int j = (i + 1) % 4;
+                if ((p[i].y > index.y) != (p[j].y > index.y))
+                {
+                    double meetX = (p[j].x - p[i].x) * (index.y - p[i].y) / (p[j].y - p[i].y) + p[i].x;
+                    if (index.x < meetX)
+                        cross++;
+                }
+            }
+            if (cross % 2 > 0)
+            {
+                iter->map_2d_location.push_back(index);
+            }
+        }
+    }
+}
+
 void find4VerticesVehicle(VehicleData &target_vehicle, std::vector<adcm::map_2dListVector> &map_2d_test)
 {
     Point2D LU, RU, RL, LL;
@@ -598,9 +646,12 @@ void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered)
         checkRange(RU);
         checkRange(RL);
         checkRange(LL);
+        adcm::Log::Info() << "장애물 꼭 범위 확인완료";
 
         generateOccupancyIndex(LU, RU, RL, LL, *(&iter));
+        adcm::Log::Info() << "장애물 index 생성완료";
     }
+    adcm::Log::Info() << "장애물 꼭짓점 범위 확인완료";
 }
 
 namespace
@@ -1040,9 +1091,8 @@ void ThreadKatech()
                             if (iter1->stop_count == 1)
                             {
                                 iter1->stop_count = iter->stop_count + iter1->stop_count;
-                                adcm::Log::Info() << "stop count updated to " << iter1->stop_count << "for obstacle " << iter1->obstacle_id;
-
-                                // stop_count 업데이트
+                                // adcm::Log::Info() << "stop count updated to " << iter1->stop_count << "for obstacle " << iter1->obstacle_id;
+                                //  stop_count 업데이트
                             }
                             // 한번이라도 stop_count가 0 이 라면 카운트 리셋
                         }
@@ -1051,6 +1101,7 @@ void ThreadKatech()
             }
             mapData.obstacle_list.clear();
 
+            adcm::Log::Info() << "stop count 변동 완료";
             //==============7. 장애물과 차량의 occupancy 계산해 map_2d_location 값 업데이트 ========
 
             if (!obstacle_list_filtered.empty())
@@ -1094,7 +1145,7 @@ void ThreadKatech()
             for (auto iter = obstacle_list_filtered.begin(); iter != obstacle_list_filtered.end(); iter++)
             {
                 adcm::obstacleListStruct obstacle_map; // 장애물 개수 무시
-                adcm::Log::Info() << "obstacle " << count << " start pushing";
+                // adcm::Log::Info() << "obstacle " << count << " start pushing";
                 count++;
                 obstacle_map.obstacle_id = iter->obstacle_id;
                 obstacle_map.obstacle_class = iter->obstacle_class;
@@ -1124,7 +1175,7 @@ void ThreadKatech()
                 obstacle_map.fused_velocity_z = iter->fused_velocity_z;
 
                 mapData.obstacle_list.push_back(obstacle_map);
-                adcm::Log::Info() << "obstacle " << count << " is pushed to the mapData";
+                // adcm::Log::Info() << "obstacle " << count << " is pushed to the mapData";
 
                 // if (count < max_count)
                 // {
