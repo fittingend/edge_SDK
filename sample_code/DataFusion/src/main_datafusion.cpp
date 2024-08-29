@@ -123,7 +123,7 @@ bool checkRange(VehicleData vehicle)
 {
     bool range_OK = false;
 
-    if (vehicle.position_x > -500 && vehicle.position_x < 3000 && vehicle.position_y > -500 && vehicle.position_y < 1500)
+    if (vehicle.position_x > 0 && vehicle.position_x < 3000 && vehicle.position_y > 0 && vehicle.position_y < 1500)
     {
         if (vehicle.timestamp)
             range_OK = true;
@@ -233,7 +233,7 @@ void gpsToMapcoordinate(VehicleData &vehicle)
     // vehicle.velocity_x = (velocity_ang * (-sin(theta) * (position_x - alpha) + (cos(theta) * (position_y - beta)))) + (velocity_x * cos(theta)) + (velocity_y * sin(theta));
     // vehicle.velocity_y = (velocity_ang * (-cos(theta) * (position_x - alpha) - (sin(theta) * (position_y - beta)))) + (velocity_x * -sin(theta)) + (velocity_y * cos(theta));
     vehicle.yaw = -(vehicle.yaw + MAP_ANGLE - 90); // 맵에 맞춰 차량 각도 회전
-    adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
+    // adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
     adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.velocity_x << " , " << vehicle.velocity_y << ")";
 }
 // void gpsToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData main_vehicle)
@@ -293,7 +293,7 @@ void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleDa
 
     for (auto iter = obstacle_list.begin(); iter != obstacle_list.end(); iter++)
     {
-        adcm::Log::Info() << "장애물 relativeToGlobal 좌표변환 before (" << iter->fused_position_x << " , " << iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
+        // adcm::Log::Info() << "장애물 relativeToGlobal 좌표변환 before (" << iter->fused_position_x << " , " << iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
 
         double obstacle_position_x = iter->fused_position_x;
         double obstacle_position_y = iter->fused_position_y;
@@ -312,6 +312,11 @@ void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleDa
         iter->fused_velocity_y = obstacle_velocity_x + vehicle.velocity_y;
 
         iter->fused_heading_angle = vehicle.yaw + iter->fused_heading_angle;
+        if (iter->fused_position_x < 0)
+            iter->fused_position_x = 0;
+
+        if (iter->fused_position_y < 0)
+            iter->fused_position_y = 0;
 
         adcm::Log::Info() << "장애물 relativeToMap 좌표변환 after (" << iter->fused_position_x << " , " << iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
     }
@@ -635,7 +640,7 @@ namespace
 } // namespace
 
 // hubData 수신
-void ThreadReceiveHudData()
+void ThreadReceiveHubData()
 {
     adcm::Log::Info() << "SDK release_240524_interface v1.7";
     // adcm::MapData_Provider mapData_provider;
@@ -643,13 +648,12 @@ void ThreadReceiveHudData()
     INFO("DataFusion .init()");
     // mapData_provider.init("DataFusion/DataFusion/PPort_map_data");
     hubData_subscriber.init("DataFusion/DataFusion/RPort_hub_data");
-    INFO("ThreadReceiveHudData start...");
+    INFO("ThreadReceiveHubData start...");
     while (continueExecution)
     {
         gMainthread_Loopcount++;
         VERBOSE("[DataFusion] Application loop");
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        bool hubData_rxEvent = hubData_subscriber.waitEvent(0); // wait event
+        bool hubData_rxEvent = hubData_subscriber.waitEvent(100); // wait event
 
         if (hubData_rxEvent)
         {
@@ -732,7 +736,7 @@ void ThreadReceiveHudData()
                         obstacle_to_push.fused_velocity_y = data->obstacle[i].velocity_y;
                         obstacle_to_push.fused_velocity_z = data->obstacle[i].velocity_z;
 
-                        adcm::Log::Info() << "보조 차량1 기준 장애물 위치 : (" << obstacle_to_push.fused_position_x << ", " << obstacle_to_push.fused_position_y << ")";
+                        // adcm::Log::Info() << "보조 차량1 기준 장애물 위치 : (" << obstacle_to_push.fused_position_x << ", " << obstacle_to_push.fused_position_y << ")";
                         obstacle_list_temp.push_back(obstacle_to_push);
                     }
                     break;
@@ -766,24 +770,23 @@ void ThreadReceiveHudData()
         }
     }
 }
-
 // work_information 수신
 void ThreadReceiveWorkInfo()
 {
-    adcm::Log::Info() << "DataFusion ThreadAct2";
+    adcm::Log::Info() << "DataFusion ThreadReceiveWorkInfo";
     adcm::WorkInformation_Subscriber workInformation_subscriber;
     workInformation_subscriber.init("DataFusion/DataFusion/RPort_work_information");
     INFO("ThreadReceiveWorkInfo start...");
 
     while (continueExecution)
     {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        bool workInfo_rxEvent = workInformation_subscriber.waitEvent(0);
+        bool workInfo_rxEvent = workInformation_subscriber.waitEvent(100);
 
         if (workInfo_rxEvent)
         {
-            adcm::Log::Verbose() << "[EVENT] DataFusion Work Information received";
 
+            adcm::Log::Verbose() << "[EVENT] DataFusion Work Information received";
+            adcm::Log::Info() << "DataFusion Work Information received";
             while (!workInformation_subscriber.isEventQueueEmpty())
             {
                 auto data = workInformation_subscriber.getEvent();
@@ -843,13 +846,16 @@ void ThreadKatech()
     adcm::map_data_Objects mapData;
     // 한번 생성후 관제에서 인지데이터를 받을때마다 (100ms) 마다 업데이트
     adcm::Log::Info() << "mapData created for the first time";
-
+    std::int8_t test = 1;
     ::adcm::map_2dListStruct map_2dStruct_init;
     map_2dStruct_init.obstacle_id = NO_OBSTACLE;
     map_2dStruct_init.road_z = 0;
     map_2dStruct_init.vehicle_class = NO_VEHICLE; // 시뮬레이션 데이터 설정때문에 부득이 NO_VEHICLE =5 로 바꿈
 
     std::vector<adcm::map_2dListVector> map_2d_test(map_n, adcm::map_2dListVector(map_m, map_2dStruct_init));
+
+    // boundary 위치 전송하는 controlhub 바이너리 받으면 조건 추가해서 for문안에 넣기
+    //  if (map_x >= 50 && map_x <= 300 && map_y >= 50 && map_y <= 300 && test == 1)
 
     /* 좌표계 변환 전 map
     std::vector<adcm::map_2dListVector> map_2d_test(max_x-min_x, adcm::map_2dListVector(max_y-min_y, map_2dStruct_init));
@@ -866,7 +872,13 @@ void ThreadKatech()
     //=============mapData provider 여기다 해보기==================
     adcm::MapData_Provider mapData_provider;
     mapData_provider.init("DataFusion/DataFusion/PPort_map_data");
-
+    if (test == 1)
+    {
+        mapData.map_2d = map_2d_test;
+        mapData_provider.send(mapData);
+        adcm::Log::Info() << "Send empty map data";
+        test = 0;
+    }
     VehicleData main_vehicle;
     VehicleData sub1_vehicle;
     VehicleData sub2_vehicle;
@@ -874,6 +886,9 @@ void ThreadKatech()
 
     while (continueExecution)
     {
+        std::int8_t map_x = max_a - min_a;
+        std::int8_t map_y = max_b - min_b;
+
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         adcm::Log::Info() << "==============KATECH modified code start==========";
         main_vehicle = main_vehicle_temp;
@@ -930,9 +945,9 @@ void ThreadKatech()
                     // if ((ABS(iter->fused_cuboid_x - iter1->fused_cuboid_x)< 0.001) && (ABS(iter->fused_cuboid_y - iter1->fused_cuboid_y)< 0.001) && (ABS(iter->fused_cuboid_z - iter1->fused_cuboid_z)<0.001))
                     if ((iter->fused_cuboid_x == iter1->fused_cuboid_x) && (iter->fused_cuboid_y == iter1->fused_cuboid_y) && (iter->fused_cuboid_z == iter1->fused_cuboid_z))
                     {
-                        adcm::Log::Info() << "cuboid x: " << iter->fused_cuboid_x << "cuboid y:" << iter->fused_cuboid_y << "obstacle id" << iter->obstacle_id;
-                        adcm::Log::Info() << "cuboid x: " << iter1->fused_cuboid_x << "cuboid y:" << iter1->fused_cuboid_y;
-                        adcm::Log::Info() << "Identical obstacle detected : " << iter->obstacle_id;
+                        // adcm::Log::Info() << "cuboid x: " << iter->fused_cuboid_x << "cuboid y:" << iter->fused_cuboid_y << "obstacle id" << iter->obstacle_id;
+                        // adcm::Log::Info() << "cuboid x: " << iter1->fused_cuboid_x << "cuboid y:" << iter1->fused_cuboid_y;
+                        // adcm::Log::Info() << "Identical obstacle detected : " << iter->obstacle_id;
                         iter1->obstacle_id = iter->obstacle_id;
                         obstacle_list_filtered.push_back(*iter1);
                         iter1 = obstacle_list.erase(iter1);
@@ -940,7 +955,7 @@ void ThreadKatech()
                     else // 동일하지 않은 장애물에는 temp value 인 99 으로 id를 우선 지정
                     {
                         iter1->obstacle_id = INVALID_VALUE;
-                        adcm::Log::Info() << " New obstacle appeared OR tracking failed";
+                        // adcm::Log::Info() << " New obstacle appeared OR tracking failed";
                         ++iter1;
                     }
                 }
@@ -994,7 +1009,7 @@ void ThreadKatech()
         bool a = checkRange(main_vehicle);
         bool b = checkRange(sub1_vehicle);
         bool c = checkRange(sub2_vehicle);
-
+        adcm::Log::Info() << "좌표변환 완료 맵데이터 반영 시작";
         if (a || (b && c))
         { // execute only if all true!
             //==============5. 0.1 m/s 미만인 경우 장애물 정지 상태 판정 및 stop_count 값 assign =================
@@ -1043,19 +1058,19 @@ void ThreadKatech()
                 find4VerticesObstacle(obstacle_list_filtered);
             }
 
-            if (main_vehicle.vehicle_class == EGO_VEHICLE && main_vehicle.timestamp != 0)
+            if (a)
             {
                 // main vehicle 존재하므로 해당 function execution
                 find4VerticesVehicle(main_vehicle, map_2d_test);
             }
 
-            if (sub1_vehicle.vehicle_class == SUB_VEHICLE_1)
+            if (b)
             {
                 // sub1_vehicle 존재하므로 해당 function execution
                 find4VerticesVehicle(sub1_vehicle, map_2d_test);
             }
 
-            if (sub2_vehicle.vehicle_class == SUB_VEHICLE_2)
+            if (c)
             {
                 // sub2_vehicle 존재하므로 해당 function execution
                 find4VerticesVehicle(sub2_vehicle, map_2d_test);
@@ -1080,11 +1095,12 @@ void ThreadKatech()
             {
                 adcm::obstacleListStruct obstacle_map; // 장애물 개수 무시
                 adcm::Log::Info() << "obstacle " << count << " start pushing";
+                count++;
                 obstacle_map.obstacle_id = iter->obstacle_id;
                 obstacle_map.obstacle_class = iter->obstacle_class;
                 obstacle_map.timestamp = iter->timestamp;
                 obstacle_map.map_2d_location.clear();
-                for (auto iter1 = iter->map_2d_location.begin(); iter1 < iter->map_2d_location.end(); iter1++)
+                for (auto iter1 = iter->map_2d_location.begin(); iter1 != iter->map_2d_location.end(); iter1++)
                 {
                     adcm::map2dIndex index_to_push;
                     index_to_push.x = iter1->x;
@@ -1260,7 +1276,7 @@ void ThreadKatech()
 
             mapData.vehicle_list.clear();
 
-            if (main_vehicle.vehicle_class == EGO_VEHICLE && main_vehicle.timestamp != 0)
+            if (a)
             {
                 main_vehicle_final.vehicle_class = main_vehicle.vehicle_class;
                 main_vehicle_final.timestamp = main_vehicle.timestamp;
@@ -1297,7 +1313,7 @@ void ThreadKatech()
                 INFO("main_vehicle_final pushed to mapData");
             }
 
-            if (sub1_vehicle.vehicle_class == SUB_VEHICLE_1)
+            if (b)
             // 테스트용 sub1 값이 있을때만 아래 수행
             {
                 // adcm::Log::Info() << "sub1_vehicle push to mapData (x:" << sub1_vehicle.map_2d_location.begin()->x << " ~ " << sub1_vehicle.map_2d_location[sub1_vehicle.map_2d_location.size() - 1].x << " )";
@@ -1333,7 +1349,7 @@ void ThreadKatech()
                 INFO("sub1_vehicle_final pushed to mapData");
             }
 
-            if (sub2_vehicle.vehicle_class == SUB_VEHICLE_2)
+            if (c)
             {
                 sub2_vehicle_final.vehicle_class = sub2_vehicle.vehicle_class;
                 sub2_vehicle_final.timestamp = sub2_vehicle.timestamp;
@@ -1404,7 +1420,7 @@ void ThreadKatech()
             adcm::Log::Info() << "DATA FUSION DONE";
             adcm::Log::Info() << "map_2d pushed to mapData";
             mapData_provider.send(mapData);
-            adcm::Log::Info() << "mapData sent to RASS";
+            adcm::Log::Info() << "mapData send";
         }
         else
         {
@@ -1479,10 +1495,11 @@ int main(int argc, char *argv[])
 #endif
     adcm::Log::Info() << "Ok, let's produce some DataFusion data...";
 
-    thread_list.push_back(std::thread(ThreadReceiveHudData));
+    thread_list.push_back(std::thread(ThreadReceiveHubData));
+    thread_list.push_back(std::thread(ThreadReceiveWorkInfo));
     thread_list.push_back(std::thread(ThreadMonitor));
     thread_list.push_back(std::thread(ThreadKatech));
-    // thread_list.push_back(std::thread(ThreadReceiveWorkInfo));
+
     adcm::Log::Info() << "Thread join";
     for (int i = 0; i < static_cast<int>(thread_list.size()); i++)
     {
