@@ -306,8 +306,8 @@ void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleDa
         // adcm::Log::Info() << "장애물 relativeToMap 좌표변환 before (" << iter->fused_position_x << " , " << iter->fused_position_y << ", " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
         // adcm::Log::Info() << main_vehicle.yaw << "각 회전한 값 : (" << (obstacle_position_x)*cos(theta) - (obstacle_position_y)*sin(theta) << ", " << (obstacle_position_x)*sin(theta) + (obstacle_position_y)*cos(theta) << ")";
 
-        iter->fused_position_x = vehicle.position_x + ((obstacle_position_x)*cos(theta) - (obstacle_position_y)*sin(theta)) * M_TO_10CM_PRECISION;
-        iter->fused_position_y = vehicle.position_y + ((obstacle_position_x)*sin(theta) + (obstacle_position_y)*cos(theta)) * M_TO_10CM_PRECISION;
+        iter->fused_position_x = vehicle.position_x + ((obstacle_position_x)*cos(theta) + (obstacle_position_y)*sin(theta)) * M_TO_10CM_PRECISION;
+        iter->fused_position_y = vehicle.position_y + ((obstacle_position_x)*sin(theta) - (obstacle_position_y)*cos(theta)) * M_TO_10CM_PRECISION;
 
         iter->fused_velocity_x = obstacle_velocity_x + vehicle.velocity_x;
         iter->fused_velocity_y = obstacle_velocity_x + vehicle.velocity_y;
@@ -646,10 +646,8 @@ void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered)
         checkRange(RU);
         checkRange(RL);
         checkRange(LL);
-        adcm::Log::Info() << "장애물 꼭 범위 확인완료";
 
         generateOccupancyIndex(LU, RU, RL, LL, *(&iter));
-        adcm::Log::Info() << "장애물 index 생성완료";
     }
     adcm::Log::Info() << "장애물 꼭짓점 범위 확인완료";
 }
@@ -967,7 +965,7 @@ void ThreadKatech()
         //==============2. obstacle ID assignment =================
         for (auto iter1 = mapData.obstacle_list.begin(); iter1 != mapData.obstacle_list.end(); iter1++)
         {
-            adcm::Log::Info() << "previous obstacle saved in the mapData!" << iter1->obstacle_id;
+            // adcm::Log::Info() << "previous obstacle saved in the mapData!" << iter1->obstacle_id;
         }
         std::vector<ObstacleData> obstacle_list_filtered;
         obstacle_list_filtered.clear();
@@ -982,7 +980,7 @@ void ThreadKatech()
                 iter->obstacle_id = iter->timestamp + i;
                 i++;
                 // 타임스탬프 값으로 장애물 id assign
-                adcm::Log::Info() << "obstacle assigned is " << iter->obstacle_id;
+                // adcm::Log::Info() << "obstacle assigned is " << iter->obstacle_id;
                 obstacle_list_filtered.push_back(*iter);
             }
         }
@@ -1044,7 +1042,7 @@ void ThreadKatech()
 
         for (auto iter1 = obstacle_list_filtered.begin(); iter1 != obstacle_list_filtered.end(); iter1++)
         {
-            adcm::Log::Info() << "obstacle filtered are: " << iter1->obstacle_id;
+            // adcm::Log::Info() << "obstacle filtered are: " << iter1->obstacle_id;
         }
 
         //==============3. 차량 좌표계 변환==================================
