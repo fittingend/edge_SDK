@@ -88,7 +88,7 @@ struct VehicleData
 //    std::vector<Point2D>
     std::vector<Point2D> map_2d_location;
 //    std::time_t timestamp;
-    unsigned int timestamp;
+    std::uint64_t timestamp;
     std::vector<double> road_z;
 //    double road_z[4];
     double position_long; // x equivalent
