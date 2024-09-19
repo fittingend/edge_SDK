@@ -767,6 +767,44 @@ void ThreadReceiveHubData()
                     sub1_vehicle_temp.velocity_lat = data->velocity_lat;
                     sub1_vehicle_temp.velocity_ang = data->velocity_ang;
                     adcm::Log::Info() << "sub vehicle1 data received";
+                    // obstacle_list_temp.clear();
+
+                    // for (int i = 0; i < data->obstacle.size(); i++)
+                    // {
+                    //     ObstacleData obstacle_to_push;
+                    //     obstacle_to_push.obstacle_class = data->obstacle[i].obstacle_class;
+                    //     obstacle_to_push.timestamp = data->timestamp;
+                    //     obstacle_to_push.fused_cuboid_x = data->obstacle[i].cuboid_x;
+                    //     obstacle_to_push.fused_cuboid_y = data->obstacle[i].cuboid_y;
+                    //     obstacle_to_push.fused_cuboid_z = data->obstacle[i].cuboid_z;
+                    //     obstacle_to_push.fused_heading_angle = data->obstacle[i].heading_angle;
+                    //     obstacle_to_push.fused_position_x = data->obstacle[i].position_x;
+                    //     obstacle_to_push.fused_position_y = data->obstacle[i].position_y;
+                    //     obstacle_to_push.fused_position_z = data->obstacle[i].position_z;
+                    //     obstacle_to_push.fused_velocity_x = data->obstacle[i].velocity_x;
+                    //     obstacle_to_push.fused_velocity_y = data->obstacle[i].velocity_y;
+                    //     obstacle_to_push.fused_velocity_z = data->obstacle[i].velocity_z;
+
+                    //     adcm::Log::Info() << "보조 차량1 기준 장애물 위치 : (" << obstacle_to_push.fused_position_x << ", " << obstacle_to_push.fused_position_y << ")";
+                    //     obstacle_list_temp.push_back(obstacle_to_push);
+                    // }
+                    break;
+
+                case SUB_VEHICLE_2: // 보조차2가 보낸 인지데이터
+                    sub2_vehicle_temp.vehicle_class = SUB_VEHICLE_2;
+                    sub2_vehicle_temp.timestamp = data->timestamp;
+                    // sub2_vehicle_temp.road_z = data->road_z; //vector assignment to fix?
+                    sub2_vehicle_temp.position_lat = data->position_lat;
+                    sub2_vehicle_temp.position_long = data->position_long;
+                    sub2_vehicle_temp.position_height = data->position_height;
+                    sub2_vehicle_temp.yaw = data->yaw;
+                    sub2_vehicle_temp.roll = data->roll;
+                    sub2_vehicle_temp.pitch = data->pitch;
+                    sub2_vehicle_temp.velocity_long = data->velocity_long;
+                    sub2_vehicle_temp.velocity_lat = data->velocity_lat;
+                    sub2_vehicle_temp.velocity_ang = data->velocity_ang;
+
+                    adcm::Log::Info() << "sub vehicle2 data received";
                     obstacle_list_temp.clear();
 
                     for (int i = 0; i < data->obstacle.size(); i++)
@@ -785,25 +823,9 @@ void ThreadReceiveHubData()
                         obstacle_to_push.fused_velocity_y = data->obstacle[i].velocity_y;
                         obstacle_to_push.fused_velocity_z = data->obstacle[i].velocity_z;
 
-                        // adcm::Log::Info() << "보조 차량1 기준 장애물 위치 : (" << obstacle_to_push.fused_position_x << ", " << obstacle_to_push.fused_position_y << ")";
+                        adcm::Log::Info() << "보조 차량2 기준 장애물 위치 : (" << obstacle_to_push.fused_position_x << ", " << obstacle_to_push.fused_position_y << ")";
                         obstacle_list_temp.push_back(obstacle_to_push);
                     }
-                    break;
-
-                case SUB_VEHICLE_2: // 보조차2가 보낸 인지데이터
-                    sub2_vehicle_temp.vehicle_class = SUB_VEHICLE_2;
-                    sub2_vehicle_temp.timestamp = data->timestamp;
-                    // sub2_vehicle_temp.road_z = data->road_z; //vector assignment to fix?
-                    sub2_vehicle_temp.position_lat = data->position_lat;
-                    sub2_vehicle_temp.position_long = data->position_long;
-                    sub2_vehicle_temp.position_height = data->position_height;
-                    sub2_vehicle_temp.yaw = data->yaw;
-                    sub2_vehicle_temp.roll = data->roll;
-                    sub2_vehicle_temp.pitch = data->pitch;
-                    sub2_vehicle_temp.velocity_long = data->velocity_long;
-                    sub2_vehicle_temp.velocity_lat = data->velocity_lat;
-                    sub2_vehicle_temp.velocity_ang = data->velocity_ang;
-                    adcm::Log::Info() << "sub vehicle2 data received";
                     break;
 
                 default:
