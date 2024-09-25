@@ -147,7 +147,7 @@ void HubData_Subscriber::receivedCallback_hubData()
     // execute callback for every samples in the context of GetNewSamples
     std::shared_ptr<hub_data_Objects> temp;
     auto callback = [&temp](auto sample) {
-        DEBUG("Callback: hubDataEvent ");
+        // DEBUG("Callback: hubDataEvent ");
         temp = std::make_shared<hub_data_Objects>(*sample);
     };
     m_proxy->hubDataEvent.GetNewSamples(callback);

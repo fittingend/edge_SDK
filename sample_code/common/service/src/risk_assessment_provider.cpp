@@ -124,7 +124,7 @@ void RiskAssessment_Provider::send(risk_assessment_Objects& data)
         auto l_sampleData = std::move(allocation).Value();
         *l_sampleData = data;
         m_skeleton->riskAssessmentEvent.Send(std::move(l_sampleData));
-        DEBUG("sent");
+        // DEBUG("sent");
 
     } catch(ara::com::Exception e) {
         ERROR("Exeception : %s", e.what());

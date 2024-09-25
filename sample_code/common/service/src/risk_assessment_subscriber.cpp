@@ -147,7 +147,7 @@ void RiskAssessment_Subscriber::receivedCallback_riskAssessment()
     // execute callback for every samples in the context of GetNewSamples
     std::shared_ptr<risk_assessment_Objects> temp;
     auto callback = [&temp](auto sample) {
-        DEBUG("Callback: riskAssessmentEvent ");
+        // DEBUG("Callback: riskAssessmentEvent ");
         temp = std::make_shared<risk_assessment_Objects>(*sample);
     };
     m_proxy->riskAssessmentEvent.GetNewSamples(callback);

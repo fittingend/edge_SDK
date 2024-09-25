@@ -163,17 +163,14 @@ set(OPENDDS_GEN_DEST ${PROJECT_BINARY_DIR}/dds_gen)
 # FIXME: The MAKE_TARGET for add_opendds is fixed (the TARGET parameter of this function is not evaluated)
 set(OPENDDS_MAKE_TARGET ${APP_NAME}Generated)
 
-FILE(GLOB MyCppSources src/*.cpp)
-
 # Define source files
 set(APPLICATION_src
     src/main_datafusion.cpp
-    ${MyCppSources}
     ${${PROCESS_ARTIFACTS_MAKE_TARGET}_SOURCES}
     ${PROJECT_SOURCE_DIR}/../common/logger/src/logger.cpp
     ${PROJECT_SOURCE_DIR}/../common/service/src/map_data_provider.cpp
-    ${PROJECT_SOURCE_DIR}/../common/service/src/build_path_subscriber.cpp
     ${PROJECT_SOURCE_DIR}/../common/service/src/hub_data_subscriber.cpp
+    ${PROJECT_SOURCE_DIR}/../common/service/src/work_information_subscriber.cpp
 )
 
 if(HAS_VSOMEIP_BINDING OR HAS_WRSOMEIP_BINDING)

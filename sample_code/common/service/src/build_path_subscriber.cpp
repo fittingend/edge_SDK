@@ -95,6 +95,31 @@ void BuildPath_Subscriber::init(std::string instance)
     adcm::Log::Info() << "exit BuildPath_Subscriber::init()";
 }
 
+std::shared_ptr<build_path_Objects> BuildPath_Subscriber::BuildPath(const double& source_latitude, const double& source_longitude, 
+        const double& destination_latitude, const double& destination_longitude, const std::uint8_t& mve_type, const std::uint64_t deadLine)
+{
+    adcm::Log::Verbose() << "source_latitude / source_longitude / destination_latitude / destination_longitude / mve_type";
+    adcm::Log::Verbose() << source_latitude << " / " << source_longitude << " / " << destination_latitude << " / " << destination_longitude << " / " << mve_type;
+
+    auto buildPath_future = m_proxy->GetBuildPath(source_latitude, source_longitude, destination_latitude, destination_longitude, mve_type);
+    buildPath_future.wait_for(std::chrono::milliseconds(deadLine));
+    auto result = buildPath_future.GetResult();
+
+    if (result.HasValue()) {
+        auto buildPath_output = result.Value();
+        adcm::Log::Info() << "BuildPath method call successful";
+        return std::make_shared<build_path_Objects>(buildPath_output.Object);
+    }else{
+        adcm::Log::Error() << "BuildPath method call fail...";
+        return NULL;
+    }
+}
+
+build_path_Objects BuildPath_Subscriber::getBuildPath()
+{
+    return buildPathObject;
+}
+
 void BuildPath_Subscriber::subscribe_buildPath()
 {
     if(!m_proxy->buildPathEvent.IsSubscribed()) {
@@ -147,7 +172,7 @@ void BuildPath_Subscriber::receivedCallback_buildPath()
     // execute callback for every samples in the context of GetNewSamples
     std::shared_ptr<build_path_Objects> temp;
     auto callback = [&temp](auto sample) {
-        DEBUG("Callback: buildPathEvent ");
+        // DEBUG("Callback: buildPathEvent ");
         temp = std::make_shared<build_path_Objects>(*sample);
     };
     m_proxy->buildPathEvent.GetNewSamples(callback);

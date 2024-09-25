@@ -169,6 +169,8 @@ set(APPLICATION_src
     ${${PROCESS_ARTIFACTS_MAKE_TARGET}_SOURCES}
     ${PROJECT_SOURCE_DIR}/../common/logger/src/logger.cpp
     ${PROJECT_SOURCE_DIR}/../common/service/src/risk_assessment_provider.cpp
+    ${PROJECT_SOURCE_DIR}/../common/service/src/build_path_subscriber.cpp
+    ${PROJECT_SOURCE_DIR}/../common/service/src/build_path_test_subscriber.cpp
     ${PROJECT_SOURCE_DIR}/../common/service/src/map_data_subscriber.cpp
 )
 
