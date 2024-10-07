@@ -1538,6 +1538,7 @@ void ThreadMonitor()
 
 int main(int argc, char *argv[])
 {
+    IDManager id_Manager;
     std::vector<std::thread> thread_list;
     UNUSED(argc);
     UNUSED(argv);

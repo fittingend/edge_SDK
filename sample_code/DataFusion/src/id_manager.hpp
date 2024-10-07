@@ -3,11 +3,9 @@
 
 #include <iostream>
 #include <string>
-#include "main_datafusion.hpp"
 
 #define OBSTACLE_MAX 256
 
-using namespace std;
 
 class IDManager
 {
@@ -17,7 +15,7 @@ public:
     void retID(int id);
 
 private:
-    uint16_t id_Counter;
-    uint8_t id_Notused[OBSTACLE_MAX];
+    std::uint16_t id_Counter;
+    std::uint8_t id_Notused[OBSTACLE_MAX];
 };
 #endif

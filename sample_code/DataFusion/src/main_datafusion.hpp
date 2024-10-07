@@ -1,3 +1,8 @@
+#ifndef __MAIN_DATAFUSION_HPP__
+#define __MAIN_DATAFUSION_HPP__
+
+#include "id_manager.hpp"
+
 #define map_n 2500
 #define map_m 1500
 #define ABS(x) ((x >= 0) ? x : -x)
@@ -130,3 +135,4 @@ struct FusionData
     std::vector<ObstacleData> obstacle_list;
     std::vector<VehicleData> vehicle_list;
 };
+#endif
