@@ -45,45 +45,7 @@
 // I.e. this code as nothing to do with the communication or execution API
 ///////////////////////////////////////////////////////////////////////
 
-#include <thread>
-#include <chrono>
-#include <cstdio>
-#include <cstdint>
-#include <cstdlib>
-#include <csignal>
-#include <stdio.h>
-#include <random>
-
 #include "main_datafusion.hpp"
-
-#include <ara/com/e2exf/status_handler.h>
-#include <ara/exec/execution_client.h>
-
-#include <ara/log/logger.h>
-#include "logger.h"
-#include "ara/core/initialization.h"
-
-#include "map_data_provider.h"
-
-#include "hub_data_subscriber.h"
-#include "work_information_subscriber.h"
-
-VehicleData main_vehicle_temp;
-VehicleData sub1_vehicle_temp;
-VehicleData sub2_vehicle_temp;
-
-std::vector<ObstacleData> obstacle_list_temp;
-long ContourX[map_m][2];
-bool once = 1;
-// 차량 크기(work_information data)
-
-double utmOrigin_x, utmOrigin_y;
-
-std::uint16_t main_vehicle_size_length;
-std::uint16_t main_vehicle_size_width;
-std::vector<VehicleSizeData> sub_vehicle_size;
-std::vector<BoundaryData> work_boundary;
-double min_a, min_b, max_a, max_b;
 
 void GPStoUTM(double lat, double lon, double &utmX, double &utmY)
 {
@@ -119,11 +81,12 @@ void GPStoUTM(double lat, double lon, double &utmX, double &utmY)
         utmY += 10000000.0; // 10000000 meter offset for southern hemisphere
     }
 }
+
 bool checkRange(VehicleData vehicle)
 {
     bool range_OK = false;
 
-    if (vehicle.position_x > 0 && vehicle.position_x < 3000 && vehicle.position_y > 0 && vehicle.position_y < 1500)
+    if (vehicle.position_x > 0 && vehicle.position_x < map_n && vehicle.position_y > 0 && vehicle.position_y < map_m)
     {
         if (vehicle.timestamp)
             range_OK = true;
@@ -144,8 +107,9 @@ void checkRange(Point2D &point)
         point.y = map_m - 1;
     }
 }
-//-------------------------boundary 맵 대상 코드-------------------------//
 
+//-------------------------boundary 맵 대상 코드-------------------------//
+/*
 bool checkRange(int x, int y)
 {
     int cross = 0;
@@ -163,6 +127,7 @@ bool checkRange(int x, int y)
     }
     return cross % 2 > 0;
 }
+*/
 /*
 bool checkRange(VehicleData vehicle)
 {
@@ -204,6 +169,7 @@ bool checkRange(Point2D point)
     return cross % 2 > 0;
 }
 */
+
 void gpsToMapcoordinate(VehicleData &vehicle)
 {
     // wps84기반 gps(global)좌표계를 작업환경 XY 기반의 Map 좌표계로 변환
@@ -652,46 +618,11 @@ void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered)
     adcm::Log::Info() << "장애물 꼭짓점 범위 확인완료";
 }
 
-namespace
-{
-
-    // Atomic flag for exit after SIGTERM caught
-    std::atomic_bool continueExecution{true};
-    std::atomic_uint gReceivedEvent_count_hub_data{0};
-    std::atomic_uint gMainthread_Loopcount{0};
-
-    void SigTermHandler(int signal)
-    {
-        if (signal == SIGTERM)
-        {
-            // set atomic exit flag
-            continueExecution = false;
-        }
-    }
-
-    bool RegisterSigTermHandler()
-    {
-        struct sigaction sa;
-        sa.sa_handler = SigTermHandler;
-        sa.sa_flags = 0;
-        sigemptyset(&sa.sa_mask);
-
-        // register signal handler
-        if (sigaction(SIGTERM, &sa, NULL) == -1)
-        {
-            // Could not register a SIGTERM signal handler
-            return false;
-        }
-
-        return true;
-    }
-
-} // namespace
 
 // hubData 수신
 void ThreadReceiveHubData()
 {
-    adcm::Log::Info() << "SDK release_240524_interface v1.7";
+    adcm::Log::Info() << "SDK release_240910_interface v1.8.4";
     // adcm::MapData_Provider mapData_provider;
     adcm::HubData_Subscriber hubData_subscriber;
     INFO("DataFusion .init()");
@@ -862,16 +793,16 @@ void ThreadReceiveWorkInfo()
             {
                 auto data = workInformation_subscriber.getEvent();
 
-                main_vehicle_size_length = data->main_vehicle.length;
-                main_vehicle_size_width = data->main_vehicle.width;
-                adcm::Log::Info() << "main vehicle size : (" << main_vehicle_size_length << ", " << main_vehicle_size_width << ")";
+                main_vehicle_size.length = data->main_vehicle.length;
+                main_vehicle_size.width = data->main_vehicle.width;
+                adcm::Log::Info() << "main vehicle size : (" << main_vehicle_size.length << ", " << main_vehicle_size.width << ")";
                 for (int i = 0; i < data->sub_vehicle.size(); i++)
                 {
                     VehicleSizeData vehicle_to_push;
                     vehicle_to_push.length = data->sub_vehicle[i].length;
                     vehicle_to_push.width = data->sub_vehicle[i].width;
                     sub_vehicle_size.push_back(vehicle_to_push);
-                    adcm::Log::Info() << "sub vehicle " << i << " size : (" << main_vehicle_size_length << ", " << main_vehicle_size_width << ")";
+                    adcm::Log::Info() << "sub vehicle " << i << " size : (" << vehicle_to_push.length << ", " << vehicle_to_push.width << ")";
                 }
                 for (int i = 0; i < data->working_area_boundary.size(); i++)
                 {
@@ -917,27 +848,15 @@ void ThreadKatech()
     adcm::map_data_Objects mapData;
     // 한번 생성후 관제에서 인지데이터를 받을때마다 (100ms) 마다 업데이트
     adcm::Log::Info() << "mapData created for the first time";
-    std::int8_t test = 1;
     ::adcm::map_2dListStruct map_2dStruct_init;
     map_2dStruct_init.obstacle_id = NO_OBSTACLE;
     map_2dStruct_init.road_z = 0;
     map_2dStruct_init.vehicle_class = NO_VEHICLE; // 시뮬레이션 데이터 설정때문에 부득이 NO_VEHICLE =5 로 바꿈
+    std::int8_t test = 1; //최초 실행 시 빈 맵 전송을 위한 변수
 
+    // 빈 맵 생성
     std::vector<adcm::map_2dListVector> map_2d_test(map_n, adcm::map_2dListVector(map_m, map_2dStruct_init));
 
-    // boundary 위치 전송하는 controlhub 바이너리 받으면 조건 추가해서 for문안에 넣기
-    //  if (map_x >= 50 && map_x <= 300 && map_y >= 50 && map_y <= 300 && test == 1)
-
-    /* 좌표계 변환 전 map
-    std::vector<adcm::map_2dListVector> map_2d_test(max_x-min_x, adcm::map_2dListVector(max_y-min_y, map_2dStruct_init));
-    for (int i = 0; i < max_x - min_x; i++)
-    {
-        for (int j = 0; j < max_y - min_y; j++)
-        {
-            map_2d_test[i][j].isvalid=checkRange(i,j);
-        }
-    }
-    */
     adcm::Log::Info() << "mapData 2d info initialized";
 
     //=============mapData provider 여기다 해보기==================
@@ -1538,7 +1457,6 @@ void ThreadMonitor()
 
 int main(int argc, char *argv[])
 {
-    IDManager id_Manager;
     std::vector<std::thread> thread_list;
     UNUSED(argc);
     UNUSED(argv);
