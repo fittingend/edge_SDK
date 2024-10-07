@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <string>
+#include "main_datafusion.hpp"
 
 #define OBSTACLE_MAX 256
 

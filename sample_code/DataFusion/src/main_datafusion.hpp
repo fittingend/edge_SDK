@@ -72,8 +72,6 @@ struct ObstacleData
     double fused_velocity_x;
     double fused_velocity_y;
     double fused_velocity_z;
-    std::uint8_t state;
-    std::uint8_t history;
 };
 
 struct VehicleSizeData
