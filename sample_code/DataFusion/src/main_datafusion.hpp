@@ -44,24 +44,6 @@
 // 필드 목록
 IDManager id_manager; // 장애물 ID 부여 및 반환
 
-VehicleData main_vehicle_temp;
-VehicleData sub1_vehicle_temp;
-VehicleData sub2_vehicle_temp;
-
-std::vector<ObstacleData> obstacle_list_temp;
-long ContourX[map_m][2];
-bool once = 1;
-// 차량 크기(work_information data)
-
-double utmOrigin_x, utmOrigin_y;
-
-std::uint16_t main_vehicle_size_length;
-std::uint16_t main_vehicle_size_width;
-VehicleSizeData main_vehicle_size;
-std::vector<VehicleSizeData> sub_vehicle_size;
-std::vector<BoundaryData> work_boundary;
-double min_a, min_b, max_a, max_b;
-
 enum VehicleClass
 {
     EGO_VEHICLE = 240,
@@ -175,6 +157,26 @@ enum VehicleClass
     NO_VEHICLE
 };
 */
+
+VehicleData main_vehicle_temp;
+VehicleData sub1_vehicle_temp;
+VehicleData sub2_vehicle_temp;
+
+std::vector<ObstacleData> obstacle_list_temp;
+long ContourX[map_m][2];
+bool once = 1;
+// 차량 크기(work_information data)
+
+double utmOrigin_x, utmOrigin_y;
+
+std::uint16_t main_vehicle_size_length;
+std::uint16_t main_vehicle_size_width;
+VehicleSizeData main_vehicle_size;
+std::vector<VehicleSizeData> sub_vehicle_size;
+std::vector<BoundaryData> work_boundary;
+double min_a, min_b, max_a, max_b;
+
+
 
 
 ///////////////////////////////////////////////////////////////////////
