@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <random>
 #include <vector>
+#include <algorithm>
 
 #include <ara/com/e2exf/status_handler.h>
 #include <ara/exec/execution_client.h>
@@ -38,7 +39,6 @@
 // 사이즈는 10cm 단위 기준
 
 // #define KM_TO_MS_CONVERSION 5/18
-
 
 ///////////////////////////////////////////////////////////////////////
 // 필드 목록
@@ -115,6 +115,7 @@ struct VehicleData
     double velocity_x; // new- to assign
     double velocity_y; // new- to assign
     double velocity_ang;
+    std::uint32_t hubNumber = 0;
 };
 
 struct GridCellData
@@ -176,11 +177,11 @@ std::vector<VehicleSizeData> sub_vehicle_size;
 std::vector<BoundaryData> work_boundary;
 double min_a, min_b, max_a, max_b;
 
-
-
+std::uint32_t hubUpdate = 0; // 허브데이터를 수령한 횟수
+std::uint32_t mapUpdate = 0; // 맵데이터 전송마다 hubUpdate 값으로 업데이트되며, 스레드에서 hubUpdate와 값이 같으면 스레드 휴식(부하 감소)
 
 ///////////////////////////////////////////////////////////////////////
-// 함수 목록 
+// 함수 목록
 void GPStoUTM(double lat, double lon, double &utmX, double &utmY);
 
 bool checkRange(VehicleData vehicle);
@@ -203,7 +204,7 @@ void ThreadReceiveWorkInfo();
 void ThreadKatech();
 void ThreadMonitor();
 
-//리눅스 Sigterm 관리
+// 리눅스 Sigterm 관리
 namespace
 {
 
@@ -239,6 +240,5 @@ namespace
     }
 
 } // namespace
-
 
 #endif
