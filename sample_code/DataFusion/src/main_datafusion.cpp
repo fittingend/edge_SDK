@@ -853,22 +853,20 @@ void ThreadKatech()
     map_2dStruct_init.obstacle_id = NO_OBSTACLE;
     map_2dStruct_init.road_z = 0;
     map_2dStruct_init.vehicle_class = NO_VEHICLE; // 시뮬레이션 데이터 설정때문에 부득이 NO_VEHICLE =5 로 바꿈
-    std::int8_t test = 1;                         // 최초 실행 시 빈 맵 전송을 위한 변수
+    bool sendEmptyMap = true;                     // 최초 실행 시 빈 맵 전송을 위한 변수
 
     // 빈 맵 생성
     std::vector<adcm::map_2dListVector> map_2d_test(map_n, adcm::map_2dListVector(map_m, map_2dStruct_init));
-
     adcm::Log::Info() << "mapData 2d info initialized";
 
-    //=============mapData provider 여기다 해보기==================
     adcm::MapData_Provider mapData_provider;
     mapData_provider.init("DataFusion/DataFusion/PPort_map_data");
-    if (test == 1)
+    if (sendEmptyMap)
     {
         mapData.map_2d = map_2d_test;
         mapData_provider.send(mapData);
         adcm::Log::Info() << "Send empty map data";
-        test = 0;
+        sendEmptyMap = false;
     }
     VehicleData main_vehicle;
     VehicleData sub1_vehicle;
@@ -904,115 +902,136 @@ void ThreadKatech()
 
         adcm::Log::Info() << "mapData obstacle list size is at start is" << mapData.obstacle_list.size();
 
-        //==============1. obstacle 로 인지된 sub 차량 제거 (OK)=================
+        //==============1. obstacle 로 인지된 특장차 및 보조 차량 제거 =================
+
+        adcm::Log::Info() << "특장차 및 보조차량 제거 전 obstacle 사이즈: " << obstacle_list.size();
         for (auto iter = obstacle_list.begin(); iter != obstacle_list.end();)
         {
-            if ((abs(iter->fused_cuboid_x - SUB_VEHICLE_SIZE_X / 10)) < 0.1 && (abs(iter->fused_cuboid_y - SUB_VEHICLE_SIZE_Y / 10)) < 0.1)
+            //if ((abs(iter->fused_cuboid_x - SUB_VEHICLE_SIZE_X / 10)) < 0.1 && (abs(iter->fused_cuboid_y - SUB_VEHICLE_SIZE_Y / 10)) < 0.1)
+            if (iter->obstacle_class == 51)
             {
+                adcm::Log::Info() << "보조차량 제거";
+                iter = obstacle_list.erase(iter);
+            }
+            //if ((abs(iter->fused_cuboid_x - MAIN_VEHICLE_SIZE_X / 10)) < 0.1 && (abs(iter->fused_cuboid_y - MAIN_VEHICLE_SIZE_Y / 10)) < 0.1)
+            else if(iter->obstacle_class == 50)
+            {
+                adcm::Log::Info() << "특장차 제거";
                 iter = obstacle_list.erase(iter);
             }
             else
                 iter++;
         }
-        adcm::Log::Info() << "obstacle without sub-vehicle size is " << obstacle_list.size();
+        adcm::Log::Info() << "특장차 및 보조차량 제거 후 obstacle 사이즈: " << obstacle_list.size();
 
-        //==============2. obstacle ID assignment =================
+        //==============2. 차량 좌표계 변환==================================
+        // 차량마다 받은 gps 좌표를 작업공간 map 좌표계로 변환
+        gpsToMapcoordinate(main_vehicle);
+        gpsToMapcoordinate(sub1_vehicle);
+        gpsToMapcoordinate(sub2_vehicle);
+        adcm::Log::Info() << "차량 측위 좌표계 변환 완료";
+
+
+        //==============3. 장애물 좌표계 변환=================
+        // 차량 기준 장애물 좌표를 작업공간 map 좌표계로 변환
+        //relativeToMapcoordinate(obstacle_list_filtered, sub2_vehicle);
+        relativeToMapcoordinate(obstacle_list, sub2_vehicle);
+        bool a = checkRange(main_vehicle);
+        bool b = checkRange(sub1_vehicle);
+        bool c = checkRange(sub2_vehicle);
+        adcm::Log::Info() << "차량별 장애물 좌표계 변환 완료";
+
+        //TO DO: 4. 차량별 장애물 fusion 여기서 필요
+
+
+        //==============5. 장애물 ID 관리 =================
+
         for (auto iter1 = mapData.obstacle_list.begin(); iter1 != mapData.obstacle_list.end(); iter1++)
         {
             // adcm::Log::Info() << "previous obstacle saved in the mapData!" << iter1->obstacle_id;
         }
         std::vector<ObstacleData> obstacle_list_filtered;
         obstacle_list_filtered.clear();
+        IDManager id_manager;
 
         if (mapData.obstacle_list.empty())
         {
-            // 최초 obstacle ID assignment 진행. random하게 assign 한다
+            // 최초 obstacle ID assignment 진행
             // 트래킹하는 알고리즘 필요 *추후 보완
             int i = 1;
             for (auto iter = obstacle_list.begin(); iter != obstacle_list.end(); iter++)
             {
-                iter->obstacle_id = iter->timestamp + i;
-                i++;
-                // 타임스탬프 값으로 장애물 id assign
-                // adcm::Log::Info() << "obstacle assigned is " << iter->obstacle_id;
+                iter->obstacle_id = id_manager.allocID();
                 obstacle_list_filtered.push_back(*iter);
             }
         }
         else // 이미 obstacle list 존재하는 경우는 obstacle id 비교가 필요하다
         {
-            for (auto iter = mapData.obstacle_list.begin(); iter != mapData.obstacle_list.end(); iter++)
+            std::vector<int> removedObstacle;
+            for (auto ori_iter = mapData.obstacle_list.begin(); ori_iter != mapData.obstacle_list.end(); ori_iter++)
             {
-                for (auto iter1 = obstacle_list.begin(); iter1 != obstacle_list.end();)
+                bool identicalObstacleFound = false;
+                for (auto new_iter = obstacle_list.begin(); new_iter != obstacle_list.end();)
                 {
-                    // 사이즈 오차 10cm 이내면 동일 장애물이라 본다
+                    // 현재 정적장애물 기준 xyz 사이즈와 좌표위치가 10cm 오차 이내로 동일하면 동일 장애물로 associate 
                     // if ((ABS(iter->fused_cuboid_x - iter1->fused_cuboid_x)< 0.001) && (ABS(iter->fused_cuboid_y - iter1->fused_cuboid_y)< 0.001) && (ABS(iter->fused_cuboid_z - iter1->fused_cuboid_z)<0.001))
-                    if ((iter->fused_cuboid_x == iter1->fused_cuboid_x) && (iter->fused_cuboid_y == iter1->fused_cuboid_y) && (iter->fused_cuboid_z == iter1->fused_cuboid_z))
+                    if ((ori_iter->fused_cuboid_x == new_iter->fused_cuboid_x) && (ori_iter->fused_cuboid_y == new_iter->fused_cuboid_y) && (ori_iter->fused_cuboid_z == new_iter->fused_cuboid_z)\
+                    && (abs(ori_iter->fused_position_x) - (new_iter->fused_position_x) < 100) && (abs(ori_iter->fused_position_y - new_iter->fused_position_y) < 100) && (abs(ori_iter->fused_position_z - new_iter->fused_position_z) < 100)\
+                    && (ori_iter->obstacle_class == new_iter->obstacle_class))
                     {
-                        // adcm::Log::Info() << "cuboid x: " << iter->fused_cuboid_x << "cuboid y:" << iter->fused_cuboid_y << "obstacle id" << iter->obstacle_id;
-                        // adcm::Log::Info() << "cuboid x: " << iter1->fused_cuboid_x << "cuboid y:" << iter1->fused_cuboid_y;
-                        // adcm::Log::Info() << "Identical obstacle detected : " << iter->obstacle_id;
-                        iter1->obstacle_id = iter->obstacle_id;
-                        obstacle_list_filtered.push_back(*iter1);
-                        iter1 = obstacle_list.erase(iter1);
+                        adcm::Log::Info() << "fused_position_x: " << ori_iter->fused_position_x << "fused_position_y:" << ori_iter->fused_position_y << "obstacle id" << ori_iter->obstacle_id;
+                        adcm::Log::Info() << "new fused_position_x: " << new_iter->fused_position_x << "new fused_position_y:" << new_iter->fused_position_y;
+                        adcm::Log::Info() << "Identical obstacle detected : " << ori_iter->obstacle_id;
+                        new_iter->obstacle_id = ori_iter->obstacle_id;
+                        obstacle_list_filtered.push_back(*new_iter);
+                        new_iter = obstacle_list.erase(new_iter);
+                        identicalObstacleFound = true;
+                        break; //if 문 break
+                        //동일한 장애물이 발견되면 obstacle_list 에서 obstacle_list_filtered 로 옮기고 obstacle list 에서는 삭제한다 
                     }
-                    else // 동일하지 않은 장애물에는 temp value 인 99 으로 id를 우선 지정
+                    else
                     {
-                        iter1->obstacle_id = INVALID_VALUE;
-                        // adcm::Log::Info() << " New obstacle appeared OR tracking failed";
-                        ++iter1;
+                        adcm::Log::Info() << "[ori]fused_position_x: " << ori_iter->fused_position_x << "fused_position_y:" << ori_iter->fused_position_y << "obstacle id" << ori_iter->obstacle_id;
+                        adcm::Log::Info() << "[new]fused_position_x: " << new_iter->fused_position_x << "new fused_position_y:" << new_iter->fused_position_y;
+                        adcm::Log::Info() << "[ori]fused_cuboid_x: " << ori_iter->fused_cuboid_x << "fused_cuboid_y:" << ori_iter->fused_cuboid_y << "fused_cuboid_z:" << ori_iter->fused_cuboid_z;
+                        adcm::Log::Info() << "[new]fused_cuboid_x: " << new_iter->fused_cuboid_x << "fused_cuboid_y:" << new_iter->fused_cuboid_y << "fused_cuboid_z:" << new_iter->fused_cuboid_z;
+                        adcm::Log::Info() << "[ori]obstacle_class: " << ori_iter->obstacle_class;
+                        adcm::Log::Info() << "[new]obstacle_class: " << new_iter->obstacle_class;
+
+                        adcm::Log::Info() << "Different obstacle detected : " << ori_iter->obstacle_id;
+                        //동일하지 않은 장애물은 obstacle_list 에 계속 남긴다
+                        ++new_iter;
                     }
+                }
+                if(identicalObstacleFound == false)
+                {
+                    //이전 장애물이 이번엔 발견되지 않았으므로 추후 id return 필요
+                    removedObstacle.push_back(ori_iter->obstacle_id);
                 }
             }
 
-            // 새로운 객체들에 대한 id 지정 (INVALID_VALUE 를 실제 아이디로 지정)
-            srand(time(NULL));
-            unsigned short rand_id = (unsigned short)rand();
-            for (auto iter1 = obstacle_list.begin(); iter1 != obstacle_list.end(); iter1++)
+            // 새로운 객체들에 대한 id 지정
+            for (auto new_iter = obstacle_list.begin(); new_iter != obstacle_list.end(); new_iter++)
             {
-                bool idcheck = false;
-                // TO DO:id 중복여부 duplicate 체크 해야함 *추후 수정
-                // 추가: id 중복 없을 시 idcheck->true, 중복체크 완료 후 rand_id 값으로 id 지정
-                while (!idcheck)
-                {
-                    idcheck = true;
-                    for (auto iter2 = obstacle_list_filtered.begin(); iter2 != obstacle_list_filtered.end(); iter2++)
-                    {
-                        if (iter2->obstacle_id == rand_id)
-                        {
-                            idcheck = false;
-                            rand_id++;
-                            break;
-                        }
-                    }
-                }
-                // 타임스탬프 값으로 장애물 id assign
-                iter1->obstacle_id = rand_id;
-                adcm::Log::Info() << "obstacle newly assigned is " << iter1->obstacle_id;
-                obstacle_list_filtered.push_back(*iter1);
-                rand_id++;
+                new_iter->obstacle_id = id_manager.allocID();
+                adcm::Log::Info() << "obstacle newly assigned is " << new_iter->obstacle_id;
+                obstacle_list_filtered.push_back(*new_iter);
+            }
+            // 삭제된 객체에 대한 id 반납
+            for (auto iter = removedObstacle.begin(); iter!=removedObstacle.end(); iter++)
+            {
+                id_manager.retID(*iter);
             }
         }
         obstacle_list.clear();
 
-        for (auto iter1 = obstacle_list_filtered.begin(); iter1 != obstacle_list_filtered.end(); iter1++)
+        for (auto filter_iter = obstacle_list_filtered.begin(); filter_iter != obstacle_list_filtered.end(); filter_iter++)
         {
-            // adcm::Log::Info() << "obstacle filtered are: " << iter1->obstacle_id;
+            adcm::Log::Info() << "obstacle filtered are: " << filter_iter->obstacle_id;
         }
+        adcm::Log::Info() << "장애물 ID allocation 완료";
 
-        //==============3. 차량 좌표계 변환==================================
-        // 차량마다 받은 gps 좌표를 작업공간 map 좌표계로 변환
-        gpsToMapcoordinate(main_vehicle);
-        gpsToMapcoordinate(sub1_vehicle);
-        gpsToMapcoordinate(sub2_vehicle);
 
-        //==============4. 장애물 좌표계 변환=================
-        // 차량 기준 장애물 좌표를 작업공간 map 좌표계로 변환
-        relativeToMapcoordinate(obstacle_list_filtered, sub2_vehicle);
-
-        bool a = checkRange(main_vehicle);
-        bool b = checkRange(sub1_vehicle);
-        bool c = checkRange(sub2_vehicle);
-        adcm::Log::Info() << "좌표변환 완료 맵데이터 반영 시작";
         if (a || (b && c))
         { // execute only if all true!
             //==============5. 0.1 m/s 미만인 경우 장애물 정지 상태 판정 및 stop_count 값 assign =================
