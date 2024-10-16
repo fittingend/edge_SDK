@@ -77,17 +77,16 @@ void BuildPath_Provider::setCallback(BuildPathCallback cb)
 }
 
 ara::core::Future<adcm::build_path::GetBuildPathOutput> BuildPathImp::GetBuildPath(
-    const double& source_latitude, const double& source_longitude, 
     const double& destination_latitude, const double& destination_longitude, const std::uint8_t& mve_type)
 {
     if(adcm::mCallback != NULL)
     {
-        adcm::mCallback(source_latitude, source_longitude, destination_latitude, destination_longitude, mve_type);
+        adcm::mCallback(destination_latitude, destination_longitude, mve_type);
     }
     else
         adcm::Log::Info() << "mCallback is NULL";
 
-    decltype(Skeleton::GetBuildPath(source_latitude, source_longitude, destination_latitude, destination_longitude, mve_type))::PromiseType promise;
+    decltype(Skeleton::GetBuildPath(destination_latitude, destination_longitude, mve_type))::PromiseType promise;
     promise.set_value(std::move(*output));
     return promise.get_future();
 }

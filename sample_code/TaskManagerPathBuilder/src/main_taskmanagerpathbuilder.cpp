@@ -111,8 +111,7 @@ bool RegisterSigTermHandler()
     return true;
 }
 
-void setBuildPath(const double& source_latitude, const double& source_longitude, 
-    const double& destination_latitude, const double& destination_longitude, const std::uint8_t& type)
+void setBuildPath(const double& destination_latitude, const double& destination_longitude, const std::uint8_t& type)
 {
     adcm::Log::Info() << "TaskManagerPathBuilder >> setBuildPath function callback";
     
@@ -122,6 +121,7 @@ void setBuildPath(const double& source_latitude, const double& source_longitude,
     adcm::routeStruct route;
 
     ps.result = m_ud_0_8(m_rand_eng);
+    ps.timestamp = m_ud_0_64(m_rand_eng);
     ps.t0 = m_ud_0_64(m_rand_eng);
     ps.vehicle_class = m_ud_0_8(m_rand_eng);
     ps.move_type = m_ud_0_8(m_rand_eng);
@@ -130,8 +130,8 @@ void setBuildPath(const double& source_latitude, const double& source_longitude,
 
     ps.route.clear();
     for (int i = 0; i < 3; ++i){
-        route.x = m_ud_10000_10000(m_rand_eng);
-        route.y = m_ud_10000_10000(m_rand_eng);
+        route.latitude = m_ud_10000_10000(m_rand_eng);
+        route.longitude = m_ud_10000_10000(m_rand_eng);
         route.delta_t =  m_ud_0_16(m_rand_eng);
         ps.route.push_back(route);
     }
@@ -402,6 +402,7 @@ void ThreadSendBuildPath()
         adcm::routeStruct route;
 
         ps.result = m_ud_0_8(m_rand_eng);
+        ps.timestamp = m_ud_0_64(m_rand_eng);
         ps.t0 = m_ud_0_64(m_rand_eng);
         ps.vehicle_class = m_ud_0_8(m_rand_eng);
         ps.move_type = m_ud_0_8(m_rand_eng);
@@ -410,8 +411,8 @@ void ThreadSendBuildPath()
 
         ps.route.clear();
         for (int i = 0; i < 5; ++i){
-            route.x = m_ud_10000_10000(m_rand_eng);
-            route.y = m_ud_10000_10000(m_rand_eng);
+            route.latitude = m_ud_10000_10000(m_rand_eng);
+            route.longitude = m_ud_10000_10000(m_rand_eng);
             route.delta_t =  m_ud_0_16(m_rand_eng);
             ps.route.push_back(route);
         }

@@ -64,7 +64,7 @@
 namespace adcm
 {
 
-typedef void (*BuildPathCallback)(const double& source_latitude, const double& source_longitude, const double& destination_latitude, const double& destination_longitude, const std::uint8_t& mve_type);
+typedef void (*BuildPathCallback)(const double& destination_latitude, const double& destination_longitude, const std::uint8_t& mve_type);
 static BuildPathCallback mCallback = nullptr;
 static std::shared_ptr<adcm::build_path::GetBuildPathOutput> output = std::make_shared<adcm::build_path::GetBuildPathOutput>();
 
@@ -91,8 +91,8 @@ public:
         m_worker.join();
     }
 
-    virtual auto GetBuildPath(const double& source_latitude, const double& source_longitude, const double& destination_latitude, const double& destination_longitude, const std::uint8_t& mve_type)
-        -> decltype(Skeleton::GetBuildPath(source_latitude, source_longitude, destination_latitude, destination_longitude, mve_type)) override;
+    virtual auto GetBuildPath(const double& destination_latitude, const double& destination_longitude, const std::uint8_t& mve_type)
+        -> decltype(Skeleton::GetBuildPath(destination_latitude, destination_longitude, mve_type)) override;
 
 private:
     /*!

@@ -95,13 +95,13 @@ void BuildPath_Subscriber::init(std::string instance)
     adcm::Log::Info() << "exit BuildPath_Subscriber::init()";
 }
 
-std::shared_ptr<build_path_Objects> BuildPath_Subscriber::BuildPath(const double& source_latitude, const double& source_longitude, 
-        const double& destination_latitude, const double& destination_longitude, const std::uint8_t& mve_type, const std::uint64_t deadLine)
+std::shared_ptr<build_path_Objects> BuildPath_Subscriber::BuildPath(const double& destination_latitude, const double& destination_longitude, 
+    const std::uint8_t& mve_type, const std::uint64_t deadLine)
 {
-    adcm::Log::Verbose() << "source_latitude / source_longitude / destination_latitude / destination_longitude / mve_type";
-    adcm::Log::Verbose() << source_latitude << " / " << source_longitude << " / " << destination_latitude << " / " << destination_longitude << " / " << mve_type;
+    adcm::Log::Verbose() << "destination_latitude / destination_longitude / mve_type";
+    adcm::Log::Verbose() << destination_latitude << " / " << destination_longitude << " / " << mve_type;
 
-    auto buildPath_future = m_proxy->GetBuildPath(source_latitude, source_longitude, destination_latitude, destination_longitude, mve_type);
+    auto buildPath_future = m_proxy->GetBuildPath(destination_latitude, destination_longitude, mve_type);
     buildPath_future.wait_for(std::chrono::milliseconds(deadLine));
     auto result = buildPath_future.GetResult();
 

@@ -166,6 +166,7 @@ set(OPENDDS_MAKE_TARGET ${APP_NAME}Generated)
 # Define source files
 set(APPLICATION_src
     src/main_datafusion.cpp
+    src/id_manager.cpp
     ${${PROCESS_ARTIFACTS_MAKE_TARGET}_SOURCES}
     ${PROJECT_SOURCE_DIR}/../common/logger/src/logger.cpp
     ${PROJECT_SOURCE_DIR}/../common/service/src/map_data_provider.cpp
