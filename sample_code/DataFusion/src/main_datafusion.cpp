@@ -44,9 +44,201 @@
 // between applications. We also have no execution environment in use here
 // I.e. this code as nothing to do with the communication or execution API
 ///////////////////////////////////////////////////////////////////////
-
+#include <sstream>
+#include <fstream>  // Required for file handling
+#include <filesystem>
 #include "main_datafusion.hpp"
 
+#define NATS_TEST
+#ifdef NATS_TEST
+#include "./NATS_IMPLEMENTATION/NatsConnManager.h"
+#define HMI_SERVER_URL  "https://nats.beyless.com"
+
+std::mutex mtx; // 뮤텍스 선언
+bool firstTime = true;
+natsStatus s = NATS_OK;
+std::vector<const char*> subject = {"test1.*", "test2.*"};
+std::shared_ptr<adcm::etc::NatsConnManager> natsManager;
+
+
+void asyncCb(natsConnection* nc, natsSubscription* sub, natsStatus err, void* closure)
+{
+    std::cout << "Async error: " << err << " - " << natsStatus_GetText(err) << std::endl;
+    natsManager->NatsSubscriptionGetDropped(sub, (int64_t*) &natsManager->dropped);
+}
+
+void onMsg(natsConnection* nc, natsSubscription* sub, natsMsg* msg, void* closure)
+{
+    const char* subject = NULL;
+    
+    // 뮤텍스를 사용하여 공유 변수 접근 보호
+    std::lock_guard<std::mutex> lock(mtx);
+    subject = natsMsg_GetSubject(msg);
+
+    std::cout << "Received msg: [" << subject << " : " << natsMsg_GetDataLength(msg) << "]" << natsMsg_GetData(msg) << std::endl;
+    // We should be using a mutex to protect those variables since
+    // they are used from the subscription's delivery and the main
+    // threads. For demo purposes, this is fine.
+    
+    // std::istringstream iss(subject);
+    // std::vector<std::string> words;
+    // std::string word;
+
+    // while (std::getline(iss, word, '.')) 
+    // {
+    //     words.push_back(word);
+    // }
+    // std::cout << words[0] << " Data Category : " << words[1] << std::endl;
+
+    natsManager->NatsMsgDestroy(msg);
+}
+/*
+NATS_INTERFACE::NATS_INTERFACE()
+{
+    natsStatus s = NATS_OK;
+    //const char*  subject = "sensorData.*";
+    std::vector<const char*> subject = {"test1.*", "test2.*"};
+    natsManager = std::make_shared<adcm::etc::NatsConnManager>(HMI_SERVER_URL, subject, onMsg, asyncCb, adcm::etc::NatsConnManager::Mode::Default);
+}*/
+
+std::string map2dIndexVectorToString(const ::map2dIndexVector& map_2d_location) 
+{
+    adcm::Log::Info() << "map2dIndexVectorToString start!";
+    //::map2dIndexVector
+    //ara::core::Vector<adcm::map2dIndex>
+    std::ostringstream oss;
+    // Assume map_2d_location is some form of vector, iterating over it
+    for (const auto& index : map_2d_location) {
+        oss << "(X: " << index.x << ", Y: " << index.y << ") ";
+    }
+    return oss.str();
+}
+
+// External function to convert obstacleListStruct to a string
+std::string obstacleStructToString(const adcm::obstacleListStruct& obstacle) 
+{        
+    adcm::Log::Info() << "obstacleStructToString start!";
+    std::ostringstream oss;
+    // Append all the fields to the string stream
+    oss << "Obstacle ID: " << obstacle.obstacle_id 
+        << ", Class: " << static_cast<int>(obstacle.obstacle_class)  // uint8_t is printed as int
+        << ", Timestamp: " << obstacle.timestamp
+        << ", Map 2D Location: " << map2dIndexVectorToString(obstacle.map_2d_location)
+        << ", Stop Count: " << static_cast<int>(obstacle.stop_count)
+        << ", Fused Cuboid X: " << obstacle.fused_cuboid_x
+        << ", Fused Cuboid Y: " << obstacle.fused_cuboid_y
+        << ", Fused Cuboid Z: " << obstacle.fused_cuboid_z
+        << ", Fused Heading Angle: " << obstacle.fused_heading_angle
+        << ", Fused Position X: " << obstacle.fused_position_x
+        << ", Fused Position Y: " << obstacle.fused_position_y
+        << ", Fused Position Z: " << obstacle.fused_position_z
+        << ", Fused Velocity X: " << obstacle.fused_velocity_x
+        << ", Fused Velocity Y: " << obstacle.fused_velocity_y
+        << ", Fused Velocity Z: " << obstacle.fused_velocity_z;
+    return oss.str();  // Return the concatenated string
+}
+
+std::string convertVectorToString(const ListVector& map_2d) 
+{
+    adcm::Log::Info() << "convertVectorToString map_2d start!"; 
+    std::ostringstream oss;
+
+    for (size_t i = 0; i < map_2d.size(); ++i) {
+        for (size_t j = 0; j < map_2d[i].size(); ++j) 
+        {
+            const auto& item = map_2d[i][j]; // Access the specific element
+
+            // Format each item's properties into a string
+            oss << "    map_2d[" << i << "][" << j << "]: "
+                << "Obstacle ID: " << item.obstacle_id 
+                << ", Vehicle Class: " << static_cast<int>(item.vehicle_class)  // Cast to int for display
+                << ", Road Z: " << item.road_z << "\n"; // Add a newline for better readability
+        }
+    }
+    return oss.str();  // Return the concatenated string
+}
+
+std::string convertVectorToString(const ::obstacleListVector& obstacle_list) 
+{
+    adcm::Log::Info() << "convertVectorToString start!"; 
+    std::ostringstream result;
+
+    // Iterate over the vector and convert each struct to a string
+    for (const auto& obstacle : obstacle_list) {
+        result << obstacleStructToString(obstacle) << "\n";  // Use the external conversion function
+    }
+    return result.str();  // Return the concatenated string
+}
+
+void saveToJsonFile(const std::string& key, const std::string& value, int& fileCount)
+{
+    std::ostringstream fileNameStream;
+    fileNameStream << key <<"_" << fileCount << ".json";  // Construct the file name
+    std::string fileName = fileNameStream.str();
+    std::ofstream outFile(fileName);
+    // Open file for writing with the generated name
+    if (outFile.is_open())
+    {
+        outFile << value;  // Write the JSON string to the file
+        outFile.close();          // Close the file after writing
+        adcm::Log::Info() << "JSON data stored in " << fileName;
+    }
+    else
+    {
+        adcm::Log::Error() << "Failed to open file " << fileName << " for writing!";
+    }
+
+    // Increment the file count for the next call
+    ++fileCount;
+}
+
+void NatsSend(adcm::map_data_Objects map_data)
+{
+    static int map2d_count = 0;  // Static variable to track file number
+    static int obstacle_list_count = 0;  // Static variable to track file number
+
+    if (firstTime == true)
+    {
+        adcm::Log::Info() << "NATS first time setup!";
+        natsManager = std::make_shared<adcm::etc::NatsConnManager>(HMI_SERVER_URL, subject, onMsg, asyncCb, adcm::etc::NatsConnManager::Mode::Default);
+        s = natsManager->NatsExecute();
+        firstTime = false;
+    }
+    if(s == NATS_OK)
+    {
+        const char* pubSubject = "test1.JSON";
+        natsManager->ClearJsonData();
+        adcm::Log::Info() << "NATS conversion start!";
+        //convertToStandardVector(map_data.obstacle_list);
+        std::string map2dStr = convertVectorToString(map_data.map_2d);
+        std::string obstaclesStr = convertVectorToString(map_data.obstacle_list);
+        //std::string vehiclesStr = convertVectorToString(map_data.vehicle_list);
+        adcm::Log::Info() << "NATS conversion done!";
+
+        natsManager->addJsonData("map2d", map2dStr);        
+        natsManager->addJsonData("obstacle_list", obstaclesStr);       
+
+        natsManager->NatsPublishJson(pubSubject);
+        adcm::Log::Info() << "NatsPublishJson";
+
+        saveToJsonFile("map2d", map2dStr, map2d_count);
+        saveToJsonFile("obstacle_list", obstaclesStr, obstacle_list_count);
+
+    }
+    else
+    {
+        std::cout << "Nats Connection error" << std::endl;
+        try{
+        natsManager = std::make_shared<adcm::etc::NatsConnManager>(HMI_SERVER_URL,subject, onMsg, asyncCb, adcm::etc::NatsConnManager::Mode::Default);
+        s = natsManager->NatsExecute();
+        }catch(std::exception e)
+        {
+            std::cout << "Nats reConnection error" << std::endl;
+        }
+    }  
+}
+
+#endif
 void GPStoUTM(double lat, double lon, double &utmX, double &utmY)
 {
     // WGS84 Parameters
@@ -108,68 +300,6 @@ void checkRange(Point2D &point)
     }
 }
 
-//-------------------------boundary 맵 대상 코드-------------------------//
-/*
-bool checkRange(int x, int y)
-{
-    int cross = 0;
-    std::vector<BoundaryData> p = work_boundary;
-
-    for (int i = 0; i < p.size(); i++)
-    {
-        int j = (i + 1) % p.size();
-        if ((p[i].y > y) != (p[j].y > y))
-        {
-            double meetX = (p[j].x - p[i].x) * (y - p[i].y) / (p[j].y - p[i].y) + p[i].x;
-            if (x < meetX)
-                cross++;
-        }
-    }
-    return cross % 2 > 0;
-}
-*/
-/*
-bool checkRange(VehicleData vehicle)
-{
-    double x = vehicle.position_x;
-    double y = vehicle.position_y;
-    int cross = 0;
-    std::vector<BoundaryData> p = work_boundary;
-
-    for (int i = 0; i < p.size(); i++)
-    {
-        int j = (i + 1) % p.size();
-        if ((p[i].y > y) != (p[j].y > y))
-        {
-            double meetX = (p[j].x - p[i].x) * (y - p[i].y) / (p[j].y - p[i].y) + p[i].x;
-            if (x < meetX)
-                cross++;
-        }
-    }
-    return cross % 2 > 0;
-}
-
-bool checkRange(Point2D point)
-{
-    long x = point.x;
-    long y = point.y;
-    int cross = 0;
-    std::vector<BoundaryData> p = work_boundary;
-
-    for (int i = 0; i < p.size(); i++)
-    {
-        int j = (i + 1) % p.size();
-        if ((p[i].y > y) != (p[j].y > y))
-        {
-            double meetX = (p[j].x - p[i].x) * (y - p[i].y) / (p[j].y - p[i].y) + p[i].x;
-            if (x < meetX)
-                cross++;
-        }
-    }
-    return cross % 2 > 0;
-}
-*/
-
 void gpsToMapcoordinate(VehicleData &vehicle)
 {
     // wps84기반 gps(global)좌표계를 작업환경 XY 기반의 Map 좌표계로 변환
@@ -202,56 +332,7 @@ void gpsToMapcoordinate(VehicleData &vehicle)
     // adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
     // adcm::Log::Info() << "timestamp: " << vehicle.timestamp << " 차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.yaw << ")";
 }
-// void gpsToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData main_vehicle)
-// {
-//     // 시뮬레이션의 global 좌표계를 작업환경 XY 기반의 local 좌표계로 변환하는 함수
-//     double mapOrigin_x = 453.088714;
-//     double mapOrigin_y = 507.550078;
-//     double angle_radians = -MAP_ANGLE * M_PI / 180.0;
-//     double alpha = 537.92;
-//     double beta = -416.58;
-//     double theta = main_vehicle.yaw * M_PI / 180;
-//     double velocity_ang = main_vehicle.velocity_ang;
-//     for (auto iter = obstacle_list.begin(); iter != obstacle_list.end(); iter++)
-//     {
-//         double position_x = iter->fused_position_x;
-//         double position_y = iter->fused_position_y;
-//         double velocity_x = iter->fused_velocity_x;
-//         double velocity_y = iter->fused_velocity_y;
 
-//         iter->fused_position_x = (cos(theta) * (position_x - alpha) + sin(theta) * (position_y - beta)) * M_TO_10CM_PRECISION;
-//         iter->fused_position_y = (-sin(theta) * (position_x - alpha) + cos(theta) * (position_y - beta)) * M_TO_10CM_PRECISION;
-
-//         iter->fused_velocity_x = (velocity_ang * (-sin(theta) * (position_x - alpha) + (cos(theta) * (position_y - beta)))) + (velocity_x * cos(theta)) + (velocity_y * sin(theta));
-
-//         iter->fused_velocity_y = (velocity_ang * (-cos(theta) * (position_x - alpha) - (sin(theta) * (position_y - beta)))) + (velocity_x * -sin(theta)) + (velocity_y * cos(theta));
-
-//         iter->fused_heading_angle = iter->fused_heading_angle - main_vehicle.yaw;
-
-//         adcm::Log::Info() << "장애물 globalToLocalcoordinate 좌표변환 (" << iter->fused_position_x << " , " << iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
-//         // adcm::Log::Info() << "해당 timestamp: " << iter->timestamp;
-//     }
-// }
-// void relativeToGlobalcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData main_vehicle)
-// {
-//     double theta = main_vehicle.yaw * M_PI / 180;
-//     double velocity_ang = main_vehicle.velocity_ang;
-
-//     for (auto iter = obstacle_list.begin(); iter != obstacle_list.end(); iter++)
-//     {
-//         // adcm::Log::Info() << "장애물 relativeToGlobal 좌표변환 before (" << iter->fused_position_x << " , " << iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
-
-//         double obstacle_position_x = iter->fused_position_x;
-//         double obstacle_position_y = iter->fused_position_y;
-//         double obstacle_velocity_x = iter->fused_velocity_x;
-//         double obstacle_velocity_y = iter->fused_velocity_y;
-
-//         iter->fused_position_x = main_vehicle.global_x + ((obstacle_position_x)*cos(theta) - (obstacle_position_y)*sin(theta)) * M_TO_10CM_PRECISION;
-//         iter->fused_position_y = main_vehicle.global_y + ((obstacle_position_x)*sin(theta) + (obstacle_position_y)*cos(theta)) * M_TO_10CM_PRECISION;
-
-//         adcm::Log::Info() << "장애물 relativeToGlobal 좌표변환 after (" << iter->fused_position_x << " , " << iter->fused_position_y << ")";
-//     }
-// }
 void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData vehicle)
 {
     srand((unsigned int)time(NULL));
@@ -359,7 +440,7 @@ void ScanLine(long x1, long y1, long x2, long y2, long min_y, long max_y)
 void generateRoadZValue(VehicleData target_vehicle, std::vector<adcm::map_2dListVector> &map_2d_test)
 {
 // 현재 차량의 position_x position_y 중심으로 좌우전방 5m 를 스캔해서 road_z 값을 1로 지정
-#define SCANNING_RANGE 30
+#define SCANNING_RANGE 10
     adcm::Log::Info() << "vehicle class " << target_vehicle.vehicle_class << " generateRoadZValue";
 
     int scanned_range_LL_x = floor(target_vehicle.position_x - SUB_VEHICLE_SIZE_X / 2) - SCANNING_RANGE;
@@ -433,49 +514,7 @@ void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, Vehi
 
     adcm::Log::Info() << "Vehicle class " << vehicle.vehicle_class << " generateOccupancyIndex";
 }
-/*
-void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std::vector<ObstacleData>::iterator iter)
-{
-    long arr_x[] = {p0.x, p1.x, p2.x, p3.x};
-    long arr_y[] = {p0.y, p1.y, p2.y, p3.y};
-    // find max x&y and min x&y of the rectangle
-    int n = sizeof(arr_y) / sizeof(arr_y[0]);
-    // Implemented inbuilt function to sort array
-    std::sort(arr_x, arr_x + n);
-    std::sort(arr_y, arr_y + n);
-    long min_x = arr_x[0];
-    long max_x = arr_x[n - 1];
-    long min_y = arr_y[0];
-    long max_y = arr_y[n - 1];
 
-    Point2D index;
-    for (index.y = min_y; index.y < max_y + 1; index.y++)
-    {
-        // adcm::Log::Info() << "min:" << ContourX[index.y][0];
-        // adcm::Log::Info() << "max:" << ContourX[index
-
-        ScanLine(p3.x, p3.y, p0.x, p0.y, min_y, max_y);
-
-        for (index.y = min_y; index.y < max_y + 1; index.y++)
-        {
-            if (ContourX[index.y][1] >= ContourX[index.y][0])
-            {
-                index.x = ContourX[index.y][0];
-                long len = 1 + ContourX[index.y][1] - ContourX[index.y][0];
-
-                // Can draw a horizontal line instead of individual pixels here
-                while (len--)
-                {
-                    // occupied
-                    iter->map_2d_location.push_back(index);
-                    index.x++;
-                    // adcm::Log::Info() << "x value is " << index.x << " y value is " << index.y;
-                }
-            }
-        }
-    }
-}
-*/
 // 기존 map_2d_location 반영 함수 수정
 void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std::vector<ObstacleData>::iterator iter)
 {
@@ -681,7 +720,7 @@ void ThreadReceiveHubData()
                     //     adcm::Log::Info() << "메인 차 기준 장애물 위치 : (" << obstacle_to_push.fused_position_x << ", " << obstacle_to_push.fused_position_y << ")";
                     //     obstacle_list_temp.push_back(obstacle_to_push);
                     // }
-                    adcm::Log::Info() << "main vehicle data received " << main_vehicle_temp.hubNumber;
+                    //adcm::Log::Info() << "main vehicle data received " << main_vehicle_temp.hubNumber;
                     break;
 
                 case SUB_VEHICLE_1: // 보조차1이 보낸 인지데이터
@@ -698,7 +737,7 @@ void ThreadReceiveHubData()
                     sub1_vehicle_temp.velocity_lat = data->velocity_lat;
                     sub1_vehicle_temp.velocity_ang = data->velocity_ang;
                     sub1_vehicle_temp.hubNumber = data->timestamp;
-                    adcm::Log::Info() << "sub vehicle1 data received" << sub1_vehicle_temp.hubNumber;
+                    //adcm::Log::Info() << "sub vehicle1 data received" << sub1_vehicle_temp.hubNumber;
                     // obstacle_list_temp.clear();
 
                     // for (int i = 0; i < data->obstacle.size(); i++)
@@ -736,7 +775,7 @@ void ThreadReceiveHubData()
                     sub2_vehicle_temp.velocity_lat = data->velocity_lat;
                     sub2_vehicle_temp.velocity_ang = data->velocity_ang;
                     sub2_vehicle_temp.hubNumber = data->timestamp;
-                    adcm::Log::Info() << "sub vehicle2 data received"  << sub2_vehicle_temp.hubNumber;
+                    //adcm::Log::Info() << "sub vehicle2 data received"  << sub2_vehicle_temp.hubNumber;
                     obstacle_list_temp.clear();
 
                     for (int i = 0; i < data->obstacle.size(); i++)
@@ -847,6 +886,9 @@ void ThreadKatech()
 {
     //==============1.전역변수인 MapData 생성 =================
     adcm::map_data_Objects mapData;
+    IDManager id_manager;
+    //NATS_INTERFACE nats_interface;
+
     // 한번 생성후 관제에서 인지데이터를 받을때마다 (100ms) 마다 업데이트
     adcm::Log::Info() << "mapData created for the first time";
     ::adcm::map_2dListStruct map_2dStruct_init;
@@ -952,7 +994,6 @@ void ThreadKatech()
         }
         std::vector<ObstacleData> obstacle_list_filtered;
         obstacle_list_filtered.clear();
-        IDManager id_manager;
 
         if (mapData.obstacle_list.empty())
         {
@@ -1101,11 +1142,6 @@ void ThreadKatech()
             //==============8. 현재까지의 데이터를 adcm mapData 형식으로 재구성해서 업데이트 ================
             //================ adcm mapData 내 obstacle list 업데이트 ===============================
 
-            adcm::obstacleListStruct obstacle1;
-            adcm::obstacleListStruct obstacle2;
-            adcm::obstacleListStruct obstacle3;
-            adcm::obstacleListStruct obstacle4; // 우선 장애물 최대 4개만 있다고 가정하고 진행
-
             adcm::vehicleListStruct main_vehicle_final;
             adcm::vehicleListStruct sub1_vehicle_final;
             adcm::vehicleListStruct sub2_vehicle_final;
@@ -1146,151 +1182,7 @@ void ThreadKatech()
                 obstacle_map.fused_velocity_z = iter->fused_velocity_z;
 
                 mapData.obstacle_list.push_back(obstacle_map);
-                // adcm::Log::Info() << "obstacle " << count << " is pushed to the mapData";
-
-                // if (count < max_count)
-                // {
-                //     count++;
-                // }
-                // else
-                //     break;
-                // switch (count)
-                // {
-                // case 1:
-                //     adcm::Log::Info() << "obstacle 1 start pushing";
-                //     obstacle1.obstacle_id = iter->obstacle_id;
-                //     obstacle1.obstacle_class = iter->obstacle_class;
-                //     obstacle1.timestamp = iter->timestamp;
-                //     obstacle1.map_2d_location.clear();
-                //     for (auto iter1 = iter->map_2d_location.begin(); iter1 < iter->map_2d_location.end(); iter1++)
-                //     {
-                //         adcm::map2dIndex index_to_push;
-                //         index_to_push.x = iter1->x;
-                //         index_to_push.y = iter1->y;
-                //         map_2d_test[index_to_push.x][index_to_push.y].obstacle_id = iter->obstacle_id;
-                //         // adcm::Log::Info() << "occupancy index pair of obstacle 1 is " << index_to_push.x << " , " << index_to_push.y;
-                //         // adcm::Log::Info() << "occupancy index of obstacle id " << iter->obstacle_id;
-                //         // adcm::Log::Info() << "map_2d_test[" << index_to_push.x << "][" <<index_to_push.y << "] = " <<  map_2d_test[index_to_push.x][index_to_push.y].obstacle_id;
-                //         obstacle1.map_2d_location.push_back(index_to_push);
-                //     }
-                //     obstacle1.stop_count = iter->stop_count;
-                //     obstacle1.fused_cuboid_x = iter->fused_cuboid_x;
-                //     obstacle1.fused_cuboid_y = iter->fused_cuboid_y;
-                //     obstacle1.fused_cuboid_z = iter->fused_cuboid_z;
-                //     obstacle1.fused_heading_angle = iter->fused_heading_angle;
-                //     obstacle1.fused_position_x = iter->fused_position_x;
-                //     obstacle1.fused_position_y = iter->fused_position_y;
-                //     obstacle1.fused_position_z = iter->fused_position_z;
-                //     obstacle1.fused_velocity_x = iter->fused_velocity_x;
-                //     obstacle1.fused_velocity_y = iter->fused_velocity_y;
-                //     obstacle1.fused_velocity_z = iter->fused_velocity_z;
-
-                //     mapData.obstacle_list.push_back(obstacle1);
-                //     adcm::Log::Info() << "obstacle 1 is pushed to the mapData";
-                //     break;
-
-                // case 2:
-                //     adcm::Log::Info() << "obstacle 2 start pushing";
-                //     obstacle2.obstacle_id = iter->obstacle_id;
-                //     obstacle2.obstacle_class = iter->obstacle_class;
-                //     obstacle2.timestamp = iter->timestamp;
-                //     obstacle2.map_2d_location.clear();
-                //     adcm::Log::Info() << "check1";
-                //     for (auto iter1 = iter->map_2d_location.begin(); iter1 < iter->map_2d_location.end(); iter1++)
-                //     {
-                //         adcm::map2dIndex index_to_push;
-                //         index_to_push.x = iter1->x;
-                //         index_to_push.y = iter1->y;
-                //         map_2d_test[index_to_push.x][index_to_push.y].obstacle_id = iter->obstacle_id;
-                //         // adcm::Log::Info() << "obstacle id : " << iter->obstacle_id;
-                //         // adcm::Log::Info() << "obstacle2 map_2d_location : (" << index_to_push.x << ", " << index_to_push.y << ")";
-                //         // adcm::Log::Info() << "occupancy index pair of obstacle 2 is " << index_to_push.x << " , " << index_to_push.y;
-                //         // adcm::Log::Info() << "occupancy index of obstacle id " << iter->obstacle_id;
-                //         obstacle2.map_2d_location.push_back(index_to_push);
-                //     }
-                //     adcm::Log::Info() << "check2";
-                //     obstacle2.stop_count = iter->stop_count;
-                //     obstacle2.fused_cuboid_x = iter->fused_cuboid_x;
-                //     obstacle2.fused_cuboid_y = iter->fused_cuboid_y;
-                //     obstacle2.fused_cuboid_z = iter->fused_cuboid_z;
-                //     obstacle2.fused_heading_angle = iter->fused_heading_angle;
-                //     obstacle2.fused_position_x = iter->fused_position_x;
-                //     obstacle2.fused_position_y = iter->fused_position_y;
-                //     obstacle2.fused_position_z = iter->fused_position_z;
-                //     obstacle2.fused_velocity_x = iter->fused_velocity_x;
-                //     obstacle2.fused_velocity_y = iter->fused_velocity_y;
-                //     obstacle2.fused_velocity_z = iter->fused_velocity_z;
-                //     mapData.obstacle_list.push_back(obstacle2);
-                //     adcm::Log::Info() << "obstacle 2 is pushed to the mapData";
-                //     break;
-
-                // case 3:
-                //     adcm::Log::Info() << "obstacle 3 start pushing";
-                //     obstacle3.obstacle_id = iter->obstacle_id;
-                //     obstacle3.obstacle_class = iter->obstacle_class;
-                //     obstacle3.timestamp = iter->timestamp;
-                //     obstacle3.map_2d_location.clear();
-                //     for (auto iter1 = iter->map_2d_location.begin(); iter1 < iter->map_2d_location.end(); iter1++)
-                //     {
-                //         adcm::map2dIndex index_to_push;
-                //         index_to_push.x = iter1->x;
-                //         index_to_push.y = iter1->y;
-                //         map_2d_test[index_to_push.x][index_to_push.y].obstacle_id = iter->obstacle_id;
-                //         obstacle3.map_2d_location.push_back(index_to_push);
-                //     }
-                //     obstacle3.stop_count = iter->stop_count;
-                //     obstacle3.fused_cuboid_x = iter->fused_cuboid_x;
-                //     obstacle3.fused_cuboid_y = iter->fused_cuboid_y;
-                //     obstacle3.fused_cuboid_z = iter->fused_cuboid_z;
-                //     obstacle3.fused_heading_angle = iter->fused_heading_angle;
-                //     obstacle3.fused_position_x = iter->fused_position_x;
-                //     obstacle3.fused_position_y = iter->fused_position_y;
-                //     obstacle3.fused_position_z = iter->fused_position_z;
-                //     obstacle3.fused_velocity_x = iter->fused_velocity_x;
-                //     obstacle3.fused_velocity_y = iter->fused_velocity_y;
-                //     obstacle3.fused_velocity_z = iter->fused_velocity_z;
-                //     mapData.obstacle_list.push_back(obstacle3);
-                //     adcm::Log::Info() << "obstacle 3 is pushed to the mapData";
-                //     break;
-
-                // case 4:
-                //     adcm::Log::Info() << "obstacle 4 start pushing";
-                //     obstacle4.obstacle_id = iter->obstacle_id;
-                //     obstacle4.obstacle_class = iter->obstacle_class;
-                //     obstacle4.timestamp = iter->timestamp;
-                //     obstacle4.map_2d_location.clear();
-                //     for (auto iter1 = iter->map_2d_location.begin(); iter1 < iter->map_2d_location.end(); iter1++)
-                //     {
-                //         adcm::map2dIndex index_to_push;
-                //         index_to_push.x = iter1->x;
-                //         index_to_push.y = iter1->y;
-                //         map_2d_test[index_to_push.x][index_to_push.y].obstacle_id = iter->obstacle_id;
-                //         // mapData.map_2d[iter1->x][iter1->y].obstacle_id = iter->obstacle_id;
-                //         obstacle4.map_2d_location.push_back(index_to_push);
-                //     }
-                //     obstacle4.stop_count = iter->stop_count;
-                //     obstacle4.fused_cuboid_x = iter->fused_cuboid_x;
-                //     obstacle4.fused_cuboid_y = iter->fused_cuboid_y;
-                //     obstacle4.fused_cuboid_z = iter->fused_cuboid_z;
-                //     obstacle4.fused_heading_angle = iter->fused_heading_angle;
-                //     obstacle4.fused_position_x = iter->fused_position_x;
-                //     obstacle4.fused_position_y = iter->fused_position_y;
-                //     obstacle4.fused_position_z = iter->fused_position_z;
-                //     obstacle4.fused_velocity_x = iter->fused_velocity_x;
-                //     obstacle4.fused_velocity_y = iter->fused_velocity_y;
-                //     obstacle4.fused_velocity_z = iter->fused_velocity_z;
-                //     adcm::Log::Info() << "obstacle 4 is pushed to the mapData";
-
-                // default:
-                //     adcm::Log::Info() << "drop obstacle";
-                //     break;
-                // }
-                // if (count < max_count)
-                // {
-                //     count++;
-                // }
-                // else
-                //     break;
+               
             }
             adcm::Log::Info() << "mapData obstacle list size is " << mapData.obstacle_list.size();
 
@@ -1405,18 +1297,6 @@ void ThreadKatech()
                 mapData.vehicle_list.push_back(sub2_vehicle_final);
                 // INFO("sub2_vehicle_final pushed to mapData");
             }
-            //==============mapData.2d 가 obstacle 리스트와 vehicle 리스트를 정보를 가지도록 assignment============
-            /*if(once)
-            {
-                for (int i =29; i < 100; i++)
-                {
-                    for (int j=45; j <55; j++)
-                    {
-                        map_2d_test[i][j].road_z = 1;
-                    }
-                }
-            once = 0;
-            }*/
 
             mapData.map_2d.clear();
             for (int i = 0; i < map_n; ++i)
@@ -1445,6 +1325,7 @@ void ThreadKatech()
             mapData_provider.send(mapData);
             adcm::Log::Info() << mapUpdate << "번째 허브 데이터 맵변환 후 전송 완료";
             adcm::Log::Info() << "mapData send";
+            NatsSend(mapData);
         }
         else
         {
