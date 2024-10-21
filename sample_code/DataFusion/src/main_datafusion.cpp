@@ -137,12 +137,35 @@ std::string obstacleStructToString(const adcm::obstacleListStruct& obstacle)
         << ", Fused Velocity Z: " << obstacle.fused_velocity_z;
     return oss.str();  // Return the concatenated string
 }
+std::string vehicleStructToString(const adcm::vehicleListStruct& vehicle) 
+{        
+    adcm::Log::Info() << "vehicleStructToString start!";
+    std::ostringstream oss;
+    
+    // Append all the fields to the string stream
+    oss << "Vehicle Class: " << static_cast<int>(vehicle.vehicle_class)  // uint8_t is printed as int
+        << ", Timestamp: " << vehicle.timestamp
+        << ", Map 2D Location: " << map2dIndexVectorToString(vehicle.map_2d_location)
+        << ", Position (Long): " << vehicle.position_long
+        << ", Position (Lat): " << vehicle.position_lat
+        << ", Position (Height): " << vehicle.position_height
+        << ", Position X: " << vehicle.position_x
+        << ", Position Y: " << vehicle.position_y
+        << ", Position Z: " << vehicle.position_z
+        << ", Yaw: " << vehicle.yaw
+        << ", Roll: " << vehicle.roll
+        << ", Pitch: " << vehicle.pitch
+        << ", Velocity (Long): " << vehicle.velocity_long
+        << ", Velocity (Lat): " << vehicle.velocity_lat
+        << ", Velocity X: " << vehicle.velocity_x
+        << ", Velocity Y: " << vehicle.velocity_y
+        << ", Velocity Angular: " << vehicle.velocity_ang;
 
+    return oss.str();  // Return the concatenated string
+}
 std::string convertVectorToString(const ListVector& map_2d) 
 {
-    adcm::Log::Info() << "convertVectorToString map_2d start!"; 
     std::ostringstream oss;
-
     for (size_t i = 0; i < map_2d.size(); ++i) {
         for (size_t j = 0; j < map_2d[i].size(); ++j) 
         {
@@ -158,14 +181,23 @@ std::string convertVectorToString(const ListVector& map_2d)
     return oss.str();  // Return the concatenated string
 }
 
-std::string convertVectorToString(const ::obstacleListVector& obstacle_list) 
+std::string convertVectorToString(const obstacleListVector& obstacle_list) 
 {
-    adcm::Log::Info() << "convertVectorToString start!"; 
     std::ostringstream result;
-
     // Iterate over the vector and convert each struct to a string
     for (const auto& obstacle : obstacle_list) {
         result << obstacleStructToString(obstacle) << "\n";  // Use the external conversion function
+    }
+    return result.str();  // Return the concatenated string
+}
+
+std::string convertVectorToString(const vehicleListVector& vehicle_list) 
+{
+    adcm::Log::Info() << "vehicle_list start!"; 
+    std::ostringstream result;
+    // Iterate over the vector and convert each struct to a string
+    for (const auto& vehicle : vehicle_list) {
+        result << vehicleStructToString(vehicle) << "\n";  // Use the external conversion function
     }
     return result.str();  // Return the concatenated string
 }
@@ -192,10 +224,11 @@ void saveToJsonFile(const std::string& key, const std::string& value, int& fileC
     ++fileCount;
 }
 
-void NatsSend(adcm::map_data_Objects map_data)
+void NatsSend(const adcm::map_data_Objects& map_data)
 {
     static int map2d_count = 0;  // Static variable to track file number
     static int obstacle_list_count = 0;  // Static variable to track file number
+    static int vehicle_list_count = 0;  // Static variable to track file number
 
     if (firstTime == true)
     {
@@ -212,17 +245,19 @@ void NatsSend(adcm::map_data_Objects map_data)
         //convertToStandardVector(map_data.obstacle_list);
         std::string map2dStr = convertVectorToString(map_data.map_2d);
         std::string obstaclesStr = convertVectorToString(map_data.obstacle_list);
-        //std::string vehiclesStr = convertVectorToString(map_data.vehicle_list);
+        std::string vehiclesStr = convertVectorToString(map_data.vehicle_list);
         adcm::Log::Info() << "NATS conversion done!";
 
         natsManager->addJsonData("map2d", map2dStr);        
         natsManager->addJsonData("obstacle_list", obstaclesStr);       
+        natsManager->addJsonData("vehicle_list", vehiclesStr);       
 
         natsManager->NatsPublishJson(pubSubject);
         adcm::Log::Info() << "NatsPublishJson";
 
         saveToJsonFile("map2d", map2dStr, map2d_count);
         saveToJsonFile("obstacle_list", obstaclesStr, obstacle_list_count);
+        saveToJsonFile("vehicle_list", vehiclesStr, vehicle_list_count);
 
     }
     else
