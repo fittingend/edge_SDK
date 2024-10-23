@@ -77,13 +77,8 @@
 #define MAX_BATCH_SIZE 5
 #define DEMO
 
-// adcm::map_2dListStruct map_2dStruct_init;
-// map_2dStruct_init.obstacle_id = NO_OBSTACLE;
-//  map_2dStruct_init.road_z = 0;
-//  // map_2dStruct_init.vehicle_class = NO_VEHICLE;
 std::vector<adcm::map_2dListVector> map_2d;
 
-//(map_n, adcm::map_2dListVector(map_m, map_2dStruct_init));
 obstacleListVector obstacle_list_temp;
 adcm::vehicleListStruct ego_vehicle_temp, sub_vehicle_1_temp, sub_vehicle_2_temp, sub_vehicle_3_temp, sub_vehicle_4_temp;
 doubleVector utm_x;
@@ -92,8 +87,146 @@ obstacleListVector obstacle_pedes_initial;   // 시나리오 5 용
 obstacleListVector obstacle_vehicle_initial; // 시나리오 6 용
 
 //============== 2. 함수 definition =================
+#define NATS_TEST
+#ifdef NATS_TEST
+#include "./NATS_IMPLEMENTATION/NatsConnManager.h"
+#define HMI_SERVER_URL  "https://nats.beyless.com"
+#include <sstream>
+#include <fstream>  // Required for file handling
+#include <filesystem>
+std::mutex mtx; // 뮤텍스 선언
+bool firstTime = true;
+natsStatus s = NATS_OK;
+std::vector<const char*> subject = {"test1.*", "test2.*"};
+std::shared_ptr<adcm::etc::NatsConnManager> natsManager;
 
-// double getDistance(ObstacleData obstacle, VehicleData vehicle)
+void asyncCb(natsConnection* nc, natsSubscription* sub, natsStatus err, void* closure)
+{
+    std::cout << "Async error: " << err << " - " << natsStatus_GetText(err) << std::endl;
+    natsManager->NatsSubscriptionGetDropped(sub, (int64_t*) &natsManager->dropped);
+}
+
+void onMsg(natsConnection* nc, natsSubscription* sub, natsMsg* msg, void* closure)
+{
+    const char* subject = NULL;
+    
+    // 뮤텍스를 사용하여 공유 변수 접근 보호
+    std::lock_guard<std::mutex> lock(mtx);
+    subject = natsMsg_GetSubject(msg);
+
+    std::cout << "Received msg: [" << subject << " : " << natsMsg_GetDataLength(msg) << "]" << natsMsg_GetData(msg) << std::endl;
+    // We should be using a mutex to protect those variables since
+    // they are used from the subscription's delivery and the main
+    // threads. For demo purposes, this is fine.
+    
+    // std::istringstream iss(subject);
+    // std::vector<std::string> words;
+    // std::string word;
+
+    // while (std::getline(iss, word, '.')) 
+    // {
+    //     words.push_back(word);
+    // }
+    // std::cout << words[0] << " Data Category : " << words[1] << std::endl;
+
+    natsManager->NatsMsgDestroy(msg);
+}
+
+std::string globalPathPositionVectorToString(const globalPathPositionVector& wgs84_xy) 
+{
+    adcm::Log::Info() << "globalPathPositionVectorToString start!";
+    std::ostringstream oss;
+    for (const auto& index : wgs84_xy) {
+        oss << "(X: " << index.x << ", Y: " << index.y << ") ";
+    }
+    return oss.str();
+}
+std::string riskStructToString(const adcm::riskAssessmentStruct& risk) 
+{
+    adcm::Log::Info() << "riskStructToString start!";
+    std::ostringstream oss;
+    
+    // Append all the fields to the string stream
+    oss << "Obstacle ID: " << risk.obstacle_id
+        << ", WGS84 Start: " << globalPathPositionVectorToString(risk.wgs84_xy_start)  // Assuming a function for this
+        << ", WGS84 End: " << globalPathPositionVectorToString(risk.wgs84_xy_end)      // Assuming a function for this
+        << ", Hazard Class: " << static_cast<int>(risk.hazard_class)  // uint8_t is printed as int
+        << ", Is Hazard: " << (risk.isHarzard ? "True" : "False")
+        << ", Confidence: " << risk.confidence;
+
+    return oss.str();  // Return the concatenated string
+}
+std::string convertVectorToString(const riskAssessmentVector& riskAssessmentList) 
+{
+    adcm::Log::Info() << "riskAssessmentList start!"; 
+    std::ostringstream result;
+    // Iterate over the vector and convert each struct to a string
+    for (const auto& risk : riskAssessmentList) {
+        result << riskStructToString(risk) << "\n";  // Use the external conversion function
+    }
+    return result.str();  // Return the concatenated string
+}
+
+void saveToJsonFile(const std::string& key, const std::string& value, int& fileCount)
+{
+    std::ostringstream fileNameStream;
+    fileNameStream << key <<"_" << fileCount << ".json";  // Construct the file name
+    std::string fileName = fileNameStream.str();
+    std::ofstream outFile(fileName);
+    // Open file for writing with the generated name
+    if (outFile.is_open())
+    {
+        outFile << value;  // Write the JSON string to the file
+        outFile.close();          // Close the file after writing
+        adcm::Log::Info() << "JSON data stored in " << fileName;
+    }
+    else
+    {
+        adcm::Log::Error() << "Failed to open file " << fileName << " for writing!";
+    }
+
+    // Increment the file count for the next call
+    ++fileCount;
+}
+void NatsSend(const adcm::risk_assessment_Objects& riskAssessment)
+{
+    static int risk_count = 0;  // Static variable to track file number
+
+    if (firstTime == true)
+    {
+        adcm::Log::Info() << "NATS first time setup!";
+        natsManager = std::make_shared<adcm::etc::NatsConnManager>(HMI_SERVER_URL, subject, onMsg, asyncCb, adcm::etc::NatsConnManager::Mode::Default);
+        s = natsManager->NatsExecute();
+        firstTime = false;
+    }
+    if(s == NATS_OK)
+    {
+        const char* pubSubject = "test2.JSON";
+        natsManager->ClearJsonData();
+        adcm::Log::Info() << "String conversion start!";
+        std::string riskToStr = convertVectorToString(riskAssessment.riskAssessmentList);
+        adcm::Log::Info() << "String conversion done!";
+
+        natsManager->addJsonData("riskAssessment", riskToStr);             
+
+        natsManager->NatsPublishJson(pubSubject);
+        adcm::Log::Info() << "NatsPublishJson";
+
+        saveToJsonFile("riskAssessment", riskToStr, risk_count);
+    }
+    else
+    {
+        std::cout << "Nats Connection error" << std::endl;
+        try{
+        natsManager = std::make_shared<adcm::etc::NatsConnManager>(HMI_SERVER_URL,subject, onMsg, asyncCb, adcm::etc::NatsConnManager::Mode::Default);
+        s = natsManager->NatsExecute();
+        }catch(std::exception e)
+        {
+            std::cout << "Nats reConnection error" << std::endl;
+        }
+    }  
+}
+#endif
 void symmDiff(obstacleListVector vec1, obstacleListVector vec2, obstacleListVector &output, int n, int m)
 {
     // Traverse both arrays simultaneously.
@@ -1148,6 +1281,7 @@ void ThreadKatech()
                 {
                     adcm::Log::Info() << "riskAssessment send!";
                     riskAssessment_provider.send(riskAssessment);
+                    NatsSend(riskAssessment);
                 }
                 else
                     adcm::Log::Info() << "riskAssessment size is 0, doesn't send";
