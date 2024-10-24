@@ -94,6 +94,7 @@ obstacleListVector obstacle_vehicle_initial; // 시나리오 6 용
 #include <sstream>
 #include <fstream>  // Required for file handling
 #include <filesystem>
+
 std::mutex mtx; // 뮤텍스 선언
 bool firstTime = true;
 natsStatus s = NATS_OK;
@@ -115,56 +116,7 @@ void onMsg(natsConnection* nc, natsSubscription* sub, natsMsg* msg, void* closur
     subject = natsMsg_GetSubject(msg);
 
     std::cout << "Received msg: [" << subject << " : " << natsMsg_GetDataLength(msg) << "]" << natsMsg_GetData(msg) << std::endl;
-    // We should be using a mutex to protect those variables since
-    // they are used from the subscription's delivery and the main
-    // threads. For demo purposes, this is fine.
-    
-    // std::istringstream iss(subject);
-    // std::vector<std::string> words;
-    // std::string word;
-
-    // while (std::getline(iss, word, '.')) 
-    // {
-    //     words.push_back(word);
-    // }
-    // std::cout << words[0] << " Data Category : " << words[1] << std::endl;
-
     natsManager->NatsMsgDestroy(msg);
-}
-
-std::string globalPathPositionVectorToString(const globalPathPositionVector& wgs84_xy) 
-{
-    adcm::Log::Info() << "globalPathPositionVectorToString start!";
-    std::ostringstream oss;
-    for (const auto& index : wgs84_xy) {
-        oss << "(X: " << index.x << ", Y: " << index.y << ") ";
-    }
-    return oss.str();
-}
-std::string riskStructToString(const adcm::riskAssessmentStruct& risk) 
-{
-    adcm::Log::Info() << "riskStructToString start!";
-    std::ostringstream oss;
-    
-    // Append all the fields to the string stream
-    oss << "Obstacle ID: " << risk.obstacle_id
-        << ", WGS84 Start: " << globalPathPositionVectorToString(risk.wgs84_xy_start)  // Assuming a function for this
-        << ", WGS84 End: " << globalPathPositionVectorToString(risk.wgs84_xy_end)      // Assuming a function for this
-        << ", Hazard Class: " << static_cast<int>(risk.hazard_class)  // uint8_t is printed as int
-        << ", Is Hazard: " << (risk.isHarzard ? "True" : "False")
-        << ", Confidence: " << risk.confidence;
-
-    return oss.str();  // Return the concatenated string
-}
-std::string convertVectorToString(const riskAssessmentVector& riskAssessmentList) 
-{
-    adcm::Log::Info() << "riskAssessmentList start!"; 
-    std::ostringstream result;
-    // Iterate over the vector and convert each struct to a string
-    for (const auto& risk : riskAssessmentList) {
-        result << riskStructToString(risk) << "\n";  // Use the external conversion function
-    }
-    return result.str();  // Return the concatenated string
 }
 
 void saveToJsonFile(const std::string& key, const std::string& value, int& fileCount)
@@ -188,6 +140,76 @@ void saveToJsonFile(const std::string& key, const std::string& value, int& fileC
     // Increment the file count for the next call
     ++fileCount;
 }
+std::string convertRiskAssessmentToJsonString(const adcm::risk_assessment_Objects& riskAssessment) {
+    //test purpose
+
+    uint64_t timestamp_map = 111;
+    uint64_t timestamp_risk = 222;
+    std::string model_id = "test_id_v1";
+
+    std::ostringstream oss;  // Use a string stream for easier manipulation
+    oss << "{\n";  // Start the JSON object
+
+    // Convert riskAssessmentList to JSON
+    oss << "    \"riskAssessmentList\": [\n";
+    for (size_t i = 0; i < riskAssessment.riskAssessmentList.size(); ++i) {
+        const auto& item = riskAssessment.riskAssessmentList[i];
+        oss << "        {\n"
+            << "            \"obstacle_id\": " << item.obstacle_id << ",\n"
+            << "            \"wgs84_xy_start\": [\n";
+
+        // Convert wgs84_xy_start to JSON
+        for (size_t j = 0; j < item.wgs84_xy_start.size(); ++j) {
+            const auto& start = item.wgs84_xy_start[j];
+            oss << "                {\n"
+                << "                    \"x\": " << start.x << ",\n"
+                << "                    \"y\": " << start.y << "\n"
+                << "                }";
+
+            if (j < item.wgs84_xy_start.size() - 1) {
+                oss << ",";
+            }
+            oss << "\n";  // Newline for readability
+        }
+
+        oss << "            ],\n"  // Close wgs84_xy_start array
+            << "            \"wgs84_xy_end\": [\n";
+
+        // Convert wgs84_xy_end to JSON
+        for (size_t j = 0; j < item.wgs84_xy_end.size(); ++j) {
+            const auto& end = item.wgs84_xy_end[j];
+            oss << "                {\n"
+                << "                    \"x\": " << end.x << ",\n"
+                << "                    \"y\": " << end.y << "\n"
+                << "                }";
+
+            if (j < item.wgs84_xy_end.size() - 1) {
+                oss << ",";
+            }
+            oss << "\n";  // Newline for readability
+        }
+
+        oss << "            ],\n"  // Close wgs84_xy_end array
+            << "            \"hazard_class\": " << static_cast<int>(item.hazard_class) << ",\n"  // hazard_class
+            << "            \"isHarzard\": " << (item.isHarzard ? "true" : "false") << ",\n"  // isHazard
+            << "            \"confidence\": " << item.confidence << ",\n"  // confidence
+            << "            \"timestamp_map\": " << timestamp_map << ",\n"  // timestamp_map
+            << "            \"timestamp_risk\": " << timestamp_risk << ",\n"  // timestamp_risk
+            << "            \"model_id\": \"" << model_id << "\"\n";  // model_id
+
+        oss << "        }";
+
+        if (i < riskAssessment.riskAssessmentList.size() - 1) {
+            oss << ",";
+        }
+        oss << "\n";  // Newline for readability
+    }
+    oss << "    ]\n";  // Close riskAssessmentList array
+    oss << "}";  // Close the main JSON object
+
+    return oss.str();  // Return the constructed JSON string
+}
+
 void NatsSend(const adcm::risk_assessment_Objects& riskAssessment)
 {
     static int risk_count = 0;  // Static variable to track file number
@@ -203,15 +225,10 @@ void NatsSend(const adcm::risk_assessment_Objects& riskAssessment)
     {
         const char* pubSubject = "test2.JSON";
         natsManager->ClearJsonData();
-        adcm::Log::Info() << "String conversion start!";
-        std::string riskToStr = convertVectorToString(riskAssessment.riskAssessmentList);
-        adcm::Log::Info() << "String conversion done!";
-
-        natsManager->addJsonData("riskAssessment", riskToStr);             
-
+        std::string riskToStr = convertRiskAssessmentToJsonString(riskAssessment);
+        natsManager->addJsonData("riskAssessment", riskToStr);
         natsManager->NatsPublishJson(pubSubject);
         adcm::Log::Info() << "NatsPublishJson";
-
         saveToJsonFile("riskAssessment", riskToStr, risk_count);
     }
     else
@@ -1237,16 +1254,6 @@ void ThreadKatech()
 
                     if (utm_x.size() != 0 && map_2d.size() != 0)
                     {
-                        /*if ((map_2d.size() != 0) && (obstacle_list.size()== 0) && (utm_x.size() == 6))
-                        {
-                            for (int i =29; i < 100; i++)
-                            {
-                                for (int j=45; j <55; j++)
-                                {
-                                    map_2d[i][j].road_z = 1;
-                                }
-                            }
-                        }*/
                         drawline(utm_x, utm_y, map_2d, riskAssessment);
                     }
                     adcm::Log::Info() << "scenario 7 DONE";
@@ -1282,9 +1289,14 @@ void ThreadKatech()
                     adcm::Log::Info() << "riskAssessment send!";
                     riskAssessment_provider.send(riskAssessment);
                     NatsSend(riskAssessment);
+
                 }
                 else
+                {
+                    NatsSend(riskAssessment); //테스트 용도로 계속 송신하게 한다
                     adcm::Log::Info() << "riskAssessment size is 0, doesn't send";
+
+                }
                 riskAssessment.riskAssessmentList.clear();
             }
 

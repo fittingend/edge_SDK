@@ -49,6 +49,10 @@
 #include <filesystem>
 #include "main_datafusion.hpp"
 
+#include <string>
+#include <vector>
+
+
 #define NATS_TEST
 #ifdef NATS_TEST
 #include "./NATS_IMPLEMENTATION/NatsConnManager.h"
@@ -92,114 +96,130 @@ void onMsg(natsConnection* nc, natsSubscription* sub, natsMsg* msg, void* closur
 
     natsManager->NatsMsgDestroy(msg);
 }
-/*
-NATS_INTERFACE::NATS_INTERFACE()
-{
-    natsStatus s = NATS_OK;
-    //const char*  subject = "sensorData.*";
-    std::vector<const char*> subject = {"test1.*", "test2.*"};
-    natsManager = std::make_shared<adcm::etc::NatsConnManager>(HMI_SERVER_URL, subject, onMsg, asyncCb, adcm::etc::NatsConnManager::Mode::Default);
-}*/
 
-std::string map2dIndexVectorToString(const ::map2dIndexVector& map_2d_location) 
-{
-    adcm::Log::Info() << "map2dIndexVectorToString start!";
-    //::map2dIndexVector
-    //ara::core::Vector<adcm::map2dIndex>
-    std::ostringstream oss;
-    // Assume map_2d_location is some form of vector, iterating over it
-    for (const auto& index : map_2d_location) {
-        oss << "(X: " << index.x << ", Y: " << index.y << ") ";
-    }
-    return oss.str();
-}
+std::string convertMapDataToJsonString(const adcm::map_data_Objects& mapData) {
+    std::ostringstream oss;  // Use a string stream for easier manipulation
+    oss << "{\n";  // Start the JSON object
 
-// External function to convert obstacleListStruct to a string
-std::string obstacleStructToString(const adcm::obstacleListStruct& obstacle) 
-{        
-    adcm::Log::Info() << "obstacleStructToString start!";
-    std::ostringstream oss;
-    // Append all the fields to the string stream
-    oss << "Obstacle ID: " << obstacle.obstacle_id 
-        << ", Class: " << static_cast<int>(obstacle.obstacle_class)  // uint8_t is printed as int
-        << ", Timestamp: " << obstacle.timestamp
-        << ", Map 2D Location: " << map2dIndexVectorToString(obstacle.map_2d_location)
-        << ", Stop Count: " << static_cast<int>(obstacle.stop_count)
-        << ", Fused Cuboid X: " << obstacle.fused_cuboid_x
-        << ", Fused Cuboid Y: " << obstacle.fused_cuboid_y
-        << ", Fused Cuboid Z: " << obstacle.fused_cuboid_z
-        << ", Fused Heading Angle: " << obstacle.fused_heading_angle
-        << ", Fused Position X: " << obstacle.fused_position_x
-        << ", Fused Position Y: " << obstacle.fused_position_y
-        << ", Fused Position Z: " << obstacle.fused_position_z
-        << ", Fused Velocity X: " << obstacle.fused_velocity_x
-        << ", Fused Velocity Y: " << obstacle.fused_velocity_y
-        << ", Fused Velocity Z: " << obstacle.fused_velocity_z;
-    return oss.str();  // Return the concatenated string
-}
-std::string vehicleStructToString(const adcm::vehicleListStruct& vehicle) 
-{        
-    adcm::Log::Info() << "vehicleStructToString start!";
-    std::ostringstream oss;
-    
-    // Append all the fields to the string stream
-    oss << "Vehicle Class: " << static_cast<int>(vehicle.vehicle_class)  // uint8_t is printed as int
-        << ", Timestamp: " << vehicle.timestamp
-        << ", Map 2D Location: " << map2dIndexVectorToString(vehicle.map_2d_location)
-        << ", Position (Long): " << vehicle.position_long
-        << ", Position (Lat): " << vehicle.position_lat
-        << ", Position (Height): " << vehicle.position_height
-        << ", Position X: " << vehicle.position_x
-        << ", Position Y: " << vehicle.position_y
-        << ", Position Z: " << vehicle.position_z
-        << ", Yaw: " << vehicle.yaw
-        << ", Roll: " << vehicle.roll
-        << ", Pitch: " << vehicle.pitch
-        << ", Velocity (Long): " << vehicle.velocity_long
-        << ", Velocity (Lat): " << vehicle.velocity_lat
-        << ", Velocity X: " << vehicle.velocity_x
-        << ", Velocity Y: " << vehicle.velocity_y
-        << ", Velocity Angular: " << vehicle.velocity_ang;
+    // Convert map_2d to JSON
+    oss << "    \"map_2d\": [\n";
+    for (size_t i = 0; i < mapData.map_2d.size(); ++i) {
+        oss << "        [\n";  // Start each row
+        for (size_t j = 0; j < mapData.map_2d[i].size(); ++j) {
+            const auto& item = mapData.map_2d[i][j];
+            oss << "            {\n"
+                << "                \"obstacle_id\": " << item.obstacle_id << ",\n"
+                << "                \"vehicle_class\": " << static_cast<int>(item.vehicle_class) << ",\n"
+                << "                \"road_z\": " << static_cast<int>(item.road_z) << "\n"
+                << "            }";
 
-    return oss.str();  // Return the concatenated string
-}
-std::string convertVectorToString(const ListVector& map_2d) 
-{
-    std::ostringstream oss;
-    for (size_t i = 0; i < map_2d.size(); ++i) {
-        for (size_t j = 0; j < map_2d[i].size(); ++j) 
-        {
-            const auto& item = map_2d[i][j]; // Access the specific element
-
-            // Format each item's properties into a string
-            oss << "    map_2d[" << i << "][" << j << "]: "
-                << "Obstacle ID: " << item.obstacle_id 
-                << ", Vehicle Class: " << static_cast<int>(item.vehicle_class)  // Cast to int for display
-                << ", Road Z: " << item.road_z << "\n"; // Add a newline for better readability
+            if (j < mapData.map_2d[i].size() - 1) {
+                oss << ",";
+            }
+            oss << "\n";  // Newline for readability
         }
-    }
-    return oss.str();  // Return the concatenated string
-}
+        oss << "        ]";
 
-std::string convertVectorToString(const obstacleListVector& obstacle_list) 
-{
-    std::ostringstream result;
-    // Iterate over the vector and convert each struct to a string
-    for (const auto& obstacle : obstacle_list) {
-        result << obstacleStructToString(obstacle) << "\n";  // Use the external conversion function
+        if (i < mapData.map_2d.size() - 1) {
+            oss << ",";
+        }
+        oss << "\n";  // Newline for readability
     }
-    return result.str();  // Return the concatenated string
-}
+    oss << "    ],\n";
 
-std::string convertVectorToString(const vehicleListVector& vehicle_list) 
-{
-    adcm::Log::Info() << "vehicle_list start!"; 
-    std::ostringstream result;
-    // Iterate over the vector and convert each struct to a string
-    for (const auto& vehicle : vehicle_list) {
-        result << vehicleStructToString(vehicle) << "\n";  // Use the external conversion function
+    // Convert obstacle_list to JSON
+    oss << "    \"obstacle_list\": [\n";
+    for (size_t i = 0; i < mapData.obstacle_list.size(); ++i) {
+        const auto& item = mapData.obstacle_list[i];
+        oss << "        {\n"
+            << "            \"obstacle_id\": " << item.obstacle_id << ",\n"
+            << "            \"obstacle_class\": " << static_cast<int>(item.obstacle_class) << ",\n"
+            << "            \"timestamp\": " << item.timestamp << ",\n"
+            << "            \"stop_count\": " << static_cast<int>(item.stop_count) << ",\n"
+            << "            \"fused_cuboid_x\": " << item.fused_cuboid_x << ",\n"
+            << "            \"fused_cuboid_y\": " << item.fused_cuboid_y << ",\n"
+            << "            \"fused_cuboid_z\": " << item.fused_cuboid_z << ",\n"
+            << "            \"fused_heading_angle\": " << item.fused_heading_angle << ",\n"
+            << "            \"fused_position_x\": " << item.fused_position_x << ",\n"
+            << "            \"fused_position_y\": " << item.fused_position_y << ",\n"
+            << "            \"fused_position_z\": " << item.fused_position_z << ",\n"
+            << "            \"fused_velocity_x\": " << item.fused_velocity_x << ",\n"
+            << "            \"fused_velocity_y\": " << item.fused_velocity_y << ",\n"
+            << "            \"fused_velocity_z\": " << item.fused_velocity_z << ",\n"
+            << "            \"map_2d_location\": [\n";
+
+        for (size_t j = 0; j < item.map_2d_location.size(); ++j) {
+            const auto& index = item.map_2d_location[j];
+            oss << "                {\n"
+                << "                    \"x\": " << index.x << ",\n"
+                << "                    \"y\": " << index.y << "\n"
+                << "                }";
+
+            if (j < item.map_2d_location.size() - 1) {
+                oss << ",";
+            }
+            oss << "\n";  // Newline for readability
+        }
+
+        oss << "            ]\n"  // Close map_2d_location array
+            << "        }";
+
+        if (i < mapData.obstacle_list.size() - 1) {
+            oss << ",";
+        }
+        oss << "\n";  // Newline for readability
     }
-    return result.str();  // Return the concatenated string
+    oss << "    ],\n";
+
+    // Convert vehicle_list to JSON
+    oss << "    \"vehicle_list\": [\n";
+    for (size_t i = 0; i < mapData.vehicle_list.size(); ++i) {
+        const auto& item = mapData.vehicle_list[i];
+        oss << "        {\n"
+            << "            \"vehicle_class\": " << static_cast<int>(item.vehicle_class) << ",\n"
+            << "            \"timestamp\": " << item.timestamp << ",\n"
+            << "            \"position_long\": " << item.position_long << ",\n"
+            << "            \"position_lat\": " << item.position_lat << ",\n"
+            << "            \"position_height\": " << item.position_height << ",\n"
+            << "            \"position_x\": " << item.position_x << ",\n"
+            << "            \"position_y\": " << item.position_y << ",\n"
+            << "            \"position_z\": " << item.position_z << ",\n"
+            << "            \"yaw\": " << item.yaw << ",\n"
+            << "            \"roll\": " << item.roll << ",\n"
+            << "            \"pitch\": " << item.pitch << ",\n"
+            << "            \"velocity_long\": " << item.velocity_long << ",\n"
+            << "            \"velocity_lat\": " << item.velocity_lat << ",\n"
+            << "            \"velocity_x\": " << item.velocity_x << ",\n"
+            << "            \"velocity_y\": " << item.velocity_y << ",\n"
+            << "            \"velocity_ang\": " << item.velocity_ang << ",\n"
+            << "            \"map_2d_location\": [\n";
+
+        for (size_t j = 0; j < item.map_2d_location.size(); ++j) {
+            const auto& index = item.map_2d_location[j];
+            oss << "                {\n"
+                << "                    \"x\": " << index.x << ",\n"
+                << "                    \"y\": " << index.y << "\n"
+                << "                }";
+
+            if (j < item.map_2d_location.size() - 1) {
+                oss << ",";
+            }
+            oss << "\n";  // Newline for readability
+        }
+
+        oss << "            ]\n"  // Close map_2d_location array
+            << "        }";
+
+        if (i < mapData.vehicle_list.size() - 1) {
+            oss << ",";
+        }
+        oss << "\n";  // Newline for readability
+    }
+    oss << "    ]\n";  // Close vehicle_list
+
+    oss << "}";  // Close the main JSON object
+
+    return oss.str();  // Return the concatenated JSON string
 }
 
 void saveToJsonFile(const std::string& key, const std::string& value, int& fileCount)
@@ -224,11 +244,9 @@ void saveToJsonFile(const std::string& key, const std::string& value, int& fileC
     ++fileCount;
 }
 
-void NatsSend(const adcm::map_data_Objects& map_data)
+void NatsSend(const adcm::map_data_Objects& mapData)
 {
-    static int map2d_count = 0;  // Static variable to track file number
-    static int obstacle_list_count = 0;  // Static variable to track file number
-    static int vehicle_list_count = 0;  // Static variable to track file number
+    static int mapData_count = 0;
 
     if (firstTime == true)
     {
@@ -242,23 +260,12 @@ void NatsSend(const adcm::map_data_Objects& map_data)
         const char* pubSubject = "test1.JSON";
         natsManager->ClearJsonData();
         adcm::Log::Info() << "NATS conversion start!";
-        //convertToStandardVector(map_data.obstacle_list);
-        std::string map2dStr = convertVectorToString(map_data.map_2d);
-        std::string obstaclesStr = convertVectorToString(map_data.obstacle_list);
-        std::string vehiclesStr = convertVectorToString(map_data.vehicle_list);
+        std::string mapDataStr = convertMapDataToJsonString(mapData);
         adcm::Log::Info() << "NATS conversion done!";
-
-        natsManager->addJsonData("map2d", map2dStr);        
-        natsManager->addJsonData("obstacle_list", obstaclesStr);       
-        natsManager->addJsonData("vehicle_list", vehiclesStr);       
-
+        natsManager->addJsonData("mapData", mapDataStr);        
         natsManager->NatsPublishJson(pubSubject);
         adcm::Log::Info() << "NatsPublishJson";
-
-        saveToJsonFile("map2d", map2dStr, map2d_count);
-        saveToJsonFile("obstacle_list", obstaclesStr, obstacle_list_count);
-        saveToJsonFile("vehicle_list", vehiclesStr, vehicle_list_count);
-
+        saveToJsonFile("mapData", mapDataStr, mapData_count);
     }
     else
     {
