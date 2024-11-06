@@ -75,6 +75,11 @@ find_package(ara-core REQUIRED)
 find_package(ara-exec-execution-client REQUIRED)
 find_package(ara-log REQUIRED)
 
+#Find library for Poco
+find_package(Poco COMPONENTS Foundation Net JSON REQUIRED)
+#nats
+find_library(NATS_LIB nats REQUIRED)
+
 # Protocol Binding
 # It's not possible to enable some/ip and opendds at the same time
 if((HAS_VSOMEIP_BINDING OR HAS_WRSOMEIP_BINDING) AND HAS_OPENDDS_BINDING)
@@ -166,6 +171,7 @@ set(OPENDDS_MAKE_TARGET ${APP_NAME}Generated)
 # Define source files
 set(APPLICATION_src
     src/main_riskassessment.cpp
+    src/NATS_IMPLEMENTATION/NatsConnManager.cpp
     ${${PROCESS_ARTIFACTS_MAKE_TARGET}_SOURCES}
     ${PROJECT_SOURCE_DIR}/../common/logger/src/logger.cpp
     ${PROJECT_SOURCE_DIR}/../common/service/src/risk_assessment_provider.cpp
@@ -239,6 +245,9 @@ endif()
 
 
 target_link_libraries(${CMAKE_PROJECT_NAME} ${CMAKE_THREAD_LIBS_INIT} ${ARA_LIBRARIES} ${COMMUNICATION_LIBRARY} ara_com e2exf e2e ara::log ara::exec_execution_client ara::core)
+
+#NATS용 library 추가
+target_link_libraries(${CMAKE_PROJECT_NAME} ${CMAKE_THREAD_LIBS_INIT} ${ARA_LIBRARIES} ${COMMUNICATION_LIBRARY} ara_com e2exf e2e ara::log ara::exec_execution_client ara::core ${NATS_LIB} ara::core Poco::Net Poco::Foundation Poco::JSON ${Boost_LIBRARIES})
 
 #add_dependencies(${PROJECT_NAME} ${INTERFACES_MAKE_TARGET} ${PROCESS_ARTIFACTS_MAKE_TARGET})
 
