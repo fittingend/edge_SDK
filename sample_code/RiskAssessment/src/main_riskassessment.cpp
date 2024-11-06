@@ -144,7 +144,7 @@ std::string convertRiskAssessmentToJsonString(const adcm::risk_assessment_Object
     //test purpose
 
     uint64_t timestamp_map = 111;
-    uint64_t timestamp_risk = 222;
+    uint64_t timestamp_risk = riskAssessment.timestamp;
     std::string model_id = "test_id_v1";
 
     std::ostringstream oss;  // Use a string stream for easier manipulation
@@ -551,7 +551,7 @@ void GetRiskAssDataFromQueue(std::vector<adcm::risk_assessment_Objects> &dataBat
 }
 void ThreadAct1()
 {
-    adcm::Log::Info() << "SDK release_240910_interface v1.8.4";
+    adcm::Log::Info() << "SDK release_241008_interface v1.9";
     adcm::Log::Info() << "RiskAssessment ThreadAct1";
     INFO("RiskAssessment .init()");
     // adcm::RiskAssessment_Provider riskAssessment_provider;
@@ -1286,14 +1286,19 @@ void ThreadKatech()
                 adcm::Log::Info() << "===============================================================";
                 if (riskAssessment.riskAssessmentList.size() != 0)
                 {
+                    //risktAssessment object 의 생성시간 추가
+                    auto now = std::chrono::system_clock::now();
+                    auto riskAssessment_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+                    adcm::Log::Info() << "Current timestamp in milliseconds: " << riskAssessment_timestamp;
+                    riskAssessment.timestamp = riskAssessment_timestamp;
                     adcm::Log::Info() << "riskAssessment send!";
                     riskAssessment_provider.send(riskAssessment);
-                    NatsSend(riskAssessment);
 
+                    NatsSend(riskAssessment);
                 }
                 else
                 {
-                    NatsSend(riskAssessment); //테스트 용도로 계속 송신하게 한다
+                    //NatsSend(riskAssessment); //테스트 용도로 계속 송신하게 한다
                     adcm::Log::Info() << "riskAssessment size is 0, doesn't send";
 
                 }

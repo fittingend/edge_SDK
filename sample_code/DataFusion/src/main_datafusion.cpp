@@ -52,7 +52,6 @@
 #include <string>
 #include <vector>
 
-
 #define NATS_TEST
 #ifdef NATS_TEST
 #include "./NATS_IMPLEMENTATION/NatsConnManager.h"
@@ -702,7 +701,7 @@ void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered)
 // hubData 수신
 void ThreadReceiveHubData()
 {
-    adcm::Log::Info() << "SDK release_240910_interface v1.8.4";
+    adcm::Log::Info() << "SDK release_241008_interface v1.9";
     // adcm::MapData_Provider mapData_provider;
     adcm::HubData_Subscriber hubData_subscriber;
     INFO("DataFusion .init()");
@@ -929,8 +928,6 @@ void ThreadKatech()
     //==============1.전역변수인 MapData 생성 =================
     adcm::map_data_Objects mapData;
     IDManager id_manager;
-    //NATS_INTERFACE nats_interface;
-
     // 한번 생성후 관제에서 인지데이터를 받을때마다 (100ms) 마다 업데이트
     adcm::Log::Info() << "mapData created for the first time";
     ::adcm::map_2dListStruct map_2dStruct_init;
@@ -1363,6 +1360,13 @@ void ThreadKatech()
             }
             adcm::Log::Info() << "DATA FUSION DONE";
             adcm::Log::Info() << "map_2d pushed to mapData";
+
+            //map_data_object 의 생성시간 추가
+            auto now = std::chrono::system_clock::now();
+            auto mapData_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+            adcm::Log::Info() << "Current timestamp in milliseconds: " << mapData_timestamp;
+            mapData.timestamp = mapData_timestamp;
+
             mapUpdate = nowHubData;
             mapData_provider.send(mapData);
             adcm::Log::Info() << mapUpdate << "번째 허브 데이터 맵변환 후 전송 완료";
