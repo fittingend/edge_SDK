@@ -10,6 +10,7 @@
 #include <random>
 #include <vector>
 #include <algorithm>
+#include <queue>
 
 #include <ara/com/e2exf/status_handler.h>
 #include <ara/exec/execution_client.h>
@@ -23,9 +24,10 @@
 #include "hub_data_subscriber.h"
 #include "work_information_subscriber.h"
 #include "id_manager.hpp"
+#include "concurrentqueue.h"
 
-#define map_n 2500
-#define map_m 1500
+#define map_n 2000
+#define map_m 1000
 #define ABS(x) ((x >= 0) ? x : -x)
 #define INVALID_VALUE 999
 
@@ -36,6 +38,8 @@
 #define SUB_VEHICLE_SIZE_X 21.92
 #define SUB_VEHICLE_SIZE_Y 15.99
 #define MAP_ANGLE -86
+
+using namespace std;
 // 사이즈는 10cm 단위 기준
 
 // #define KM_TO_MS_CONVERSION 5/18
@@ -115,7 +119,6 @@ struct VehicleData
     double velocity_x; // new- to assign
     double velocity_y; // new- to assign
     double velocity_ang;
-    std::uint32_t hubNumber = 0;
 };
 
 struct GridCellData
@@ -132,12 +135,6 @@ struct MapData
     std::vector<VehicleData> vehicle_list;
 
 }; // maptdata 사이즈는 24*4000*5000+24+24 = 480000048 byte = 약 450MB
-
-struct FusionData
-{
-    std::vector<ObstacleData> obstacle_list;
-    std::vector<VehicleData> vehicle_list;
-};
 
 enum ObstacleClass
 {
@@ -159,10 +156,19 @@ enum VehicleClass
 };
 */
 
+struct FusionData 
+{
+    VehicleData vehicle;
+    std::vector<ObstacleData> obstacle_list;
+};
+
+moodycamel::ConcurrentQueue<FusionData> main_vehicle_queue;
+moodycamel::ConcurrentQueue<FusionData> sub1_vehicle_queue;
+moodycamel::ConcurrentQueue<FusionData> sub2_vehicle_queue;
+
 VehicleData main_vehicle_temp;
 VehicleData sub1_vehicle_temp;
 VehicleData sub2_vehicle_temp;
-
 std::vector<ObstacleData> obstacle_list_temp;
 long ContourX[map_m][2];
 bool once = 1;
