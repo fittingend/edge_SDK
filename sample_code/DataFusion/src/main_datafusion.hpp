@@ -156,7 +156,7 @@ enum VehicleClass
 };
 */
 
-struct FusionData 
+struct FusionData
 {
     VehicleData vehicle;
     std::vector<ObstacleData> obstacle_list;
@@ -166,9 +166,15 @@ moodycamel::ConcurrentQueue<FusionData> main_vehicle_queue;
 moodycamel::ConcurrentQueue<FusionData> sub1_vehicle_queue;
 moodycamel::ConcurrentQueue<FusionData> sub2_vehicle_queue;
 
+queue<int> order;
+
 VehicleData main_vehicle_temp;
 VehicleData sub1_vehicle_temp;
 VehicleData sub2_vehicle_temp;
+FusionData main_vehicle_data;
+FusionData sub1_vehicle_data;
+FusionData sub2_vehicle_data;
+
 std::vector<ObstacleData> obstacle_list_temp;
 long ContourX[map_m][2];
 bool once = 1;

@@ -45,7 +45,7 @@
 // I.e. this code as nothing to do with the communication or execution API
 ///////////////////////////////////////////////////////////////////////
 #include <sstream>
-#include <fstream>  // Required for file handling
+#include <fstream> // Required for file handling
 #include <filesystem>
 #include "main_datafusion.hpp"
 
@@ -55,25 +55,24 @@
 #define NATS_TEST
 #ifdef NATS_TEST
 #include "./NATS_IMPLEMENTATION/NatsConnManager.h"
-#define HMI_SERVER_URL  "https://nats.beyless.com"
+#define HMI_SERVER_URL "https://nats.beyless.com"
 
 std::mutex mtx; // 뮤텍스 선언
 bool firstTime = true;
 natsStatus s = NATS_OK;
-std::vector<const char*> subject = {"test1.*", "test2.*"};
+std::vector<const char *> subject = {"test1.*", "test2.*"};
 std::shared_ptr<adcm::etc::NatsConnManager> natsManager;
 
-
-void asyncCb(natsConnection* nc, natsSubscription* sub, natsStatus err, void* closure)
+void asyncCb(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure)
 {
     std::cout << "Async error: " << err << " - " << natsStatus_GetText(err) << std::endl;
-    natsManager->NatsSubscriptionGetDropped(sub, (int64_t*) &natsManager->dropped);
+    natsManager->NatsSubscriptionGetDropped(sub, (int64_t *)&natsManager->dropped);
 }
 
-void onMsg(natsConnection* nc, natsSubscription* sub, natsMsg* msg, void* closure)
+void onMsg(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
-    const char* subject = NULL;
-    
+    const char *subject = NULL;
+
     // 뮤텍스를 사용하여 공유 변수 접근 보호
     std::lock_guard<std::mutex> lock(mtx);
     subject = natsMsg_GetSubject(msg);
@@ -82,12 +81,12 @@ void onMsg(natsConnection* nc, natsSubscription* sub, natsMsg* msg, void* closur
     // We should be using a mutex to protect those variables since
     // they are used from the subscription's delivery and the main
     // threads. For demo purposes, this is fine.
-    
+
     // std::istringstream iss(subject);
     // std::vector<std::string> words;
     // std::string word;
 
-    // while (std::getline(iss, word, '.')) 
+    // while (std::getline(iss, word, '.'))
     // {
     //     words.push_back(word);
     // }
@@ -96,40 +95,46 @@ void onMsg(natsConnection* nc, natsSubscription* sub, natsMsg* msg, void* closur
     natsManager->NatsMsgDestroy(msg);
 }
 
-std::string convertMapDataToJsonString(const adcm::map_data_Objects& mapData) {
-    std::ostringstream oss;  // Use a string stream for easier manipulation
-    oss << "{\n";  // Start the JSON object
+std::string convertMapDataToJsonString(const adcm::map_data_Objects &mapData)
+{
+    std::ostringstream oss; // Use a string stream for easier manipulation
+    oss << "{\n";           // Start the JSON object
 
     // Convert map_2d to JSON
     oss << "    \"map_2d\": [\n";
-    for (size_t i = 0; i < mapData.map_2d.size(); ++i) {
-        oss << "        [\n";  // Start each row
-        for (size_t j = 0; j < mapData.map_2d[i].size(); ++j) {
-            const auto& item = mapData.map_2d[i][j];
+    for (size_t i = 0; i < mapData.map_2d.size(); ++i)
+    {
+        oss << "        [\n"; // Start each row
+        for (size_t j = 0; j < mapData.map_2d[i].size(); ++j)
+        {
+            const auto &item = mapData.map_2d[i][j];
             oss << "            {\n"
                 << "                \"obstacle_id\": " << item.obstacle_id << ",\n"
                 << "                \"vehicle_class\": " << static_cast<int>(item.vehicle_class) << ",\n"
                 << "                \"road_z\": " << static_cast<int>(item.road_z) << "\n"
                 << "            }";
 
-            if (j < mapData.map_2d[i].size() - 1) {
+            if (j < mapData.map_2d[i].size() - 1)
+            {
                 oss << ",";
             }
-            oss << "\n";  // Newline for readability
+            oss << "\n"; // Newline for readability
         }
         oss << "        ]";
 
-        if (i < mapData.map_2d.size() - 1) {
+        if (i < mapData.map_2d.size() - 1)
+        {
             oss << ",";
         }
-        oss << "\n";  // Newline for readability
+        oss << "\n"; // Newline for readability
     }
     oss << "    ],\n";
 
     // Convert obstacle_list to JSON
     oss << "    \"obstacle_list\": [\n";
-    for (size_t i = 0; i < mapData.obstacle_list.size(); ++i) {
-        const auto& item = mapData.obstacle_list[i];
+    for (size_t i = 0; i < mapData.obstacle_list.size(); ++i)
+    {
+        const auto &item = mapData.obstacle_list[i];
         oss << "        {\n"
             << "            \"obstacle_id\": " << item.obstacle_id << ",\n"
             << "            \"obstacle_class\": " << static_cast<int>(item.obstacle_class) << ",\n"
@@ -147,33 +152,37 @@ std::string convertMapDataToJsonString(const adcm::map_data_Objects& mapData) {
             << "            \"fused_velocity_z\": " << item.fused_velocity_z << ",\n"
             << "            \"map_2d_location\": [\n";
 
-        for (size_t j = 0; j < item.map_2d_location.size(); ++j) {
-            const auto& index = item.map_2d_location[j];
+        for (size_t j = 0; j < item.map_2d_location.size(); ++j)
+        {
+            const auto &index = item.map_2d_location[j];
             oss << "                {\n"
                 << "                    \"x\": " << index.x << ",\n"
                 << "                    \"y\": " << index.y << "\n"
                 << "                }";
 
-            if (j < item.map_2d_location.size() - 1) {
+            if (j < item.map_2d_location.size() - 1)
+            {
                 oss << ",";
             }
-            oss << "\n";  // Newline for readability
+            oss << "\n"; // Newline for readability
         }
 
-        oss << "            ]\n"  // Close map_2d_location array
+        oss << "            ]\n" // Close map_2d_location array
             << "        }";
 
-        if (i < mapData.obstacle_list.size() - 1) {
+        if (i < mapData.obstacle_list.size() - 1)
+        {
             oss << ",";
         }
-        oss << "\n";  // Newline for readability
+        oss << "\n"; // Newline for readability
     }
     oss << "    ],\n";
 
     // Convert vehicle_list to JSON
     oss << "    \"vehicle_list\": [\n";
-    for (size_t i = 0; i < mapData.vehicle_list.size(); ++i) {
-        const auto& item = mapData.vehicle_list[i];
+    for (size_t i = 0; i < mapData.vehicle_list.size(); ++i)
+    {
+        const auto &item = mapData.vehicle_list[i];
         oss << "        {\n"
             << "            \"vehicle_class\": " << static_cast<int>(item.vehicle_class) << ",\n"
             << "            \"timestamp\": " << item.timestamp << ",\n"
@@ -193,45 +202,48 @@ std::string convertMapDataToJsonString(const adcm::map_data_Objects& mapData) {
             << "            \"velocity_ang\": " << item.velocity_ang << ",\n"
             << "            \"map_2d_location\": [\n";
 
-        for (size_t j = 0; j < item.map_2d_location.size(); ++j) {
-            const auto& index = item.map_2d_location[j];
+        for (size_t j = 0; j < item.map_2d_location.size(); ++j)
+        {
+            const auto &index = item.map_2d_location[j];
             oss << "                {\n"
                 << "                    \"x\": " << index.x << ",\n"
                 << "                    \"y\": " << index.y << "\n"
                 << "                }";
 
-            if (j < item.map_2d_location.size() - 1) {
+            if (j < item.map_2d_location.size() - 1)
+            {
                 oss << ",";
             }
-            oss << "\n";  // Newline for readability
+            oss << "\n"; // Newline for readability
         }
 
-        oss << "            ]\n"  // Close map_2d_location array
+        oss << "            ]\n" // Close map_2d_location array
             << "        }";
 
-        if (i < mapData.vehicle_list.size() - 1) {
+        if (i < mapData.vehicle_list.size() - 1)
+        {
             oss << ",";
         }
-        oss << "\n";  // Newline for readability
+        oss << "\n"; // Newline for readability
     }
-    oss << "    ]\n";  // Close vehicle_list
+    oss << "    ]\n"; // Close vehicle_list
 
-    oss << "}";  // Close the main JSON object
+    oss << "}"; // Close the main JSON object
 
-    return oss.str();  // Return the concatenated JSON string
+    return oss.str(); // Return the concatenated JSON string
 }
 
-void saveToJsonFile(const std::string& key, const std::string& value, int& fileCount)
+void saveToJsonFile(const std::string &key, const std::string &value, int &fileCount)
 {
     std::ostringstream fileNameStream;
-    fileNameStream << key <<"_" << fileCount << ".json";  // Construct the file name
+    fileNameStream << key << "_" << fileCount << ".json"; // Construct the file name
     std::string fileName = fileNameStream.str();
     std::ofstream outFile(fileName);
     // Open file for writing with the generated name
     if (outFile.is_open())
     {
-        outFile << value;  // Write the JSON string to the file
-        outFile.close();          // Close the file after writing
+        outFile << value; // Write the JSON string to the file
+        outFile.close();  // Close the file after writing
         adcm::Log::Info() << "JSON data stored in " << fileName;
     }
     else
@@ -243,7 +255,7 @@ void saveToJsonFile(const std::string& key, const std::string& value, int& fileC
     ++fileCount;
 }
 
-void NatsSend(const adcm::map_data_Objects& mapData)
+void NatsSend(const adcm::map_data_Objects &mapData)
 {
     static int mapData_count = 0;
 
@@ -254,14 +266,14 @@ void NatsSend(const adcm::map_data_Objects& mapData)
         s = natsManager->NatsExecute();
         firstTime = false;
     }
-    if(s == NATS_OK)
+    if (s == NATS_OK)
     {
-        const char* pubSubject = "test1.JSON";
+        const char *pubSubject = "test1.JSON";
         natsManager->ClearJsonData();
         adcm::Log::Info() << "NATS conversion start!";
         std::string mapDataStr = convertMapDataToJsonString(mapData);
         adcm::Log::Info() << "NATS conversion done!";
-        natsManager->addJsonData("mapData", mapDataStr);        
+        natsManager->addJsonData("mapData", mapDataStr);
         natsManager->NatsPublishJson(pubSubject);
         adcm::Log::Info() << "NatsPublishJson";
         saveToJsonFile("mapData", mapDataStr, mapData_count);
@@ -269,14 +281,16 @@ void NatsSend(const adcm::map_data_Objects& mapData)
     else
     {
         std::cout << "Nats Connection error" << std::endl;
-        try{
-        natsManager = std::make_shared<adcm::etc::NatsConnManager>(HMI_SERVER_URL,subject, onMsg, asyncCb, adcm::etc::NatsConnManager::Mode::Default);
-        s = natsManager->NatsExecute();
-        }catch(std::exception e)
+        try
+        {
+            natsManager = std::make_shared<adcm::etc::NatsConnManager>(HMI_SERVER_URL, subject, onMsg, asyncCb, adcm::etc::NatsConnManager::Mode::Default);
+            s = natsManager->NatsExecute();
+        }
+        catch (std::exception e)
         {
             std::cout << "Nats reConnection error" << std::endl;
         }
-    }  
+    }
 }
 
 #endif
@@ -766,10 +780,11 @@ void ThreadReceiveHubData()
                         obstacle_list_temp.push_back(obstacle_to_push);
                         // adcm::Log::Info() << "메인 차량 기준 장애물 위치 : (" << obstacle_to_push.fused_position_x << ", " << obstacle_to_push.fused_position_y << ")";
                     }
-                    
+
                     fusionData.vehicle = main_vehicle_temp;
                     fusionData.obstacle_list = obstacle_list_temp;
                     main_vehicle_queue.enqueue(fusionData);
+                    order.push(EGO_VEHICLE);
                     break;
 
                 case SUB_VEHICLE_1: // 보조차1이 보낸 인지데이터
@@ -806,10 +821,11 @@ void ThreadReceiveHubData()
                         obstacle_list_temp.push_back(obstacle_to_push);
                         // adcm::Log::Info() << "보조 차량1 기준 장애물 위치 : (" << obstacle_to_push.fused_position_x << ", " << obstacle_to_push.fused_position_y << ")";
                     }
-                    
+
                     fusionData.vehicle = sub1_vehicle_temp;
                     fusionData.obstacle_list = obstacle_list_temp;
                     sub1_vehicle_queue.enqueue(fusionData);
+                    order.push(SUB_VEHICLE_1);
                     break;
 
                 case SUB_VEHICLE_2: // 보조차2가 보낸 인지데이터
@@ -846,10 +862,11 @@ void ThreadReceiveHubData()
                         obstacle_list_temp.push_back(obstacle_to_push);
                         // adcm::Log::Info() << "보조 차량2 기준 장애물 위치 : (" << obstacle_to_push.fused_position_x << ", " << obstacle_to_push.fused_position_y << ")";
                     }
-                    
+
                     fusionData.vehicle = sub2_vehicle_temp;
                     fusionData.obstacle_list = obstacle_list_temp;
                     sub2_vehicle_queue.enqueue(fusionData);
+                    order.push(SUB_VEHICLE_2);
                     break;
                 default:
                     adcm::Log::Info() << "data received but belongs to no vehicle hence discarded";
@@ -946,7 +963,7 @@ void ThreadKatech()
     map_2dStruct_init.road_z = 0;
     map_2dStruct_init.vehicle_class = NO_VEHICLE; // 시뮬레이션 데이터 설정때문에 부득이 NO_VEHICLE =5 로 바꿈
     bool sendEmptyMap = true;                     // 최초 실행 시 빈 맵 전송을 위한 변수
-    int mapVer = 0; // 현재 맵이 몇 번째 맵인지 확인
+    int mapVer = 0;                               // 현재 맵이 몇 번째 맵인지 확인
     // 빈 맵 생성
     std::vector<adcm::map_2dListVector> map_2d_test(map_n, adcm::map_2dListVector(map_m, map_2dStruct_init));
     adcm::Log::Info() << "mapData 2d info initialized";
@@ -964,16 +981,14 @@ void ThreadKatech()
     VehicleData main_vehicle;
     VehicleData sub1_vehicle;
     VehicleData sub2_vehicle;
-    FusionData main_vehicle_data;
-    FusionData sub1_vehicle_data;
-    FusionData sub2_vehicle_data;
+
     std::vector<ObstacleData> obstacle_list;
 
     while (continueExecution)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(30));
         // 수신한 허브 데이터가 없으면 송신 X
-        if(main_vehicle_queue.size_approx() == 0 && sub1_vehicle_queue.size_approx() == 0 && sub2_vehicle_queue.size_approx() == 0)
+        if (main_vehicle_queue.size_approx() == 0 && sub1_vehicle_queue.size_approx() == 0 && sub2_vehicle_queue.size_approx() == 0)
         {
             adcm::Log::Info() << "No Hub Data, sub2_vehicle_queue size(): " << sub2_vehicle_queue.size_approx();
             continue;
@@ -991,29 +1006,31 @@ void ThreadKatech()
         adcm::Log::Info() << "==============KATECH modified code start==========";
 
         // (임시) 데이터를 queue에서 꺼내면서 vehicle, obstacle_list 최신화
-        if(main_vehicle_queue.try_dequeue(main_vehicle_data))
+        switch (order.front())
         {
-            main_vehicle = main_vehicle_data.vehicle;
+        case EGO_VEHICLE:
+            main_vehicle_queue.try_dequeue(main_vehicle_data);
             obstacle_list = main_vehicle_data.obstacle_list;
-        }
-        if(sub1_vehicle_queue.try_dequeue(sub1_vehicle_data))
-        {
-            sub1_vehicle = sub1_vehicle_data.vehicle;
+            break;
+
+        case SUB_VEHICLE_1:
+            sub1_vehicle_queue.try_dequeue(sub1_vehicle_data);
             obstacle_list = sub1_vehicle_data.obstacle_list;
-        }
-        if(sub2_vehicle_queue.try_dequeue(sub2_vehicle_data))
-        {
-            sub2_vehicle = sub2_vehicle_data.vehicle;
+            break;
+
+        case SUB_VEHICLE_2:
+            sub2_vehicle_queue.try_dequeue(sub2_vehicle_data);
             obstacle_list = sub2_vehicle_data.obstacle_list;
+            break;
         }
-        // main_vehicle = main_vehicle_temp;
-        // sub1_vehicle = sub1_vehicle_temp;
-        // sub2_vehicle = sub2_vehicle_temp;
-        // obstacle_list = obstacle_list_temp;
+        order.pop();
+
+        main_vehicle = main_vehicle_data.vehicle;
+        sub1_vehicle = sub1_vehicle_data.vehicle;
+        sub2_vehicle = sub2_vehicle_data.vehicle;
 
         adcm::map_2dListVector map_2dListVector;
         adcm::map_2dListStruct map_2dStruct;
-
 
         adcm::Log::Info() << "mapData obstacle list size is at start is" << mapData.obstacle_list.size();
 
@@ -1022,14 +1039,14 @@ void ThreadKatech()
         adcm::Log::Info() << "특장차 및 보조차량 제거 전 obstacle 사이즈: " << obstacle_list.size();
         for (auto iter = obstacle_list.begin(); iter != obstacle_list.end();)
         {
-            //if ((abs(iter->fused_cuboid_x - SUB_VEHICLE_SIZE_X / 10)) < 0.1 && (abs(iter->fused_cuboid_y - SUB_VEHICLE_SIZE_Y / 10)) < 0.1)
+            // if ((abs(iter->fused_cuboid_x - SUB_VEHICLE_SIZE_X / 10)) < 0.1 && (abs(iter->fused_cuboid_y - SUB_VEHICLE_SIZE_Y / 10)) < 0.1)
             if (iter->obstacle_class == 51)
             {
                 adcm::Log::Info() << "보조차량 제거";
                 iter = obstacle_list.erase(iter);
             }
-            //if ((abs(iter->fused_cuboid_x - MAIN_VEHICLE_SIZE_X / 10)) < 0.1 && (abs(iter->fused_cuboid_y - MAIN_VEHICLE_SIZE_Y / 10)) < 0.1)
-            else if(iter->obstacle_class == 50)
+            // if ((abs(iter->fused_cuboid_x - MAIN_VEHICLE_SIZE_X / 10)) < 0.1 && (abs(iter->fused_cuboid_y - MAIN_VEHICLE_SIZE_Y / 10)) < 0.1)
+            else if (iter->obstacle_class == 50)
             {
                 adcm::Log::Info() << "특장차 제거";
                 iter = obstacle_list.erase(iter);
@@ -1046,18 +1063,16 @@ void ThreadKatech()
         gpsToMapcoordinate(sub2_vehicle);
         adcm::Log::Info() << "차량 측위 좌표계 변환 완료";
 
-
         //==============3. 장애물 좌표계 변환=================
         // 차량 기준 장애물 좌표를 작업공간 map 좌표계로 변환
-        //relativeToMapcoordinate(obstacle_list_filtered, sub2_vehicle);
+        // relativeToMapcoordinate(obstacle_list_filtered, sub2_vehicle);
         relativeToMapcoordinate(obstacle_list, sub2_vehicle);
         bool a = checkRange(main_vehicle);
         bool b = checkRange(sub1_vehicle);
         bool c = checkRange(sub2_vehicle);
         adcm::Log::Info() << "차량별 장애물 좌표계 변환 완료";
 
-        //TO DO: 4. 차량별 장애물 fusion 여기서 필요
-
+        // TO DO: 4. 차량별 장애물 fusion 여기서 필요
 
         //==============5. 장애물 ID 관리 =================
 
@@ -1087,11 +1102,9 @@ void ThreadKatech()
                 bool identicalObstacleFound = false;
                 for (auto new_iter = obstacle_list.begin(); new_iter != obstacle_list.end();)
                 {
-                    // 현재 정적장애물 기준 xyz 사이즈와 좌표위치가 10cm 오차 이내로 동일하면 동일 장애물로 associate 
+                    // 현재 정적장애물 기준 xyz 사이즈와 좌표위치가 10cm 오차 이내로 동일하면 동일 장애물로 associate
                     // if ((ABS(iter->fused_cuboid_x - iter1->fused_cuboid_x)< 0.001) && (ABS(iter->fused_cuboid_y - iter1->fused_cuboid_y)< 0.001) && (ABS(iter->fused_cuboid_z - iter1->fused_cuboid_z)<0.001))
-                    if ((ori_iter->fused_cuboid_x == new_iter->fused_cuboid_x) && (ori_iter->fused_cuboid_y == new_iter->fused_cuboid_y) && (ori_iter->fused_cuboid_z == new_iter->fused_cuboid_z)\
-                    && (abs(ori_iter->fused_position_x) - (new_iter->fused_position_x) < 100) && (abs(ori_iter->fused_position_y - new_iter->fused_position_y) < 100) && (abs(ori_iter->fused_position_z - new_iter->fused_position_z) < 100)\
-                    && (ori_iter->obstacle_class == new_iter->obstacle_class))
+                    if ((ori_iter->fused_cuboid_x == new_iter->fused_cuboid_x) && (ori_iter->fused_cuboid_y == new_iter->fused_cuboid_y) && (ori_iter->fused_cuboid_z == new_iter->fused_cuboid_z) && (abs(ori_iter->fused_position_x) - (new_iter->fused_position_x) < 100) && (abs(ori_iter->fused_position_y - new_iter->fused_position_y) < 100) && (abs(ori_iter->fused_position_z - new_iter->fused_position_z) < 100) && (ori_iter->obstacle_class == new_iter->obstacle_class))
                     {
                         adcm::Log::Info() << "fused_position_x: " << ori_iter->fused_position_x << "fused_position_y:" << ori_iter->fused_position_y << "obstacle id" << ori_iter->obstacle_id;
                         adcm::Log::Info() << "new fused_position_x: " << new_iter->fused_position_x << "new fused_position_y:" << new_iter->fused_position_y;
@@ -1100,8 +1113,8 @@ void ThreadKatech()
                         obstacle_list_filtered.push_back(*new_iter);
                         new_iter = obstacle_list.erase(new_iter);
                         identicalObstacleFound = true;
-                        break; //if 문 break
-                        //동일한 장애물이 발견되면 obstacle_list 에서 obstacle_list_filtered 로 옮기고 obstacle list 에서는 삭제한다 
+                        break; // if 문 break
+                        // 동일한 장애물이 발견되면 obstacle_list 에서 obstacle_list_filtered 로 옮기고 obstacle list 에서는 삭제한다
                     }
                     else
                     {
@@ -1113,13 +1126,13 @@ void ThreadKatech()
                         adcm::Log::Info() << "[new]obstacle_class: " << new_iter->obstacle_class;
 
                         adcm::Log::Info() << "Different obstacle detected : " << ori_iter->obstacle_id;
-                        //동일하지 않은 장애물은 obstacle_list 에 계속 남긴다
+                        // 동일하지 않은 장애물은 obstacle_list 에 계속 남긴다
                         ++new_iter;
                     }
                 }
-                if(identicalObstacleFound == false)
+                if (identicalObstacleFound == false)
                 {
-                    //이전 장애물이 이번엔 발견되지 않았으므로 추후 id return 필요
+                    // 이전 장애물이 이번엔 발견되지 않았으므로 추후 id return 필요
                     removedObstacle.push_back(ori_iter->obstacle_id);
                 }
             }
@@ -1132,7 +1145,7 @@ void ThreadKatech()
                 obstacle_list_filtered.push_back(*new_iter);
             }
             // 삭제된 객체에 대한 id 반납
-            for (auto iter = removedObstacle.begin(); iter!=removedObstacle.end(); iter++)
+            for (auto iter = removedObstacle.begin(); iter != removedObstacle.end(); iter++)
             {
                 id_manager.retID(*iter);
             }
@@ -1144,7 +1157,6 @@ void ThreadKatech()
             adcm::Log::Info() << "obstacle filtered are: " << filter_iter->obstacle_id;
         }
         adcm::Log::Info() << "장애물 ID allocation 완료";
-
 
         if (a || (b && c))
         { // execute only if all true!
@@ -1394,18 +1406,17 @@ void ThreadKatech()
             adcm::Log::Info() << "DATA FUSION DONE";
             adcm::Log::Info() << "map_2d pushed to mapData";
 
-            //map_data_object 의 생성시간 추가
+            // map_data_object 의 생성시간 추가
             auto now = std::chrono::system_clock::now();
             auto mapData_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
             adcm::Log::Info() << "Current timestamp in milliseconds: " << mapData_timestamp;
-            mapData.timestamp = mapData_timestamp;
+            // mapData.timestamp = mapData_timestamp;
 
-            mapUpdate = nowHubData;
             mapData_provider.send(mapData);
             mapVer++;
             adcm::Log::Info() << mapVer << "번째 허브 데이터 맵변환 후 전송 완료";
             adcm::Log::Info() << "mapData send";
-            NatsSend(mapData);
+            // NatsSend(mapData);
         }
         else
         {
