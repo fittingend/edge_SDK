@@ -780,6 +780,54 @@ double calculateWeightedPosition(const std::vector<double> &positions, const std
     return (1.0 / totalVarianceInverse) * weightedSum;
 }
 
+// 데이터 융합
+void processFusion(
+    std::vector<ObstacleData> &fusedList,
+    const std::vector<ObstacleData> &listB,
+    const std::vector<int> &assignment)
+{
+    for (size_t i = 0; i < assignment.size(); ++i)
+    {
+        int j = assignment[i];
+        if (j != -1)
+        {
+            const ObstacleData &recentData = (fusedList[i].timestamp > listB[j].timestamp) ? fusedList[i] : listB[j];
+
+            // 속도를 제외한 나머지는 최근 TimeStamp 데이터로
+            ObstacleData fused;
+            fused.obstacle_id = recentData.obstacle_id;
+            fused.obstacle_class = recentData.obstacle_class;
+            fused.map_2d_location = recentData.map_2d_location;
+            fused.stop_count = recentData.stop_count;
+            fused.fused_cuboid_x = recentData.fused_cuboid_x;
+            fused.fused_cuboid_y = recentData.fused_cuboid_y;
+            fused.fused_cuboid_z = recentData.fused_cuboid_z;
+            fused.fused_heading_angle = recentData.fused_heading_angle;
+
+            fused.fused_position_x = calculateWeightedPosition(
+                {fusedList[i].fused_position_x, listB[j].fused_position_x},
+                {fusedList[i].standard_deviation, listB[j].standard_deviation});
+            fused.fused_position_y = calculateWeightedPosition(
+                {fusedList[i].fused_position_y, listB[j].fused_position_y},
+                {fusedList[i].standard_deviation, listB[j].standard_deviation});
+            fused.fused_position_z = calculateWeightedPosition(
+                {fusedList[i].fused_position_z, listB[j].fused_position_z},
+                {fusedList[i].standard_deviation, listB[j].standard_deviation});
+
+            fused.fused_velocity_x = recentData.fused_velocity_x;
+            fused.fused_velocity_y = recentData.fused_velocity_y;
+            fused.fused_velocity_z = recentData.fused_velocity_z;
+
+            double deltaDistance = euclideanDistance(fusedList[i], listB[j]);
+            fused.standard_deviation = 0.1 + 0.1 + deltaDistance * 0.01;
+
+            fused.timestamp = recentData.timestamp;
+
+            fusedList.push_back(fused);
+        }
+    }
+}
+
 // 장애물 리스트 융합
 std::vector<ObstacleData> fuseObstacleLists(
     const std::vector<ObstacleData> &listMain,
@@ -789,68 +837,37 @@ std::vector<ObstacleData> fuseObstacleLists(
 {
     std::vector<ObstacleData> fusedList;
 
-    auto processFusion = [&fusedList, &threshold](const std::vector<ObstacleData> &listA, const std::vector<ObstacleData> &listB, const std::vector<int> &assignment)
+    // 가장 최근 데이터를 가진 리스트로 초기화
+    if (!listMain.empty())
     {
-        for (size_t i = 0; i < assignment.size(); ++i)
+        fusedList = listMain;
+    }
+    else if (!listSub1.empty())
+    {
+        fusedList = listSub1;
+    }
+    else if (!listSub2.empty())
+    {
+        fusedList = listSub2;
+    }
+
+    // 융합 함수 정의
+    auto performFusion = [&](const std::vector<ObstacleData> &listA, const std::vector<ObstacleData> &listB)
+    {
+        if (!listA.empty() && !listB.empty())
         {
-            int j = assignment[i];
-            if (j != -1 && euclideanDistance(listA[i], listB[j]) < threshold)
-            {
-                // 최근 데이터 선택
-                const ObstacleData &recentData = (listA[i].timestamp > listB[j].timestamp) ? listA[i] : listB[j];
-
-                // 장애물 데이터 융합 시작
-                ObstacleData fused;
-                fused.obstacle_id = recentData.obstacle_id;
-                fused.obstacle_class = recentData.obstacle_class;
-                fused.map_2d_location = recentData.map_2d_location;
-                fused.stop_count = recentData.stop_count;
-                fused.fused_cuboid_x = recentData.fused_cuboid_x;
-                fused.fused_cuboid_y = recentData.fused_cuboid_y;
-                fused.fused_cuboid_z = recentData.fused_cuboid_z;
-                fused.fused_heading_angle = recentData.fused_heading_angle;
-
-                // 위치 융합
-                fused.fused_position_x = calculateWeightedPosition(
-                    {listA[i].fused_position_x, listB[j].fused_position_x},
-                    {listA[i].standard_deviation, listB[j].standard_deviation});
-                fused.fused_position_y = calculateWeightedPosition(
-                    {listA[i].fused_position_y, listB[j].fused_position_y},
-                    {listA[i].standard_deviation, listB[j].standard_deviation});
-                fused.fused_position_z = calculateWeightedPosition(
-                    {listA[i].fused_position_z, listB[j].fused_position_z},
-                    {listA[i].standard_deviation, listB[j].standard_deviation});
-
-                // 속도: 최근 데이터 사용
-                fused.fused_velocity_x = recentData.fused_velocity_x;
-                fused.fused_velocity_y = recentData.fused_velocity_y;
-                fused.fused_velocity_z = recentData.fused_velocity_z;
-
-                // 표준편차 갱신(필요시)
-                double deltaDistance = euclideanDistance(listA[i], listB[j]);
-                fused.standard_deviation = 0.1 + 0.1 + deltaDistance * 0.01;
-
-                // 최근 timestamp 사용
-                fused.timestamp = recentData.timestamp;
-
-                // 융합 리스트에 추가
-                fusedList.push_back(fused);
-            }
+            auto distMatrix = createDistanceMatrix(listA, listB);
+            auto assignment = solveAssignment(distMatrix);
+            processFusion(fusedList, listB, assignment); // 모든 융합 결과를 fusedList에 저장
         }
     };
 
-    if (!listSub1.empty())
-    {
-        auto distMatrixMainSub1 = createDistanceMatrix(listMain, listSub1);
-        auto assignmentMainSub1 = solveAssignment(distMatrixMainSub1);
-        processFusion(listMain, listSub1, assignmentMainSub1);
-    }
-
-    if (!listSub2.empty())
-    {
-        auto distMatrixMainSub2 = createDistanceMatrix(listMain, listSub2);
-        auto assignmentMainSub2 = solveAssignment(distMatrixMainSub2);
-        processFusion(listMain, listSub2, assignmentMainSub2);
+    // 모든 융합 조합에 대해 실행
+    performFusion(listMain, listSub1);
+    performFusion(listMain, listSub2);
+    if (listMain.empty())
+    { // 메인 리스트가 비어 있다면 보조 차량들 간 융합
+        performFusion(listSub1, listSub2);
     }
 
     return fusedList;

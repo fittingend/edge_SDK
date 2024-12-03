@@ -68,7 +68,7 @@ struct ObstacleData
 {
     std::uint16_t obstacle_id;
     std::uint8_t obstacle_class;
-    std::uint64_t timestamp;
+    std::uint64_t timestamp = 0;
     std::vector<Point2D> map_2d_location;
     std::uint8_t stop_count;
     double fused_cuboid_x;
@@ -224,6 +224,10 @@ std::vector<ObstacleData> fuseObstacleLists(
     double threshold);
 std::vector<int> solveAssignment(const std::vector<std::vector<double>> &costMatrix);
 double calculateWeightedPosition(const std::vector<double> &positions, const std::vector<double> &variances);
+void processFusion(
+    std::vector<ObstacleData> &fusedList,
+    const std::vector<ObstacleData> &listB,
+    const std::vector<int> &assignment);
 
 void ThreadReceiveHubData();
 void ThreadReceiveWorkInfo();
