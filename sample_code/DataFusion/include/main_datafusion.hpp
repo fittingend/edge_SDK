@@ -25,6 +25,7 @@
 #include "work_information_subscriber.h"
 #include "id_manager.hpp"
 #include "concurrentqueue.h"
+#include "munkres/src/munkres.h"
 
 #define map_n 2000
 #define map_m 1000
@@ -68,7 +69,6 @@ struct ObstacleData
     std::uint16_t obstacle_id;
     std::uint8_t obstacle_class;
     std::uint64_t timestamp;
-    //    std::vector<std::pair<unsigned short,unsigned short>> map_2d_location; //장애물이 위치한 2d 그리드 맵의 index 페어를 저장
     std::vector<Point2D> map_2d_location;
     std::uint8_t stop_count;
     double fused_cuboid_x;
@@ -81,6 +81,7 @@ struct ObstacleData
     double fused_velocity_x;
     double fused_velocity_y;
     double fused_velocity_z;
+    double standard_deviation; // 오차의 표준편차(추가)
 };
 
 struct VehicleSizeData
@@ -101,7 +102,6 @@ struct VehicleData
     //    std::vector<std::pair<unsigned short,unsigned short>> map_2d_location; //해당 차량이 위치한 2d 그리드 맵의 index 페어를 저장
     //    std::vector<Point2D>
     std::vector<Point2D> map_2d_location;
-    //    std::time_t timestamp;
     std::uint64_t timestamp;
     std::vector<double> road_z;
     //    double road_z[4];
@@ -174,6 +174,9 @@ VehicleData sub2_vehicle_temp;
 FusionData main_vehicle_data;
 FusionData sub1_vehicle_data;
 FusionData sub2_vehicle_data;
+std::vector<ObstacleData> obstacle_list_main;
+std::vector<ObstacleData> obstacle_list_sub1;
+std::vector<ObstacleData> obstacle_list_sub2;
 
 std::vector<ObstacleData> obstacle_list_temp;
 long ContourX[map_m][2];
@@ -210,6 +213,17 @@ void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std:
 
 void find4VerticesVehicle(VehicleData &target_vehicle, std::vector<adcm::map_2dListVector> &map_2d_test);
 void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered);
+
+// 장애물 데이터 매칭 및 융합 알고리즘
+double euclideanDistance(const ObstacleData &a, const ObstacleData &b);
+std::vector<std::vector<double>> createDistanceMatrix(const std::vector<ObstacleData> &listA, const std::vector<ObstacleData> &listB);
+std::vector<ObstacleData> fuseObstacleLists(
+    const std::vector<ObstacleData> &listMain,
+    const std::vector<ObstacleData> &listSub1,
+    const std::vector<ObstacleData> &listSub2,
+    double threshold);
+std::vector<int> solveAssignment(const std::vector<std::vector<double>> &costMatrix);
+double calculateWeightedPosition(const std::vector<double> &positions, const std::vector<double> &variances);
 
 void ThreadReceiveHubData();
 void ThreadReceiveWorkInfo();

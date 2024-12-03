@@ -244,7 +244,9 @@ if(HAS_OPENDDS_BINDING)
 endif()
 
 
-target_link_libraries(${CMAKE_PROJECT_NAME} ${CMAKE_THREAD_LIBS_INIT} ${ARA_LIBRARIES} ${COMMUNICATION_LIBRARY} ara_com e2exf e2e ara::log ara::exec_execution_client ara::core)
+
+
+# target_link_libraries(${CMAKE_PROJECT_NAME} ${CMAKE_THREAD_LIBS_INIT} ${ARA_LIBRARIES} ${COMMUNICATION_LIBRARY} ara_com e2exf e2e ara::log ara::exec_execution_client ara::core)
 
 #NATS용 library 추가
 target_link_libraries(${CMAKE_PROJECT_NAME} ${CMAKE_THREAD_LIBS_INIT} ${ARA_LIBRARIES} ${COMMUNICATION_LIBRARY} ara_com e2exf e2e ara::log ara::exec_execution_client ara::core ${NATS_LIB} ara::core Poco::Net Poco::Foundation Poco::JSON ${Boost_LIBRARIES})
