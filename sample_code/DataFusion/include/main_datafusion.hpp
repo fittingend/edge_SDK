@@ -177,6 +177,8 @@ FusionData sub2_vehicle_data;
 std::vector<ObstacleData> obstacle_list_main;
 std::vector<ObstacleData> obstacle_list_sub1;
 std::vector<ObstacleData> obstacle_list_sub2;
+// 이전 TimeStamp의 Obstacle_list
+std::vector<ObstacleData> previous_obstacle_list;
 
 std::vector<ObstacleData> obstacle_list_temp;
 long ContourX[map_m][2];
@@ -214,20 +216,41 @@ void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std:
 void find4VerticesVehicle(VehicleData &target_vehicle, std::vector<adcm::map_2dListVector> &map_2d_test);
 void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered);
 
-// 장애물 데이터 매칭 및 융합 알고리즘
+// 유클리디안 거리 계산
 double euclideanDistance(const ObstacleData &a, const ObstacleData &b);
+
+// 거리 행렬 생성
 std::vector<std::vector<double>> createDistanceMatrix(const std::vector<ObstacleData> &listA, const std::vector<ObstacleData> &listB);
-std::vector<ObstacleData> fuseObstacleLists(
-    const std::vector<ObstacleData> &listMain,
-    const std::vector<ObstacleData> &listSub1,
-    const std::vector<ObstacleData> &listSub2,
-    double threshold);
-std::vector<int> solveAssignment(const std::vector<std::vector<double>> &costMatrix);
+
+// 신뢰성 기반 융합 계산 함수
 double calculateWeightedPosition(const std::vector<double> &positions, const std::vector<double> &variances);
-void processFusion(
-    std::vector<ObstacleData> &fusedList,
-    const std::vector<ObstacleData> &listB,
-    const std::vector<int> &assignment);
+
+// 헝가리안 알고리즘으로 매칭
+std::vector<int> solveAssignment(const std::vector<std::vector<double>> &costMatrix);
+
+// 메인차량, 서브차량 리스트에서 제외
+std::vector<ObstacleData> filterVehicleData(const std::vector<ObstacleData> &obstacles, const VehicleData &vehicleToExclude);
+
+// 장애물 데이터 병합
+void processFusion(std::vector<ObstacleData> &fusedList, const std::vector<ObstacleData> &listB, const std::vector<int> &assignment);
+
+// 새 데이터에 대한 ID 관리 및 부여
+void assignIDsForNewData(std::vector<ObstacleData> &resultFusionList,
+                         const std::vector<ObstacleData> &currentFusionList,
+                         const std::vector<int> &assignment);
+
+// 메인 융합 함수
+std::vector<ObstacleData> mergeAndCompareLists(
+    const std::vector<ObstacleData> &previousFusionList,
+    std::vector<ObstacleData> listMain,
+    std::vector<ObstacleData> listSub1,
+    std::vector<ObstacleData> listSub2,
+    const VehicleData &mainVehicle,
+    const VehicleData &sub1Vehicle,
+    const VehicleData &sub2Vehicle);
+
+// 장애물이 보조차량, 메인차량인지 확인
+const double POSITION_TOLERANCE = 14.0;
 
 void ThreadReceiveHubData();
 void ThreadReceiveWorkInfo();

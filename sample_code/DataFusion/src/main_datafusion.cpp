@@ -716,7 +716,7 @@ void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered)
     adcm::Log::Info() << "장애물 꼭짓점 범위 확인완료";
 }
 
-// 유클리디안 거리 계산 함수
+// 유클리디안 거리 계산
 double euclideanDistance(const ObstacleData &a, const ObstacleData &b)
 {
     return std::sqrt(std::pow(a.fused_position_x - b.fused_position_x, 2) +
@@ -739,7 +739,7 @@ std::vector<std::vector<double>> createDistanceMatrix(
     return distanceMatrix;
 }
 
-// Munkres(Hungarian) 알고리즘으로 매칭
+// Munkres 알고리즘으로 매칭
 std::vector<int> solveAssignment(const std::vector<std::vector<double>> &costMatrix)
 {
     Matrix<double> matrix(costMatrix.size(), costMatrix[0].size());
@@ -780,6 +780,25 @@ double calculateWeightedPosition(const std::vector<double> &positions, const std
     return (1.0 / totalVarianceInverse) * weightedSum;
 }
 
+// 장애물 리스트에서 특정 차량 데이터를 제외하는 함수
+std::vector<ObstacleData> filterVehicleData(
+    const std::vector<ObstacleData> &obstacles,
+    const VehicleData &vehicleToExclude)
+{
+    std::vector<ObstacleData> filteredList;
+    for (const auto &obstacle : obstacles)
+    {
+        double distance = std::sqrt(std::pow(obstacle.fused_position_x - vehicleToExclude.position_x, 2) +
+                                    std::pow(obstacle.fused_position_y - vehicleToExclude.position_y, 2));
+        // 특정 차량 위치 및 obstacle_class에 해당하지 않으면 필터된 리스트에 포함
+        if (distance > POSITION_TOLERANCE || obstacle.obstacle_class != 10)
+        {
+            filteredList.push_back(obstacle);
+        }
+    }
+    return filteredList;
+}
+
 // 데이터 융합
 void processFusion(
     std::vector<ObstacleData> &fusedList,
@@ -793,8 +812,20 @@ void processFusion(
         {
             const ObstacleData &recentData = (fusedList[i].timestamp > listB[j].timestamp) ? fusedList[i] : listB[j];
 
-            // 속도를 제외한 나머지는 최근 TimeStamp 데이터로
             ObstacleData fused;
+
+            // 신뢰성 기반으로 위치 융합
+            std::vector<double> positionsX = {fusedList[i].fused_position_x, listB[j].fused_position_x};
+            std::vector<double> positionsY = {fusedList[i].fused_position_y, listB[j].fused_position_y};
+            std::vector<double> positionsZ = {fusedList[i].fused_position_z, listB[j].fused_position_z};
+
+            std::vector<double> variances = {1.0 / fusedList[i].standard_deviation, 1.0 / listB[j].standard_deviation};
+
+            fused.fused_position_x = calculateWeightedPosition(positionsX, variances);
+            fused.fused_position_y = calculateWeightedPosition(positionsY, variances);
+            fused.fused_position_z = calculateWeightedPosition(positionsZ, variances);
+
+            // 나머지 정보는 최신 데이터로
             fused.obstacle_id = recentData.obstacle_id;
             fused.obstacle_class = recentData.obstacle_class;
             fused.map_2d_location = recentData.map_2d_location;
@@ -803,74 +834,115 @@ void processFusion(
             fused.fused_cuboid_y = recentData.fused_cuboid_y;
             fused.fused_cuboid_z = recentData.fused_cuboid_z;
             fused.fused_heading_angle = recentData.fused_heading_angle;
-
-            fused.fused_position_x = calculateWeightedPosition(
-                {fusedList[i].fused_position_x, listB[j].fused_position_x},
-                {fusedList[i].standard_deviation, listB[j].standard_deviation});
-            fused.fused_position_y = calculateWeightedPosition(
-                {fusedList[i].fused_position_y, listB[j].fused_position_y},
-                {fusedList[i].standard_deviation, listB[j].standard_deviation});
-            fused.fused_position_z = calculateWeightedPosition(
-                {fusedList[i].fused_position_z, listB[j].fused_position_z},
-                {fusedList[i].standard_deviation, listB[j].standard_deviation});
-
             fused.fused_velocity_x = recentData.fused_velocity_x;
             fused.fused_velocity_y = recentData.fused_velocity_y;
             fused.fused_velocity_z = recentData.fused_velocity_z;
-
-            double deltaDistance = euclideanDistance(fusedList[i], listB[j]);
-            fused.standard_deviation = 0.1 + 0.1 + deltaDistance * 0.01;
-
+            fused.standard_deviation = recentData.standard_deviation;
             fused.timestamp = recentData.timestamp;
 
-            fusedList.push_back(fused);
+            fusedList[i] = fused;
         }
     }
 }
 
-// 장애물 리스트 융합
-std::vector<ObstacleData> fuseObstacleLists(
-    const std::vector<ObstacleData> &listMain,
-    const std::vector<ObstacleData> &listSub1,
-    const std::vector<ObstacleData> &listSub2,
-    double threshold)
+// 새 데이터에 대한 ID 관리 및 부여
+void assignIDsForNewData(
+    std::vector<ObstacleData> &resultFusionList,
+    const std::vector<ObstacleData> &currentFusionList,
+    const std::vector<int> &assignment)
 {
-    std::vector<ObstacleData> fusedList;
-
-    // 가장 최근 데이터를 가진 리스트로 초기화
-    if (!listMain.empty())
+    for (size_t i = 0; i < currentFusionList.size(); ++i)
     {
-        fusedList = listMain;
-    }
-    else if (!listSub1.empty())
-    {
-        fusedList = listSub1;
-    }
-    else if (!listSub2.empty())
-    {
-        fusedList = listSub2;
-    }
-
-    // 융합 함수 정의
-    auto performFusion = [&](const std::vector<ObstacleData> &listA, const std::vector<ObstacleData> &listB)
-    {
-        if (!listA.empty() && !listB.empty())
+        if (assignment[i] == -1)
         {
-            auto distMatrix = createDistanceMatrix(listA, listB);
-            auto assignment = solveAssignment(distMatrix);
-            processFusion(fusedList, listB, assignment); // 모든 융합 결과를 fusedList에 저장
+            ObstacleData newObstacle = currentFusionList[i];
+            newObstacle.obstacle_id = id_manager.allocID();
+            resultFusionList.push_back(newObstacle);
         }
-    };
+        else
+        {
+            resultFusionList.push_back(currentFusionList[i]);
+        }
+    }
+}
+// 장애물 리스트 융합 및 이전 데이터와 비교
+std::vector<ObstacleData> mergeAndCompareLists(
+    const std::vector<ObstacleData> &previousFusionList,
+    std::vector<ObstacleData> listMain,
+    std::vector<ObstacleData> listSub1,
+    std::vector<ObstacleData> listSub2,
+    const VehicleData &mainVehicle,
+    const VehicleData &sub1Vehicle,
+    const VehicleData &sub2Vehicle)
+{
+    // 각 차량 기준 장애물 리스트에서 해당 차량 데이터를 제외
+    listMain = filterVehicleData(listMain, sub1Vehicle);
+    listMain = filterVehicleData(listMain, sub2Vehicle);
+    listSub1 = filterVehicleData(listSub1, mainVehicle);
+    listSub1 = filterVehicleData(listSub1, sub2Vehicle);
+    listSub2 = filterVehicleData(listSub2, mainVehicle);
+    listSub2 = filterVehicleData(listSub2, sub1Vehicle);
 
-    // 모든 융합 조합에 대해 실행
-    performFusion(listMain, listSub1);
-    performFusion(listMain, listSub2);
-    if (listMain.empty())
-    { // 메인 리스트가 비어 있다면 보조 차량들 간 융합
-        performFusion(listSub1, listSub2);
+    std::vector<ObstacleData> mergedList;
+
+    // 융합할 리스트 필터링
+    std::vector<std::vector<ObstacleData>> nonEmptyLists;
+    if (!listMain.empty())
+        nonEmptyLists.push_back(listMain);
+    if (!listSub1.empty())
+        nonEmptyLists.push_back(listSub1);
+    if (!listSub2.empty())
+        nonEmptyLists.push_back(listSub2);
+
+    if (nonEmptyLists.size() == 1)
+    {
+        // 유일한 리스트 하나가 있을 경우 그대로 사용
+        mergedList = nonEmptyLists[0];
+    }
+    else
+    {
+        // 둘 이상 리스트가 있을 때 융합 수행
+        auto handleFusionForPair = [&](const std::vector<ObstacleData> &listA, const std::vector<ObstacleData> &listB)
+        {
+            std::vector<ObstacleData> fusionList = listA;
+            if (!listA.empty() && !listB.empty())
+            {
+                auto distMatrix = createDistanceMatrix(listA, listB);
+                auto assignment = solveAssignment(distMatrix);
+                processFusion(fusionList, listB, assignment);
+            }
+            return fusionList;
+        };
+
+        // 처음 두 개 리스트 융합
+        mergedList = handleFusionForPair(nonEmptyLists[0], nonEmptyLists[1]);
+
+        // 세 번째 리스트가 있다면 그 결과와 함께 융합
+        if (nonEmptyLists.size() > 2)
+        {
+            mergedList = handleFusionForPair(mergedList, nonEmptyLists[2]);
+        }
     }
 
-    return fusedList;
+    // 이전 융합 데이터와 매칭하여 ID 부여
+    if (!previousFusionList.empty() && !mergedList.empty())
+    {
+        auto distMatrix = createDistanceMatrix(previousFusionList, mergedList);
+        auto assignment = solveAssignment(distMatrix);
+        std::vector<ObstacleData> comparedList;
+        processFusion(comparedList, mergedList, assignment);
+
+        assignIDsForNewData(comparedList, mergedList, assignment);
+        return comparedList;
+    }
+    else if (!mergedList.empty())
+    {
+        std::vector<ObstacleData> initializedList;
+        assignIDsForNewData(initializedList, mergedList, std::vector<int>(mergedList.size(), -1));
+        return initializedList;
+    }
+
+    return std::vector<ObstacleData>();
 }
 
 // hubData 수신
@@ -1111,7 +1183,7 @@ void ThreadReceiveWorkInfo()
 
 void ThreadKatech()
 {
-    //==============1.전역변수인 MapData 생성 =================
+    //============== 전역변수인 MapData 생성 =================
     adcm::map_data_Objects mapData;
     IDManager id_manager;
     // 한번 생성후 관제에서 인지데이터를 받을때마다 (100ms) 마다 업데이트
@@ -1144,7 +1216,7 @@ void ThreadKatech()
 
     while (continueExecution)
     {
-        std::this_thread::sleep_for(std::chrono::milliseconds(30));
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
         // 수신한 허브 데이터가 없으면 송신 X
         if (main_vehicle_queue.size_approx() == 0 && sub1_vehicle_queue.size_approx() == 0 && sub2_vehicle_queue.size_approx() == 0)
         {
@@ -1197,8 +1269,8 @@ void ThreadKatech()
 
         //==============2. 장애물 데이터 융합=================
 
-        double distanceThreshold = 1.0;
-        obstacle_list = fuseObstacleLists(obstacle_list_main, obstacle_list_sub1, obstacle_list_sub2, distanceThreshold);
+        obstacle_list = mergeAndCompareLists(previous_obstacle_list, obstacle_list_main, obstacle_list_sub1,
+                                             obstacle_list_sub2, main_vehicle, sub1_vehicle, sub2_vehicle);
         order.pop();
 
         adcm::map_2dListVector map_2dListVector;
