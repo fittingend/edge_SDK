@@ -948,7 +948,6 @@ std::vector<ObstacleData> mergeAndCompareLists(
 // hubData 수신
 void ThreadReceiveHubData()
 {
-    adcm::Log::Info() << "SDK release_241008_interface v1.9";
     // adcm::MapData_Provider mapData_provider;
     adcm::HubData_Subscriber hubData_subscriber;
     // INFO("DataFusion .init()");
@@ -1720,6 +1719,8 @@ int main(int argc, char *argv[])
     adcm::Log::Info() << "DataFusion: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
     adcm::Log::Info() << "Ok, let's produce some DataFusion data...";
+    adcm::Log::Info() << "SDK release_241008_interface v1.9";
+    adcm::Log::Info() << "DataFusion Build 241204";
     thread_list.push_back(std::thread(ThreadReceiveHubData));
     thread_list.push_back(std::thread(ThreadReceiveWorkInfo));
     thread_list.push_back(std::thread(ThreadMonitor));
