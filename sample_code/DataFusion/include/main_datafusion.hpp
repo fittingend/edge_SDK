@@ -99,8 +99,6 @@ struct BoundaryData
 struct VehicleData
 {
     unsigned char vehicle_class;
-    //    std::vector<std::pair<unsigned short,unsigned short>> map_2d_location; //해당 차량이 위치한 2d 그리드 맵의 index 페어를 저장
-    //    std::vector<Point2D>
     std::vector<Point2D> map_2d_location;
     std::uint64_t timestamp;
     std::vector<double> road_z;
@@ -201,9 +199,9 @@ std::uint32_t mapUpdate = 0; // 맵데이터 전송마다 hubUpdate 값으로 �
 // 함수 목록
 void GPStoUTM(double lat, double lon, double &utmX, double &utmY);
 
-bool checkRange(VehicleData vehicle);
+bool checkRange(const VehicleData &vehicle);
 void checkRange(Point2D &point);
-bool checkRange(int x, int y);
+bool checkAllVehicleRange(const std::vector<VehicleData *> &vehicles);
 
 void gpsToMapcoordinate(VehicleData &vehicle);
 void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData vehicle);
@@ -251,6 +249,9 @@ std::vector<ObstacleData> mergeAndCompareLists(
 
 // 장애물이 보조차량, 메인차량인지 확인
 const double POSITION_TOLERANCE = 14.0;
+
+// VehicleData -> vehicleListStruct(맵데이터 호환)
+adcm::vehicleListStruct ConvertToVehicleListStruct(const VehicleData &vehicle, std::vector<adcm::map_2dListVector> &map);
 
 void ThreadReceiveHubData();
 void ThreadReceiveWorkInfo();
