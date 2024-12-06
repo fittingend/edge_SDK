@@ -74,16 +74,12 @@
 #include <queue>
 #include <condition_variable>
 
-#define MAX_BATCH_SIZE 5
 #define DEMO
+#define WHEEL_DIAMETER_M 0.71
+//추후에 수정 필요 특장차 휠의 지름 (미터단위) - 28인치로 우선 설정
 
-// adcm::map_2dListStruct map_2dStruct_init;
-// map_2dStruct_init.obstacle_id = NO_OBSTACLE;
-//  map_2dStruct_init.road_z = 0;
-//  // map_2dStruct_init.vehicle_class = NO_VEHICLE;
 std::vector<adcm::map_2dListVector> map_2d;
 
-//(map_n, adcm::map_2dListVector(map_m, map_2dStruct_init));
 obstacleListVector obstacle_list_temp;
 adcm::vehicleListStruct ego_vehicle_temp, sub_vehicle_1_temp, sub_vehicle_2_temp, sub_vehicle_3_temp, sub_vehicle_4_temp;
 doubleVector utm_x;
@@ -243,15 +239,39 @@ float getTTC(::adcm::obstacleListStruct obstacle, ::adcm::vehicleListStruct vehi
     else
         return INVALID_RETURN_VALUE; // return random big number
 }
+
+
+void calculateShiftedLines(int &x_start, int &x_end, int &y_start, int &y_end, int shift, double &original_m, double &original_c, double &up_c, double &down_c, bool &isVertical, double &x_up, double &x_down) 
+{
+    // Calculate the slope (gradient) of the original line
+
+    double dx = x_end - x_start;
+    double dy = y_end - y_start;
+
+    // Check if the line is vertical
+    if (dx == 0) 
+    {
+        isVertical = true;
+        original_m = INFINITY; // Undefined slope
+        original_c = INFINITY; // No y-intercept
+        x_up = x_start + shift;
+        x_down = x_start - shift;
+        return;
+    }
+    isVertical = false;
+    original_m = dy / dx; // Slope of the original line
+    original_c = y_start - original_m * x_start; // Intercept of the original line
+
+    // Adjust intercepts for vertical shifts
+    up_c = original_c + shift;
+    down_c = original_c - shift;
+}
+
 void drawline(doubleVector utm_x, doubleVector utm_y, std::vector<adcm::map_2dListVector> &map_2d, adcm::risk_assessment_Objects &riskAssessment)
 {
     bool breakFlag; // 지정된 전역경로 (x1,y1) 과 (x2, y2) 사이 하나라도
     for (int count = 0; count < utm_x.size() - 1; count++)
     {
-        //        int i = 30;
-        //        int j = 50;
-        //        adcm::Log::Info() << "[" << i << "]" << "[" << j << "]" << "road_z : " << map_2d[i][j].road_z;
-        //        adcm::Log::Info() << "drawline test 1: "<< utm_x.size();
         int x_start = floor(utm_x[count]);
         int x_end = floor(utm_x[count + 1]);
         int y_start = floor(utm_y[count]);
@@ -299,11 +319,6 @@ void drawline(doubleVector utm_x, doubleVector utm_y, std::vector<adcm::map_2dLi
                     riskAssessment.riskAssessmentList.push_back(riskAssessment7);
                     break; // 한번만 들어가도 for loop break
                 }
-                /*else if (map_2d[y][x].road_z == 1 )
-                {
-                    adcm::Log::Info() << "map_2d[" << y << "][" << x << "] is 1";
-                    adcm::Log::Info() << "scanned! safe to go";
-                }*/
             }
 
             else if (map_2d[x][y].road_z != 1) // 스캔되지 않은 map 의 index - 노면정보 X
@@ -384,21 +399,6 @@ namespace
 
 } // namespace
 
-void GetRiskAssDataFromQueue(std::vector<adcm::risk_assessment_Objects> &dataBatch)
-{
-    std::unique_lock<std::mutex> lock(riskAssDataQueueMutex);
-
-    riskAssDataQueueCondition.wait(lock, []
-                                   { return !risk_assessmentDataQueue.empty(); });
-
-    const size_t batchSize = std::min(risk_assessmentDataQueue.size(), static_cast<size_t>(MAX_BATCH_SIZE));
-
-    for (size_t i = 0; i < batchSize; ++i)
-    {
-        dataBatch.push_back(risk_assessmentDataQueue.front());
-        risk_assessmentDataQueue.pop();
-    }
-}
 void ThreadAct1()
 {
     adcm::Log::Info() << "SDK_release_240910_interface v1.8.4";
@@ -943,8 +943,6 @@ void ThreadKatech()
                     adcm::Log::Info() << "시나리오6 최초 실행하므로 장애물 리스트만 생성하고 다음 loop 에 분석을 이어서 한다";
                     obstacle_vehicle_initial.assign(obstacle_vehicle_50_60.begin(), obstacle_vehicle_50_60.end());
                 }
-
-#ifdef DEMO
                 // 시뮬레이션 데이터의 한계로 데모용 추가 코드 작성
                 else
                 {
@@ -960,8 +958,7 @@ void ThreadKatech()
                         }
                     }
 
-#endif
-#ifndef DEMO
+/*
                     else
                     {
                         // 해당 시나리오 계속 체크
@@ -990,7 +987,7 @@ void ThreadKatech()
                                 }
                             }
                         }
-#endif
+*/
                         // sort(obstacle_vehicle_new.begin(), obstacle_vehicle_new.end());
                         // obstacle_vehicle_new.erase( unique( obstacle_vehicle_new.begin(), obstacle_vehicle_new.end() ), obstacle_vehicle_new.end() );
 
@@ -1024,7 +1021,6 @@ void ThreadKatech()
                             //=========iv) 객체 출현시간 10s 이내일때 객체간 최대거리 계산
                             if (timestamp_diff < 1500)
                             {
-#ifdef DEMO
                                 for (auto iter = obstacle_vehicle_initial.begin(); iter != obstacle_vehicle_initial.end(); iter++)
                                 {
                                     for (auto iter1 = obstacle_vehicle_new.begin(); iter1 != obstacle_vehicle_new.end(); iter1++)
@@ -1035,9 +1031,7 @@ void ThreadKatech()
                                             max_distance = distance;
                                     }
                                 }
-
-#endif
-#ifndef DEMO
+/*
                                 //=========iv) 객체간 최대거리 < 30m? 측정
                                 for (auto iter = obstacle_vehicle_50_60.begin(); iter != obstacle_vehicle_50_60.end(); iter++)
                                 {
@@ -1052,36 +1046,28 @@ void ThreadKatech()
                                         }
                                     }
                                 }
-#endif
+*/
                                 // adcm::Log::Info() << "객체간 최대거리: " << max_distance;
 
                                 if (max_distance < 600)
                                 {
                                     //=========v) 통행과다환경 지정하고 환경 내 ego 와 40m 내외인 장애물에 대해서 confidence 값 계산
-#ifdef DEMO
                                     for (auto iter = obstacle_vehicle_new.begin(); iter != obstacle_vehicle_new.end(); iter++)
-#endif
-#ifndef DEMO
-                                        for (auto iter = obstacle_vehicle_50_60.begin(); iter != obstacle_vehicle_50_60.end(); iter++)
-#endif
-                                        {
-                                            distance = getDistance(*iter, ego_vehicle);
-#ifndef DEMO
-                                            if (distance < 40)
-                                            {
-#endif
-                                                // adcm::Log::Info() << "통행과다환경 지정!!! GOOD: " << iter->obstacle_id;
-                                                confidence_scenario_6 = 400 / distance * 0.7;
-                                                adcm::riskAssessmentStruct riskAssessment6;
-                                                riskAssessment6.obstacle_id = iter->obstacle_id;
-                                                riskAssessment6.hazard_class = SCENARIO_6;
-                                                riskAssessment6.confidence = confidence_scenario_6;
-                                                riskAssessment.riskAssessmentList.push_back(riskAssessment6);
-                                                adcm::Log::Info() << "Risk assessment generated for #6: " << iter->obstacle_id << "with confidence:  " << confidence_scenario_6;
-#ifndef DEMO
-                                            }
-#endif
-                                        }
+                                    //for (auto iter = obstacle_vehicle_50_60.begin(); iter != obstacle_vehicle_50_60.end(); iter++)
+                                    {
+                                        distance = getDistance(*iter, ego_vehicle);
+                                        //if (distance < 40)
+                                        //{
+                                        // adcm::Log::Info() << "통행과다환경 지정!!! GOOD: " << iter->obstacle_id;
+                                        confidence_scenario_6 = 400 / distance * 0.7;
+                                        adcm::riskAssessmentStruct riskAssessment6;
+                                        riskAssessment6.obstacle_id = iter->obstacle_id;
+                                        riskAssessment6.hazard_class = SCENARIO_6;
+                                        riskAssessment6.confidence = confidence_scenario_6;
+                                        riskAssessment.riskAssessmentList.push_back(riskAssessment6);
+                                        adcm::Log::Info() << "Risk assessment generated for #6: " << iter->obstacle_id << "with confidence:  " << confidence_scenario_6;
+                                        //}
+                                    }
                                 }
                             }
                         }
@@ -1104,19 +1090,107 @@ void ThreadKatech()
 
                     if (utm_x.size() != 0 && map_2d.size() != 0)
                     {
-                        /*if ((map_2d.size() != 0) && (obstacle_list.size()== 0) && (utm_x.size() == 6))
-                        {
-                            for (int i =29; i < 100; i++)
-                            {
-                                for (int j=45; j <55; j++)
-                                {
-                                    map_2d[i][j].road_z = 1;
-                                }
-                            }
-                        }*/
                         drawline(utm_x, utm_y, map_2d, riskAssessment);
                     }
                     adcm::Log::Info() << "scenario 7 DONE";
+                }
+
+                {
+                    if (riskAssessment.riskAssessmentList.size() == 0)
+                    {
+                        adcm::Log::Info() << "no riskAssessment data before scenario 8!";
+                    }
+                    //=====시나리오 #8. 주행가능 영역 너비/높이 변화: 전역경로 및 작업지점 근방의 노면 상태가 불균일 할 경우======
+                    adcm::Log::Info() << "=============KATECH: scenario 8 START==============";
+                    adcm::riskAssessmentStruct riskAssessment8;
+                    int shift = 50;     // 전역경로와 작업지점의 근방 5m 스캔
+                    double original_m, original_c, up_c, down_c;
+                    double x_up, x_down;
+                    bool isVertical;
+                    double vehicle_road_z = 0; //TO DO: 특장차가 위치한 시작 노면정보를 읽어 오도록 수정 필요
+                    int risk_count = 0;
+                    Point2D p1, p2, p3, p4;
+
+                    if (utm_x.size() != 0 && map_2d.size() != 0)
+                    {
+                        for (int count = 0; count < utm_x.size() - 1; count++)
+                        {
+                            int x_start = floor(utm_x[count]);
+                            int x_end = floor(utm_x[count + 1]);
+                            int y_start = floor(utm_y[count]);
+                            int y_end = floor(utm_y[count + 1]);
+
+                            calculateShiftedLines(x_start, x_end, y_start, y_end, shift, original_m, original_c, up_c, down_c, isVertical, x_up, x_down);
+                            // Print the line equations
+                            if (isVertical) 
+                            {
+                                adcm::Log::Info()<< "Original line equation: x = " << x_start << "\n";
+                                adcm::Log::Info() << "Line shifted right: x = " << x_up << "\n";
+                                adcm::Log::Info() << "Line shifted left: x = " << x_down << "\n";
+
+                                p1 = {x_down, y_start};  // First line start point
+                                p2 = {x_down, y_end}; // First line end point
+                                p3 = {x_up, y_start};   // Second line start point
+                                p4 = {x_up, y_end}; // Second line end point
+                            } 
+                            else 
+                            {
+                               adcm::Log::Info() << "Original line equation: y = " << original_m << "x + " << original_c << "\n";
+                               adcm::Log::Info() << "Line shifted up: y = " << original_m << "x + " << up_c << "\n";
+                               adcm::Log::Info() << "Line shifted down: y = " << original_m << "x + " << down_c << "\n";
+
+                                // Points of the parallelogram (calculated for x = 0 and x = 10)
+                                p1 = {x_start, original_m * x_start + up_c};  // First line start point
+                                p2 = {x_end, original_m * x_end + up_c}; // First line end point
+                                p3 = {x_start, original_m * x_start + down_c};   // Second line start point
+                                p4 = {x_end, original_m * x_end + down_c}; // Second line end point
+                            }
+
+                            int minX = std::min({p1.x, p2.x, p3.x, p4.x});
+                            int maxX = std::max({p1.x, p2.x, p3.x, p4.x});
+                            int minY = std::min({p1.y, p2.y, p3.y, p4.y});
+                            int maxY = std::max({p1.y, p2.y, p3.y, p4.y});
+
+                            for (int x = minX; x <= maxX; ++x) 
+                            {
+                                for (int y = minY; y <= maxY; ++y) 
+                                {
+                                    if (std::abs(map_2d[x][y].road_z - vehicle_road_z) > WHEEL_DIAMETER_M/2) 
+                                    {
+                                        //TO DO: road_z 값이 없는 경우도 고려해야 함 => 무시할 것인가 COUNT 를 올릴 것인가?
+                                        risk_count++;
+                                    }
+
+                                    if (risk_count == 20)
+                                    {
+                                        adcm::Log::Info() << "Road cave-in detected!";
+                                        adcm::riskAssessmentStruct riskAssessment8;
+                                        riskAssessment8.wgs84_xy_start.clear();
+                                        riskAssessment8.wgs84_xy_end.clear();
+                                        adcm::globalPathPosition uneven_start_path, uneven_end_path;
+                                        uneven_start_path.x = utm_x[count];
+                                        uneven_start_path.y = utm_y[count];
+                                        uneven_end_path.x = utm_x[count + 1];
+                                        uneven_end_path.y = utm_y[count + 1];
+                                        riskAssessment8.wgs84_xy_start.push_back(uneven_start_path);
+                                        riskAssessment8.wgs84_xy_end.push_back(uneven_end_path);
+                                        riskAssessment8.hazard_class = SCENARIO_8;
+                                        riskAssessment8.isHarzard = true;
+                                        adcm::Log::Info() << "Risk assessment generated for #8 is X: " << utm_x[count] << " Y: " << utm_y[count] << " with flag 1 ";
+                                        riskAssessment.riskAssessmentList.push_back(riskAssessment8);
+                                       break; //y 루프 종료
+                                    }
+                                }
+
+                                if (risk_count == 20) 
+                                {
+                                    risk_count = 0;
+                                    break; // x 루프도 종료
+                                }
+                            }
+                        }
+                        adcm::Log::Info() << "scenario 8 DONE";
+                    }
                 }
 
                 adcm::Log::Info() << "build riskAssessment data - size " << riskAssessment.riskAssessmentList.size();
@@ -1206,25 +1280,6 @@ void ThreadKatech()
         }
     }
 
-    /*void ThreadTxManager()
-    {
-        adcm::RiskAssessment_Provider riskAssessment_provider;
-        riskAssessment_provider.init("RiskAssessment/RiskAssessment/PPort_risk_assessment");
-
-        while(continueExecution)
-        {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            std::vector<adcm::risk_assessment_Objects> dataBatch;
-            GetRiskAssDataFromQueue(dataBatch);
-
-            for (auto& data : dataBatch)
-            {
-                adcm::Log::Info() << "Send data...";
-                riskAssessment_provider.send(data);
-            }
-        }
-    }
-    */
     int main(int argc, char *argv[])
     {
         UNUSED(argc);
