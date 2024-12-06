@@ -52,11 +52,11 @@ IDManager id_manager; // 장애물 ID 부여 및 반환
 enum VehicleClass
 {
     EGO_VEHICLE = 240,
-    SUB_VEHICLE_1 = 0,
-    SUB_VEHICLE_2 = 1,
-    SUB_VEHICLE_3 = 2,
-    SUB_VEHICLE_4 = 3,
-    NO_VEHICLE = 4
+    SUB_VEHICLE_1 = 1,
+    SUB_VEHICLE_2 = 2,
+    SUB_VEHICLE_3 = 3,
+    SUB_VEHICLE_4 = 4,
+    NO_VEHICLE = 5
 };
 
 struct Point2D
@@ -166,19 +166,27 @@ moodycamel::ConcurrentQueue<FusionData> sub2_vehicle_queue;
 
 queue<int> order;
 
+// 허브데이터 수신 시 사용하는 임시 데이터
 VehicleData main_vehicle_temp;
 VehicleData sub1_vehicle_temp;
 VehicleData sub2_vehicle_temp;
+std::vector<ObstacleData> obstacle_list_temp;
+
+// 맵데이터 생성 시 사용하는 데이터
 FusionData main_vehicle_data;
 FusionData sub1_vehicle_data;
 FusionData sub2_vehicle_data;
 std::vector<ObstacleData> obstacle_list_main;
 std::vector<ObstacleData> obstacle_list_sub1;
 std::vector<ObstacleData> obstacle_list_sub2;
+VehicleData main_vehicle;
+VehicleData sub1_vehicle;
+VehicleData sub2_vehicle;
+std::vector<VehicleData *> vehicles = {&main_vehicle, &sub1_vehicle, &sub2_vehicle};
+
 // 이전 TimeStamp의 Obstacle_list
 std::vector<ObstacleData> previous_obstacle_list;
 
-std::vector<ObstacleData> obstacle_list_temp;
 long ContourX[map_m][2];
 bool once = 1;
 // 차량 크기(work_information data)
@@ -213,6 +221,12 @@ void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std:
 
 void find4VerticesVehicle(VehicleData &target_vehicle, std::vector<adcm::map_2dListVector> &map_2d_test);
 void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered);
+
+// 차량 데이터 저장
+void fillVehicleData(VehicleData &vehicle_fill, const std::shared_ptr<adcm::hub_data_Objects> &data);
+
+// 장애물 데이터 저장
+void fillObstacleList(std::vector<ObstacleData> &obstacle_list_fill, const std::shared_ptr<adcm::hub_data_Objects> &data);
 
 // 유클리디안 거리 계산
 double euclideanDistance(const ObstacleData &a, const ObstacleData &b);
@@ -252,6 +266,9 @@ const double POSITION_TOLERANCE = 14.0;
 
 // VehicleData -> vehicleListStruct(맵데이터 호환)
 adcm::vehicleListStruct ConvertToVehicleListStruct(const VehicleData &vehicle, std::vector<adcm::map_2dListVector> &map);
+
+// ObstacleData -> obstacleListStruct(맵데이터 호환)
+adcm::obstacleListStruct ConvertToObstacleListStruct(const ObstacleData &obstacle, std::vector<adcm::map_2dListVector> &map);
 
 void ThreadReceiveHubData();
 void ThreadReceiveWorkInfo();
