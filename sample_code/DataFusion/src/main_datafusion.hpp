@@ -60,7 +60,7 @@ enum VehicleClass
 
 struct Point2D
 {
-    long x, y;
+    double x, y;
 };
 
 struct ObstacleData
@@ -98,10 +98,7 @@ struct BoundaryData
 struct VehicleData
 {
     unsigned char vehicle_class;
-    //    std::vector<std::pair<unsigned short,unsigned short>> map_2d_location; //해당 차량이 위치한 2d 그리드 맵의 index 페어를 저장
-    //    std::vector<Point2D>
     std::vector<Point2D> map_2d_location;
-    //    std::time_t timestamp;
     std::uint64_t timestamp;
     std::vector<double> road_z;
     //    double road_z[4];
@@ -123,7 +120,7 @@ struct VehicleData
 
 struct GridCellData
 {
-    unsigned short obstacle_id;
+    std::uint16_t obstacle_id;
     VehicleClass vehicle_class;
     double road_z; // 2 bytes
 }; // 패딩때문에 토탈 24 bytes
@@ -170,8 +167,6 @@ VehicleData main_vehicle_temp;
 VehicleData sub1_vehicle_temp;
 VehicleData sub2_vehicle_temp;
 std::vector<ObstacleData> obstacle_list_temp;
-long ContourX[map_m][2];
-bool once = 1;
 // 차량 크기(work_information data)
 
 double utmOrigin_x, utmOrigin_y;
@@ -196,13 +191,12 @@ bool checkRange(int x, int y);
 
 void gpsToMapcoordinate(VehicleData &vehicle);
 void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData vehicle);
-void ScanLine(long x1, long y1, long x2, long y2, long min_y, long max_y);
 
 void generateRoadZValue(VehicleData target_vehicle, std::vector<adcm::map_2dListVector> &map_2d_test);
 void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, VehicleData &vehicle, std::vector<adcm::map_2dListVector> &map_2d_test);
-void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std::vector<ObstacleData>::iterator iter);
+void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std::vector<ObstacleData>::iterator iter, std::vector<adcm::map_2dListVector> &map_2d_test);
 
-void find4VerticesVehicle(VehicleData &target_vehicle, std::vector<adcm::map_2dListVector> &map_2d_test);
+void find4VerticesVehicle(VehicleData &target_vehicle);
 void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered);
 
 void ThreadReceiveHubData();
