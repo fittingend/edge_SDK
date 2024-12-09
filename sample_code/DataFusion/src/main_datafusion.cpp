@@ -868,6 +868,16 @@ void processFusion(
             // adcm::Log::Info() << i << "번째 fusedData push";
         }
     }
+
+    for (size_t j = 0; j < fusedList.size(); ++j)
+    {
+        // assignment에 존재하지 않는 j 값을 가지는 항목들을 추가
+        if (std::find(assignment.begin(), assignment.end(), j) == assignment.end())
+        {
+            newList.push_back(fusedList[j]);
+        }
+    }
+
     fusedList = newList;
 }
 
@@ -877,9 +887,11 @@ void assignIDsForNewData(
     const std::vector<ObstacleData> &currentFusionList,
     const std::vector<int> &assignment)
 {
+    // 기존 매칭된 인덱스 집합
+    std::set<int> matchedIndices(assignment.begin(), assignment.end());
     for (size_t i = 0; i < currentFusionList.size(); ++i)
     {
-        if (assignment[i] == -1)
+        if (i >= assignment.size() || matchedIndices.find(i) == matchedIndices.end())
         {
             ObstacleData newObstacle = currentFusionList[i];
             newObstacle.obstacle_id = id_manager.allocID();
