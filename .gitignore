@@ -2,3 +2,4 @@
 /doc
 /sample_code/*/build/
 .vscode
+.DS_Store
