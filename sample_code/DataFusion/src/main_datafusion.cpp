@@ -1661,7 +1661,7 @@ int main(int argc, char *argv[])
 #endif
     adcm::Log::Info() << "Ok, let's produce some DataFusion data...";
     adcm::Log::Info() << "SDK release_241008_interface v1.9";
-    adcm::Log::Info() << "DataFusion Build 241209";
+    adcm::Log::Info() << "DataFusion Build 241212";
     thread_list.push_back(std::thread(ThreadReceiveHubData));
     thread_list.push_back(std::thread(ThreadReceiveWorkInfo));
     thread_list.push_back(std::thread(ThreadMonitor));
