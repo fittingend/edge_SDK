@@ -1,4 +1,5 @@
 /lib
 /doc
 /sample_code/*/build/
-/.vscode
+.vscode
+.DS_Store

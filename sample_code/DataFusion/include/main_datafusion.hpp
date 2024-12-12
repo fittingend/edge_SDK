@@ -52,8 +52,8 @@ IDManager id_manager; // 장애물 ID 부여 및 반환
 enum VehicleClass
 {
     EGO_VEHICLE = 240,
-    SUB_VEHICLE_1 = 1,
-    SUB_VEHICLE_2 = 2,
+    SUB_VEHICLE_1 = 0,
+    SUB_VEHICLE_2 = 1,
     SUB_VEHICLE_3 = 3,
     SUB_VEHICLE_4 = 4,
     NO_VEHICLE = 5
@@ -200,8 +200,9 @@ std::vector<VehicleSizeData> sub_vehicle_size;
 std::vector<BoundaryData> work_boundary;
 double min_a, min_b, max_a, max_b;
 
-std::uint32_t hubUpdate = 0; // 허브데이터를 수령한 횟수
-std::uint32_t mapUpdate = 0; // 맵데이터 전송마다 hubUpdate 값으로 업데이트되며, 스레드에서 hubUpdate와 값이 같으면 스레드 휴식(부하 감소)
+// bool haveWorkInfo = false;
+bool sendEmptyMap = false;
+int receiveVer = 0;
 
 ///////////////////////////////////////////////////////////////////////
 // 함수 목록
@@ -241,7 +242,7 @@ double calculateWeightedPosition(const std::vector<double> &positions, const std
 std::vector<int> solveAssignment(const std::vector<std::vector<double>> &costMatrix);
 
 // 메인차량, 서브차량 리스트에서 제외
-std::vector<ObstacleData> filterVehicleData(const std::vector<ObstacleData> &obstacles, const VehicleData &vehicleToExclude);
+void filterVehicleData(std::vector<ObstacleData> &obstacles);
 
 // 장애물 데이터 병합
 void processFusion(std::vector<ObstacleData> &fusedList, const std::vector<ObstacleData> &listB, const std::vector<int> &assignment);
