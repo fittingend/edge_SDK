@@ -6,13 +6,13 @@
 
 #define OBSTACLE_MAX 1000
 
-
 class IDManager
 {
 public:
     IDManager();
     int allocID();
     void retID(int id);
+    int getNum();
 
 private:
     std::uint16_t id_Counter;
