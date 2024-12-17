@@ -19,3 +19,8 @@ void IDManager::retID(int id)
 {
     id_Notused[id_Counter++] = id;
 }
+
+int IDManager::getNum()
+{
+    return OBSTACLE_MAX-id_Counter;
+}

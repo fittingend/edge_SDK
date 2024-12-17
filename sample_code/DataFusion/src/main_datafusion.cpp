@@ -867,6 +867,10 @@ void processFusion(
             newList.push_back(fused);
             // adcm::Log::Info() << i << "번째 fusedData push";
         }
+        else
+        {
+            newList.push_back(listB[i]);
+        }
     }
 
     for (size_t j = 0; j < fusedList.size(); ++j)
@@ -918,29 +922,30 @@ std::vector<ObstacleData> mergeAndCompareLists(
     std::vector<std::vector<ObstacleData>> nonEmptyLists;
     std::vector<ObstacleData> mergedList;
 
-    if (mainVehicle.timestamp != 0 && !listMain.empty())
+    if (mainVehicle.timestamp != 0)
     {
         nonEmptyVehicles.push_back(mainVehicle);
         nonEmptyLists.push_back(listMain);
     }
-    if (sub1Vehicle.timestamp != 0 && !listSub1.empty())
+    if (sub1Vehicle.timestamp != 0)
     {
         nonEmptyVehicles.push_back(sub1Vehicle);
         nonEmptyLists.push_back(listSub1);
     }
-    if (sub2Vehicle.timestamp != 0 && !listSub2.empty())
+    if (sub2Vehicle.timestamp != 0)
     {
         nonEmptyVehicles.push_back(sub2Vehicle);
         nonEmptyLists.push_back(listSub2);
     }
 
-    // adcm::Log::Info() << "융합: 빈 데이터 제외 완료: " << nonEmptyLists.size() << ", " << nonEmptyVehicles.size();
+    adcm::Log::Info() << "융합: 빈 데이터 제외 완료: " << nonEmptyLists.size() << ", " << nonEmptyVehicles.size();
     // 융합할 리스트 필터링
     if (nonEmptyLists.size() == 1)
     {
         // 유일한 리스트 하나가 있을 경우 그대로 사용
         mergedList = nonEmptyLists[0];
     }
+
     else
     {
         // filterVehicleData(nonEmptyLists[0], nonEmptyVehicles[1]);
@@ -987,18 +992,27 @@ std::vector<ObstacleData> mergeAndCompareLists(
     // 이전 융합 데이터와 매칭하여 ID 부여
     if (!previousFusionList.empty() && !mergedList.empty())
     {
+        adcm::Log::Info() << "previousFusionList size: " << previousFusionList.size();
+        adcm::Log::Info() << "mergedList size: " << mergedList.size();
         // adcm::Log::Info() << "융합: 이전 데이터와 융합하여 ID부여 시도";
         auto distMatrix = createDistanceMatrix(previousFusionList, mergedList);
         // adcm::Log::Info() << "융합: 거리배열 생성";
         auto assignment = solveAssignment(distMatrix);
         adcm::Log::Info() << "융합: Munkres Algorithm 적용: " << assignment.size();
-
+        for (int i = 0; i < assignment.size(); i++)
+            adcm::Log::Info() << "assignment" << i << ": " << assignment[i];
         std::vector<ObstacleData> finalList;
         processFusion(mergedList, previousFusionList, assignment);
         // adcm::Log::Info() << "융합: 이전 데이터와 융합 완료";
         assignIDsForNewData(finalList, mergedList, assignment);
-        adcm::Log::Info() << "융합: ID부여 완료";
+        adcm::Log::Info() << "융합: ID부여 완료: "<<id_manager.getNum();
         return finalList;
+    }
+
+    if (mergedList.empty())
+    {
+        adcm::Log::Info() << "현재 TimeStamp 장애물 X, 이전 TimeStamp 장애물리스트 그대로 사용";
+        return previousFusionList;
     }
     else if (!mergedList.empty())
     {
@@ -1142,7 +1156,6 @@ void ThreadReceiveHubData()
             // adcm::Log::Verbose() << "[EVENT] DataFusion Hub Data received";
             while (!hubData_subscriber.isEventQueueEmpty())
             {
-                receiveVer++;
                 auto data = hubData_subscriber.getEvent();
                 gReceivedEvent_count_hub_data++;
                 FusionData fusionData;
@@ -1157,6 +1170,7 @@ void ThreadReceiveHubData()
                     fusionData.obstacle_list = obstacle_list_temp;
                     main_vehicle_queue.enqueue(fusionData);
                     order.push(EGO_VEHICLE);
+                    adcm::Log::Info() << ++receiveVer << "번째 허브 데이터 수신 완료";
                     break;
 
                 case SUB_VEHICLE_1: // 보조차1이 보낸 인지데이터
@@ -1166,6 +1180,7 @@ void ThreadReceiveHubData()
                     fusionData.obstacle_list = obstacle_list_temp;
                     sub1_vehicle_queue.enqueue(fusionData);
                     order.push(SUB_VEHICLE_1);
+                    adcm::Log::Info() << ++receiveVer << "번째 허브 데이터 수신 완료";
                     break;
 
                 case SUB_VEHICLE_2: // 보조차2가 보낸 인지데이터
@@ -1175,13 +1190,24 @@ void ThreadReceiveHubData()
                     fusionData.obstacle_list = obstacle_list_temp;
                     sub2_vehicle_queue.enqueue(fusionData);
                     order.push(SUB_VEHICLE_2);
+                    adcm::Log::Info() << ++receiveVer << "번째 허브 데이터 수신 완료";
                     break;
+
+                // case 255: // 보조차1이 보낸 인지데이터
+                //     data->vehicle_class = SUB_VEHICLE_1;
+                //     fillVehicleData(sub1_vehicle_temp, data);
+                //     fillObstacleList(obstacle_list_temp, data);
+                //     fusionData.vehicle = sub1_vehicle_temp;
+                //     fusionData.obstacle_list = obstacle_list_temp;
+                //     sub1_vehicle_queue.enqueue(fusionData);
+                //     order.push(SUB_VEHICLE_1);
+                //     adcm::Log::Info() << ++receiveVer << "번째 허브 데이터 수신 완료";
+                //     break;
 
                 default:
                     adcm::Log::Info() << "data received but belongs to no vehicle hence discarded";
                     break;
                 }
-                adcm::Log::Info() << receiveVer << "번째 허브 데이터 수신 완료";
             }
         }
         if (continueExecution != true)

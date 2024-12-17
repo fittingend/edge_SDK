@@ -52,8 +52,8 @@ IDManager id_manager; // 장애물 ID 부여 및 반환
 enum VehicleClass
 {
     EGO_VEHICLE = 240,
-    SUB_VEHICLE_1 = 0,
-    SUB_VEHICLE_2 = 1,
+    SUB_VEHICLE_1 = 1,
+    SUB_VEHICLE_2 = 2,
     SUB_VEHICLE_3 = 3,
     SUB_VEHICLE_4 = 4,
     NO_VEHICLE = 5
