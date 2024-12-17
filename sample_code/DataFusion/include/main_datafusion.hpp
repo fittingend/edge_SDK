@@ -245,7 +245,11 @@ std::vector<int> solveAssignment(const std::vector<std::vector<double>> &costMat
 void filterVehicleData(std::vector<ObstacleData> &obstacles);
 
 // 장애물 데이터 병합
-void processFusion(std::vector<ObstacleData> &fusedList, const std::vector<ObstacleData> &listB, const std::vector<int> &assignment);
+void processFusion(
+    std::vector<ObstacleData> &presList,
+    const std::vector<ObstacleData> &prevList,
+    const std::vector<int> &assignment);
+// void processFusion(std::vector<ObstacleData> &fusedList, const std::vector<ObstacleData> &listB, const std::vector<int> &assignment);
 
 // 새 데이터에 대한 ID 관리 및 부여
 void assignIDsForNewData(std::vector<ObstacleData> &resultFusionList,
