@@ -88,8 +88,163 @@ obstacleListVector obstacle_pedes_initial;   // 시나리오 5 용
 obstacleListVector obstacle_vehicle_initial; // 시나리오 6 용
 
 //============== 2. 함수 definition =================
+#define NATS_TEST
+#ifdef NATS_TEST
+#include "./NATS_IMPLEMENTATION/NatsConnManager.h"
+#define HMI_SERVER_URL  "https://nats.beyless.com"
+#include <sstream>
+#include <fstream>  // Required for file handling
+#include <filesystem>
 
-// double getDistance(ObstacleData obstacle, VehicleData vehicle)
+std::mutex mtx; // 뮤텍스 선언
+bool firstTime = true;
+natsStatus s = NATS_OK;
+std::vector<const char*> subject = {"test1.*", "test2.*"};
+std::shared_ptr<adcm::etc::NatsConnManager> natsManager;
+
+void asyncCb(natsConnection* nc, natsSubscription* sub, natsStatus err, void* closure)
+{
+    std::cout << "Async error: " << err << " - " << natsStatus_GetText(err) << std::endl;
+    natsManager->NatsSubscriptionGetDropped(sub, (int64_t*) &natsManager->dropped);
+}
+
+void onMsg(natsConnection* nc, natsSubscription* sub, natsMsg* msg, void* closure)
+{
+    const char* subject = NULL;
+    
+    // 뮤텍스를 사용하여 공유 변수 접근 보호
+    std::lock_guard<std::mutex> lock(mtx);
+    subject = natsMsg_GetSubject(msg);
+
+    std::cout << "Received msg: [" << subject << " : " << natsMsg_GetDataLength(msg) << "]" << natsMsg_GetData(msg) << std::endl;
+    natsManager->NatsMsgDestroy(msg);
+}
+
+void saveToJsonFile(const std::string& key, const std::string& value, int& fileCount)
+{
+    std::ostringstream fileNameStream;
+    fileNameStream << key <<"_" << fileCount << ".json";  // Construct the file name
+    std::string fileName = fileNameStream.str();
+    std::ofstream outFile(fileName);
+    // Open file for writing with the generated name
+    if (outFile.is_open())
+    {
+        outFile << value;  // Write the JSON string to the file
+        outFile.close();          // Close the file after writing
+        adcm::Log::Info() << "JSON data stored in " << fileName;
+    }
+    else
+    {
+        adcm::Log::Error() << "Failed to open file " << fileName << " for writing!";
+    }
+
+    // Increment the file count for the next call
+    ++fileCount;
+}
+std::string convertRiskAssessmentToJsonString(const adcm::risk_assessment_Objects& riskAssessment) {
+    //test purpose
+
+    uint64_t timestamp_map = 111;
+    uint64_t timestamp_risk = riskAssessment.timestamp;
+    std::string model_id = "test_id_v1";
+
+    std::ostringstream oss;  // Use a string stream for easier manipulation
+    oss << "{\n";  // Start the JSON object
+
+    // Convert riskAssessmentList to JSON
+    oss << "    \"riskAssessmentList\": [\n";
+    for (size_t i = 0; i < riskAssessment.riskAssessmentList.size(); ++i) {
+        const auto& item = riskAssessment.riskAssessmentList[i];
+        oss << "        {\n"
+            << "            \"obstacle_id\": " << item.obstacle_id << ",\n"
+            << "            \"wgs84_xy_start\": [\n";
+
+        // Convert wgs84_xy_start to JSON
+        for (size_t j = 0; j < item.wgs84_xy_start.size(); ++j) {
+            const auto& start = item.wgs84_xy_start[j];
+            oss << "                {\n"
+                << "                    \"x\": " << start.x << ",\n"
+                << "                    \"y\": " << start.y << "\n"
+                << "                }";
+
+            if (j < item.wgs84_xy_start.size() - 1) {
+                oss << ",";
+            }
+            oss << "\n";  // Newline for readability
+        }
+
+        oss << "            ],\n"  // Close wgs84_xy_start array
+            << "            \"wgs84_xy_end\": [\n";
+
+        // Convert wgs84_xy_end to JSON
+        for (size_t j = 0; j < item.wgs84_xy_end.size(); ++j) {
+            const auto& end = item.wgs84_xy_end[j];
+            oss << "                {\n"
+                << "                    \"x\": " << end.x << ",\n"
+                << "                    \"y\": " << end.y << "\n"
+                << "                }";
+
+            if (j < item.wgs84_xy_end.size() - 1) {
+                oss << ",";
+            }
+            oss << "\n";  // Newline for readability
+        }
+
+        oss << "            ],\n"  // Close wgs84_xy_end array
+            << "            \"hazard_class\": " << static_cast<int>(item.hazard_class) << ",\n"  // hazard_class
+            << "            \"isHarzard\": " << (item.isHarzard ? "true" : "false") << ",\n"  // isHazard
+            << "            \"confidence\": " << item.confidence << ",\n"  // confidence
+            << "            \"timestamp_map\": " << timestamp_map << ",\n"  // timestamp_map
+            << "            \"timestamp_risk\": " << timestamp_risk << ",\n"  // timestamp_risk
+            << "            \"model_id\": \"" << model_id << "\"\n";  // model_id
+
+        oss << "        }";
+
+        if (i < riskAssessment.riskAssessmentList.size() - 1) {
+            oss << ",";
+        }
+        oss << "\n";  // Newline for readability
+    }
+    oss << "    ]\n";  // Close riskAssessmentList array
+    oss << "}";  // Close the main JSON object
+
+    return oss.str();  // Return the constructed JSON string
+}
+
+void NatsSend(const adcm::risk_assessment_Objects& riskAssessment)
+{
+    static int risk_count = 0;  // Static variable to track file number
+
+    if (firstTime == true)
+    {
+        adcm::Log::Info() << "NATS first time setup!";
+        natsManager = std::make_shared<adcm::etc::NatsConnManager>(HMI_SERVER_URL, subject, onMsg, asyncCb, adcm::etc::NatsConnManager::Mode::Default);
+        s = natsManager->NatsExecute();
+        firstTime = false;
+    }
+    if(s == NATS_OK)
+    {
+        const char* pubSubject = "test2.JSON";
+        natsManager->ClearJsonData();
+        std::string riskToStr = convertRiskAssessmentToJsonString(riskAssessment);
+        natsManager->addJsonData("riskAssessment", riskToStr);
+        natsManager->NatsPublishJson(pubSubject);
+        adcm::Log::Info() << "NatsPublishJson";
+        saveToJsonFile("riskAssessment", riskToStr, risk_count);
+    }
+    else
+    {
+        std::cout << "Nats Connection error" << std::endl;
+        try{
+        natsManager = std::make_shared<adcm::etc::NatsConnManager>(HMI_SERVER_URL,subject, onMsg, asyncCb, adcm::etc::NatsConnManager::Mode::Default);
+        s = natsManager->NatsExecute();
+        }catch(std::exception e)
+        {
+            std::cout << "Nats reConnection error" << std::endl;
+        }
+    }  
+}
+#endif
 void symmDiff(obstacleListVector vec1, obstacleListVector vec2, obstacleListVector &output, int n, int m)
 {
     // Traverse both arrays simultaneously.
@@ -401,9 +556,9 @@ namespace
 
 void ThreadAct1()
 {
-    adcm::Log::Info() << "SDK_release_240910_interface v1.8.4";
-    adcm::Log::Info() << "RiskAssessment_release_241010";
-    // INFO("RiskAssessment .init()");
+    adcm::Log::Info() << "SDK release_241008_interface v1.9";
+    adcm::Log::Info() << "RiskAssessment ThreadAct1";
+    INFO("RiskAssessment .init()");
     // adcm::RiskAssessment_Provider riskAssessment_provider;
     adcm::MapData_Subscriber mapData_subscriber;
     adcm::BuildPathTest_Subscriber buildPathTest_subscriber;
@@ -1220,11 +1375,22 @@ void ThreadKatech()
                 adcm::Log::Info() << "===============================================================";
                 if (riskAssessment.riskAssessmentList.size() != 0)
                 {
+                    //risktAssessment object 의 생성시간 추가
+                    auto now = std::chrono::system_clock::now();
+                    auto riskAssessment_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+                    adcm::Log::Info() << "Current timestamp in milliseconds: " << riskAssessment_timestamp;
+                    riskAssessment.timestamp = riskAssessment_timestamp;
                     adcm::Log::Info() << "riskAssessment send!";
                     riskAssessment_provider.send(riskAssessment);
+
+                    NatsSend(riskAssessment);
                 }
                 else
+                {
+                    //NatsSend(riskAssessment); //테스트 용도로 계속 송신하게 한다
                     adcm::Log::Info() << "riskAssessment size is 0, doesn't send";
+
+                }
                 riskAssessment.riskAssessmentList.clear();
             }
 

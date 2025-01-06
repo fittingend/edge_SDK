@@ -6,7 +6,7 @@ IDManager::IDManager()
     id_Counter = OBSTACLE_MAX;
     for (int i = 0; i < OBSTACLE_MAX; i++)
     {
-        id_Notused[i] = 255 - i;
+        id_Notused[i] = OBSTACLE_MAX - i;
     }
 }
 
@@ -18,4 +18,9 @@ int IDManager::allocID()
 void IDManager::retID(int id)
 {
     id_Notused[id_Counter++] = id;
+}
+
+int IDManager::getNum()
+{
+    return OBSTACLE_MAX-id_Counter;
 }

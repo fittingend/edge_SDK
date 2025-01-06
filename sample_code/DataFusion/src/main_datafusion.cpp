@@ -44,9 +44,256 @@
 // between applications. We also have no execution environment in use here
 // I.e. this code as nothing to do with the communication or execution API
 ///////////////////////////////////////////////////////////////////////
-
+#include <sstream>
+#include <fstream> // Required for file handling
+#include <filesystem>
 #include "main_datafusion.hpp"
 
+#include <string>
+#include <vector>
+
+#define NATS_TEST
+#ifdef NATS_TEST
+#include "./NATS_IMPLEMENTATION/NatsConnManager.h"
+#define HMI_SERVER_URL "https://nats.beyless.com"
+
+std::mutex mtx; // 뮤텍스 선언
+bool firstTime = true;
+natsStatus s = NATS_OK;
+std::vector<const char *> subject = {"test1.*", "test2.*"};
+std::shared_ptr<adcm::etc::NatsConnManager> natsManager;
+
+void asyncCb(natsConnection *nc, natsSubscription *sub, natsStatus err, void *closure)
+{
+    std::cout << "Async error: " << err << " - " << natsStatus_GetText(err) << std::endl;
+    natsManager->NatsSubscriptionGetDropped(sub, (int64_t *)&natsManager->dropped);
+}
+
+void onMsg(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
+{
+    const char *subject = NULL;
+
+    // 뮤텍스를 사용하여 공유 변수 접근 보호
+    std::lock_guard<std::mutex> lock(mtx);
+    subject = natsMsg_GetSubject(msg);
+
+    std::cout << "Received msg: [" << subject << " : " << natsMsg_GetDataLength(msg) << "]" << natsMsg_GetData(msg) << std::endl;
+    // We should be using a mutex to protect those variables since
+    // they are used from the subscription's delivery and the main
+    // threads. For demo purposes, this is fine.
+
+    // std::istringstream iss(subject);
+    // std::vector<std::string> words;
+    // std::string word;
+
+    // while (std::getline(iss, word, '.'))
+    // {
+    //     words.push_back(word);
+    // }
+    // std::cout << words[0] << " Data Category : " << words[1] << std::endl;
+
+    natsManager->NatsMsgDestroy(msg);
+}
+
+std::string convertMapDataToJsonString(const adcm::map_data_Objects &mapData)
+{
+    std::ostringstream oss; // Use a string stream for easier manipulation
+    oss << "{\n";           // Start the JSON object
+
+    // Convert map_2d to JSON
+    oss << "    \"map_2d\": [\n";
+    for (size_t i = 0; i < mapData.map_2d.size(); ++i)
+    {
+        oss << "        [\n"; // Start each row
+        for (size_t j = 0; j < mapData.map_2d[i].size(); ++j)
+        {
+            const auto &item = mapData.map_2d[i][j];
+            oss << "            {\n"
+                << "                \"obstacle_id\": " << item.obstacle_id << ",\n"
+                << "                \"vehicle_class\": " << static_cast<int>(item.vehicle_class) << ",\n"
+                << "                \"road_z\": " << static_cast<int>(item.road_z) << "\n"
+                << "            }";
+
+            if (j < mapData.map_2d[i].size() - 1)
+            {
+                oss << ",";
+            }
+            oss << "\n"; // Newline for readability
+        }
+        oss << "        ]";
+
+        if (i < mapData.map_2d.size() - 1)
+        {
+            oss << ",";
+        }
+        oss << "\n"; // Newline for readability
+    }
+    oss << "    ],\n";
+
+    // Convert obstacle_list to JSON
+    oss << "    \"obstacle_list\": [\n";
+    for (size_t i = 0; i < mapData.obstacle_list.size(); ++i)
+    {
+        const auto &item = mapData.obstacle_list[i];
+        oss << "        {\n"
+            << "            \"obstacle_id\": " << item.obstacle_id << ",\n"
+            << "            \"obstacle_class\": " << static_cast<int>(item.obstacle_class) << ",\n"
+            << "            \"timestamp\": " << item.timestamp << ",\n"
+            << "            \"stop_count\": " << static_cast<int>(item.stop_count) << ",\n"
+            << "            \"fused_cuboid_x\": " << item.fused_cuboid_x << ",\n"
+            << "            \"fused_cuboid_y\": " << item.fused_cuboid_y << ",\n"
+            << "            \"fused_cuboid_z\": " << item.fused_cuboid_z << ",\n"
+            << "            \"fused_heading_angle\": " << item.fused_heading_angle << ",\n"
+            << "            \"fused_position_x\": " << item.fused_position_x << ",\n"
+            << "            \"fused_position_y\": " << item.fused_position_y << ",\n"
+            << "            \"fused_position_z\": " << item.fused_position_z << ",\n"
+            << "            \"fused_velocity_x\": " << item.fused_velocity_x << ",\n"
+            << "            \"fused_velocity_y\": " << item.fused_velocity_y << ",\n"
+            << "            \"fused_velocity_z\": " << item.fused_velocity_z << ",\n"
+            << "            \"map_2d_location\": [\n";
+
+        for (size_t j = 0; j < item.map_2d_location.size(); ++j)
+        {
+            const auto &index = item.map_2d_location[j];
+            oss << "                {\n"
+                << "                    \"x\": " << index.x << ",\n"
+                << "                    \"y\": " << index.y << "\n"
+                << "                }";
+
+            if (j < item.map_2d_location.size() - 1)
+            {
+                oss << ",";
+            }
+            oss << "\n"; // Newline for readability
+        }
+
+        oss << "            ]\n" // Close map_2d_location array
+            << "        }";
+
+        if (i < mapData.obstacle_list.size() - 1)
+        {
+            oss << ",";
+        }
+        oss << "\n"; // Newline for readability
+    }
+    oss << "    ],\n";
+
+    // Convert vehicle_list to JSON
+    oss << "    \"vehicle_list\": [\n";
+    for (size_t i = 0; i < mapData.vehicle_list.size(); ++i)
+    {
+        const auto &item = mapData.vehicle_list[i];
+        oss << "        {\n"
+            << "            \"vehicle_class\": " << static_cast<int>(item.vehicle_class) << ",\n"
+            << "            \"timestamp\": " << item.timestamp << ",\n"
+            << "            \"position_long\": " << item.position_long << ",\n"
+            << "            \"position_lat\": " << item.position_lat << ",\n"
+            << "            \"position_height\": " << item.position_height << ",\n"
+            << "            \"position_x\": " << item.position_x << ",\n"
+            << "            \"position_y\": " << item.position_y << ",\n"
+            << "            \"position_z\": " << item.position_z << ",\n"
+            << "            \"yaw\": " << item.yaw << ",\n"
+            << "            \"roll\": " << item.roll << ",\n"
+            << "            \"pitch\": " << item.pitch << ",\n"
+            << "            \"velocity_long\": " << item.velocity_long << ",\n"
+            << "            \"velocity_lat\": " << item.velocity_lat << ",\n"
+            << "            \"velocity_x\": " << item.velocity_x << ",\n"
+            << "            \"velocity_y\": " << item.velocity_y << ",\n"
+            << "            \"velocity_ang\": " << item.velocity_ang << ",\n"
+            << "            \"map_2d_location\": [\n";
+
+        for (size_t j = 0; j < item.map_2d_location.size(); ++j)
+        {
+            const auto &index = item.map_2d_location[j];
+            oss << "                {\n"
+                << "                    \"x\": " << index.x << ",\n"
+                << "                    \"y\": " << index.y << "\n"
+                << "                }";
+
+            if (j < item.map_2d_location.size() - 1)
+            {
+                oss << ",";
+            }
+            oss << "\n"; // Newline for readability
+        }
+
+        oss << "            ]\n" // Close map_2d_location array
+            << "        }";
+
+        if (i < mapData.vehicle_list.size() - 1)
+        {
+            oss << ",";
+        }
+        oss << "\n"; // Newline for readability
+    }
+    oss << "    ]\n"; // Close vehicle_list
+
+    oss << "}"; // Close the main JSON object
+
+    return oss.str(); // Return the concatenated JSON string
+}
+
+void saveToJsonFile(const std::string &key, const std::string &value, int &fileCount)
+{
+    std::ostringstream fileNameStream;
+    fileNameStream << key << "_" << fileCount << ".json"; // Construct the file name
+    std::string fileName = fileNameStream.str();
+    std::ofstream outFile(fileName);
+    // Open file for writing with the generated name
+    if (outFile.is_open())
+    {
+        outFile << value; // Write the JSON string to the file
+        outFile.close();  // Close the file after writing
+        adcm::Log::Info() << "JSON data stored in " << fileName;
+    }
+    else
+    {
+        adcm::Log::Error() << "Failed to open file " << fileName << " for writing!";
+    }
+
+    // Increment the file count for the next call
+    ++fileCount;
+}
+
+void NatsSend(const adcm::map_data_Objects &mapData)
+{
+    static int mapData_count = 0;
+
+    if (firstTime == true)
+    {
+        adcm::Log::Info() << "NATS first time setup!";
+        natsManager = std::make_shared<adcm::etc::NatsConnManager>(HMI_SERVER_URL, subject, onMsg, asyncCb, adcm::etc::NatsConnManager::Mode::Default);
+        s = natsManager->NatsExecute();
+        firstTime = false;
+    }
+    if (s == NATS_OK)
+    {
+        const char *pubSubject = "test1.JSON";
+        natsManager->ClearJsonData();
+        adcm::Log::Info() << "NATS conversion start!";
+        std::string mapDataStr = convertMapDataToJsonString(mapData);
+        adcm::Log::Info() << "NATS conversion done!";
+        natsManager->addJsonData("mapData", mapDataStr);
+        natsManager->NatsPublishJson(pubSubject);
+        adcm::Log::Info() << "NatsPublishJson";
+        saveToJsonFile("mapData", mapDataStr, mapData_count);
+    }
+    else
+    {
+        std::cout << "Nats Connection error" << std::endl;
+        try
+        {
+            natsManager = std::make_shared<adcm::etc::NatsConnManager>(HMI_SERVER_URL, subject, onMsg, asyncCb, adcm::etc::NatsConnManager::Mode::Default);
+            s = natsManager->NatsExecute();
+        }
+        catch (std::exception e)
+        {
+            std::cout << "Nats reConnection error" << std::endl;
+        }
+    }
+}
+
+#endif
 void GPStoUTM(double lat, double lon, double &utmX, double &utmY)
 {
     // WGS84 Parameters
@@ -82,96 +329,38 @@ void GPStoUTM(double lat, double lon, double &utmX, double &utmY)
     }
 }
 
-bool checkRange(VehicleData vehicle)
+bool checkRange(const VehicleData &vehicle)
 {
-    bool range_OK = false;
-    if (vehicle.timestamp == 0)
-    {
-        return range_OK = true;
-    }
-    if (vehicle.position_x > 0 && vehicle.position_x < map_n && vehicle.position_y > 0 && vehicle.position_y < map_m)
-    {
-        if (vehicle.timestamp)
-            range_OK = true;
-    }
-
-    return range_OK;
+    if (vehicle.position_x >= 0 && vehicle.position_x < map_n &&
+        vehicle.position_y >= 0 && vehicle.position_y < map_m)
+        return true;
+    return false;
 }
 
 void checkRange(Point2D &point)
 {
-
+    if (point.x < 0)
+        point.x = 0;
+    if (point.y < 0)
+        point.y = 0;
     if (point.x > map_n)
-    {
         point.x = map_n - 1;
-    }
     if (point.y > map_m)
-    {
         point.y = map_m - 1;
-    }
 }
 
-//-------------------------boundary 맵 대상 코드-------------------------//
-/*https://mail.katech.re.kr/mail/#
-bool checkRange(int x, int y)
+bool checkAllVehicleRange(const std::vector<VehicleData *> &vehicles)
 {
-    int cross = 0;
-    std::vector<BoundaryData> p = work_boundary;
-
-    for (int i = 0; i < p.size(); i++)
+    for (const auto *vehicle : vehicles)
     {
-        int j = (i + 1) % p.size();
-        if ((p[i].y > y) != (p[j].y > y))
+        adcm::Log::Info() << vehicle->vehicle_class << " 차량 위치: [" << vehicle->position_x << ", " << vehicle->position_y << "]";
+        if (vehicle && !checkRange(*vehicle))
         {
-            double meetX = (p[j].x - p[i].x) * (y - p[i].y) / (p[j].y - p[i].y) + p[i].x;
-            if (x < meetX)
-                cross++;
+            return false;
         }
     }
-    return cross % 2 > 0;
+    return true;
 }
-*/
-/*
-bool checkRange(VehicleData vehicle)
-{
-    double x = vehicle.position_x;
-    double y = vehicle.position_y;
-    int cross = 0;
-    std::vector<BoundaryData> p = work_boundary;
-
-    for (int i = 0; i < p.size(); i++)
-    {
-        int j = (i + 1) % p.size();
-        if ((p[i].y > y) != (p[j].y > y))
-        {
-            double meetX = (p[j].x - p[i].x) * (y - p[i].y) / (p[j].y - p[i].y) + p[i].x;
-            if (x < meetX)
-                cross++;
-        }
-    }
-    return cross % 2 > 0;
-}
-
-bool checkRange(Point2D point)
-{
-    long x = point.x;
-    long y = point.y;
-    int cross = 0;
-    std::vector<BoundaryData> p = work_boundary;
-
-    for (int i = 0; i < p.size(); i++)
-    {
-        int j = (i + 1) % p.size();
-        if ((p[i].y > y) != (p[j].y > y))
-        {
-            double meetX = (p[j].x - p[i].x) * (y - p[i].y) / (p[j].y - p[i].y) + p[i].x;
-            if (x < meetX)
-                cross++;
-        }
-    }
-    return cross % 2 > 0;
-}
-*/
 
 void gpsToMapcoordinate(VehicleData &vehicle)
 {
@@ -202,8 +391,8 @@ void gpsToMapcoordinate(VehicleData &vehicle)
     // vehicle.velocity_x = (velocity_ang * (-sin(theta) * (position_x - alpha) + (cos(theta) * (position_y - beta)))) + (velocity_x * cos(theta)) + (velocity_y * sin(theta));
     // vehicle.velocity_y = (velocity_ang * (-cos(theta) * (position_x - alpha) - (sin(theta) * (position_y - beta)))) + (velocity_x * -sin(theta)) + (velocity_y * cos(theta));
     vehicle.yaw = -(vehicle.yaw + MAP_ANGLE - 90); // 맵에 맞춰 차량 각도 회전
-    // adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
-    // adcm::Log::Info() << "timestamp: " << vehicle.timestamp << " 차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.yaw << ")";
+    adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
+    adcm::Log::Info() << "timestamp: " << vehicle.timestamp << " 차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.yaw << ")";
 }
 
 void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData vehicle)
@@ -440,63 +629,6 @@ void find4VerticesVehicle(VehicleData &target_vehicle)
     generateOccupancyIndex(LU, RU, RL, LL, target_vehicle);
 
 }
-/*
-void find4VerticesVehicle(VehicleData &target_vehicle, std::vector<adcm::map_2dListVector> &map_2d_test)
-{
-    Point2D LU, RU, RL, LL;
-    double theta = target_vehicle.yaw * M_PI / 180;
-
-    if (target_vehicle.vehicle_class == EGO_VEHICLE)
-    {
-// 특장차일 경우
-#define VEHICLE_SIZE_X MAIN_VEHICLE_SIZE_X
-#define VEHICLE_SIZE_Y MAIN_VEHICLE_SIZE_Y
-        // #define VEHICLE_SIZE_X main_vehicle_size_length
-        // #define VEHICLE_SIZE_Y main_vehicle_size_width
-    }
-    else
-    {
-
-#define VEHICLE_SIZE_X SUB_VEHICLE_SIZE_X
-#define VEHICLE_SIZE_Y SUB_VEHICLE_SIZE_Y
-        // #define VEHICLE_SIZE_X sub_vehicle_size[target_vehicle.vehicle_class].length
-        // #define VEHICLE_SIZE_Y sub_vehicle_size[target_vehicle.vehicle_class].width
-    }
-    // step1. 4 꼭지점을 각각 찾는다
-    LU.x = target_vehicle.position_x + (cos(theta) * VEHICLE_SIZE_X / 2 - sin(theta) * VEHICLE_SIZE_Y / 2);
-    LU.y = target_vehicle.position_y + (sin(theta) * VEHICLE_SIZE_X / 2 + cos(theta) * VEHICLE_SIZE_Y / 2);
-
-    RU.x = target_vehicle.position_x + (cos(theta) * VEHICLE_SIZE_X / 2 - sin(theta) * VEHICLE_SIZE_Y / 2);
-    RU.y = target_vehicle.position_y - (sin(theta) * VEHICLE_SIZE_X / 2 + cos(theta) * VEHICLE_SIZE_Y / 2);
-
-    RL.x = target_vehicle.position_x - (cos(theta) * VEHICLE_SIZE_X / 2 - sin(theta) * VEHICLE_SIZE_Y / 2);
-    RL.y = target_vehicle.position_y - (sin(theta) * VEHICLE_SIZE_X / 2 + cos(theta) * VEHICLE_SIZE_Y / 2);
-
-    LL.x = target_vehicle.position_x - (cos(theta) * VEHICLE_SIZE_X / 2 - sin(theta) * VEHICLE_SIZE_Y / 2);
-    LL.y = target_vehicle.position_y + (sin(theta) * VEHICLE_SIZE_X / 2 + cos(theta) * VEHICLE_SIZE_Y / 2);
-
-    // adcm::Log::Info() << "find4VerticesVehicle: LU.x is" << LU.x;
-    // adcm::Log::Info() << "find4VerticesVehicle: LU.y is" << LU.y;
-
-    // adcm::Log::Info() << "find4VerticesVehicle: RU.x is" << RU.x;
-    // adcm::Log::Info() << "find4VerticesVehicle: RU.y is" << RU.y;
-
-    // adcm::Log::Info() << "find4VerticesVehicle: RL.x is" << RL.x;
-    // adcm::Log::Info() << "find4VerticesVehicle: RL.y is" << RL.y;
-
-    // adcm::Log::Info() << "find4VerticesVehicle: LL.x is" << LL.x;
-    // adcm::Log::Info() << "find4VerticesVehicle: LL.y is" << LL.y;
-    // 사각형 map안에 들어와있는지 확인 후 밖으로 나와있으면 범위 안으로 조정
-    checkRange(LU);
-    checkRange(RU);
-    checkRange(RL);
-    checkRange(LL);
-    // 다각형 map안에 들어와있는지 확인 후 알림
-
-    generateRoadZValue(target_vehicle, map_2d_test);
-    generateOccupancyIndex(LU, RU, RL, LL, target_vehicle, map_2d_test);
-}
-*/
 void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered)
 {
     for (auto iter = obstacle_list_filtered.begin(); iter < obstacle_list_filtered.end(); iter++)
@@ -533,58 +665,475 @@ void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered)
     }
 }
 
-/*
-void find4VerticesObstacle_ori(std::vector<ObstacleData> &obstacle_list_filtered)
+// 유클리디안 거리 계산
+double euclideanDistance(const ObstacleData &a, const ObstacleData &b)
 {
-    // 4 vertices 를 찾고싶은 해당 obstacle
-    for (auto iter = obstacle_list_filtered.begin(); iter < obstacle_list_filtered.end(); iter++)
-    {
-        Point2D LU, RU, RL, LL;
-        double obstacle_size_x = iter->fused_cuboid_x;
-        double obstacle_size_y = iter->fused_cuboid_y;
-        double obstacle_position_x = iter->fused_position_x;
-        double obstacle_position_y = iter->fused_position_y;
-        double theta = iter->fused_heading_angle * M_PI / 180;
-
-        LU.x = obstacle_position_x + (cos(theta) * (obstacle_size_x / 2) - sin(theta) * (obstacle_size_y / 2));
-        LU.y = obstacle_position_y + (sin(theta) * (obstacle_size_x / 2) + cos(theta) * (obstacle_size_y / 2));
-
-        RU.x = obstacle_position_x + (cos(theta) * (obstacle_size_x / 2) - sin(theta) * (obstacle_size_y / 2));
-        RU.y = obstacle_position_y - (sin(theta) * (obstacle_size_x / 2) + cos(theta) * (obstacle_size_y / 2));
-
-        RL.x = obstacle_position_x - (cos(theta) * (obstacle_size_x / 2) - sin(theta) * (obstacle_size_y / 2));
-        RL.y = obstacle_position_y - (sin(theta) * (obstacle_size_x / 2) + cos(theta) * (obstacle_size_y / 2));
-
-        LL.x = obstacle_position_x - (cos(theta) * (obstacle_size_x / 2) - sin(theta) * (obstacle_size_y / 2));
-        LL.y = obstacle_position_y + (sin(theta) * (obstacle_size_x / 2) + cos(theta) * (obstacle_size_y / 2));
-
-        // adcm::Log::Info() << "find4VerticesObstacle: LU.x is" << LU.x;
-        // adcm::Log::Info() << "find4VerticesObstacle: LU.y is" << LU.y;
-
-        // adcm::Log::Info() << "find4VerticesObstacle: RU.x is" << RU.x;
-        // adcm::Log::Info() << "find4VerticesObstacle: RU.y is" << RU.y;
-
-        // adcm::Log::Info() << "find4VerticesObstacle: RL.x is" << RL.x;
-        // adcm::Log::Info() << "find4VerticesObstacle: RL.y is" << RL.y;
-
-        // adcm::Log::Info() << "find4VerticesObstacle: LL.x is" << LL.x;
-        // adcm::Log::Info() << "find4VerticesObstacle: LL.y is" << LL.y;
-
-        checkRange(LU);
-        checkRange(RU);
-        checkRange(RL);
-        checkRange(LL);
-
-        generateOccupancyIndex(LU, RU, RL, LL, *(&iter));
-    }
-    adcm::Log::Info() << "장애물 꼭짓점 범위 확인완료";
+    return std::sqrt(std::pow(a.fused_position_x - b.fused_position_x, 2) +
+                     std::pow(a.fused_position_y - b.fused_position_y, 2));
 }
-*/
+
+// 거리 행렬 생성 함수
+std::vector<std::vector<double>> createDistanceMatrix(
+    const std::vector<ObstacleData> &listA,
+    const std::vector<ObstacleData> &listB)
+{
+    std::vector<std::vector<double>> distanceMatrix(listA.size(), std::vector<double>(listB.size()));
+    for (size_t i = 0; i < listA.size(); ++i)
+    {
+        for (size_t j = 0; j < listB.size(); ++j)
+        {
+            distanceMatrix[i][j] = euclideanDistance(listA[i], listB[j]);
+        }
+    }
+    return distanceMatrix;
+}
+
+// Munkres 알고리즘으로 매칭
+std::vector<int> solveAssignment(const std::vector<std::vector<double>> &costMatrix)
+{
+    Matrix<double> matrix(costMatrix.size(), costMatrix[0].size());
+    for (size_t i = 0; i < costMatrix.size(); ++i)
+    {
+        for (size_t j = 0; j < costMatrix[i].size(); ++j)
+        {
+            matrix(i, j) = costMatrix[i][j];
+        }
+    }
+    Munkres<double> munkres;
+    munkres.solve(matrix);
+    std::vector<int> assignment(costMatrix.size(), -1);
+    for (size_t i = 0; i < costMatrix.size(); ++i)
+    {
+        for (size_t j = 0; j < costMatrix[i].size(); ++j)
+        {
+            if (matrix(i, j) == 0)
+            {
+                assignment[i] = j;
+            }
+        }
+    }
+    return assignment;
+}
+
+// 신뢰성 기반 융합 계산 함수
+double calculateWeightedPosition(const std::vector<double> &positions, const std::vector<double> &variances)
+{
+    double weightedSum = 0.0;
+    double totalVarianceInverse = 0.0;
+    for (size_t i = 0; i < positions.size(); ++i)
+    {
+        double varianceInverse = 1.0 / variances[i];
+        weightedSum += positions[i] * varianceInverse;
+        totalVarianceInverse += varianceInverse;
+    }
+    return (1.0 / totalVarianceInverse) * weightedSum;
+}
+
+// 장애물 리스트에서 특정 차량 데이터를 제외하는 함수
+void filterVehicleData(std::vector<ObstacleData> &obstacles)
+{
+    // std::vector<ObstacleData> filteredList;
+    // for (const auto &obstacle : obstacles)
+    // {
+    //     double distance = std::sqrt(std::pow(obstacle.fused_position_x - vehicleToExclude.position_x, 2) +
+    //                                 std::pow(obstacle.fused_position_y - vehicleToExclude.position_y, 2));
+    //     // 특정 차량 위치 및 obstacle_class에 해당하지 않으면 필터된 리스트에 포함
+    //     if (distance > POSITION_TOLERANCE || obstacle.obstacle_class != 51)
+    //     {
+    //         filteredList.push_back(obstacle);
+    //     }
+    // }
+    for (auto iter = obstacles.begin(); iter != obstacles.end();)
+    {
+        // if ((abs(iter->fused_cuboid_x - SUB_VEHICLE_SIZE_X / 10)) < 0.1 && (abs(iter->fused_cuboid_y - SUB_VEHICLE_SIZE_Y / 10)) < 0.1)
+        if (iter->obstacle_class == 51)
+        {
+            adcm::Log::Info() << "보조차량 제거";
+            iter = obstacles.erase(iter);
+        }
+        // if ((abs(iter->fused_cuboid_x - MAIN_VEHICLE_SIZE_X / 10)) < 0.1 && (abs(iter->fused_cuboid_y - MAIN_VEHICLE_SIZE_Y / 10)) < 0.1)
+        else if (iter->obstacle_class == 50)
+        {
+            adcm::Log::Info() << "특장차 제거";
+            iter = obstacles.erase(iter);
+        }
+        else
+            iter++;
+    }
+
+    return;
+}
+
+// 데이터 융합
+void processFusion(
+    std::vector<ObstacleData> &presList,
+    const std::vector<ObstacleData> &prevList,
+    const std::vector<int> &assignment)
+{
+    std::vector<ObstacleData> newList;
+
+    // 1. 매칭된 장애물 처리
+    for (size_t i = 0; i < assignment.size(); ++i)
+    {
+        int j = assignment[i];
+        // 매칭된 장애물 newList에 추가
+        if (j != -1)
+        {
+            presList[j].obstacle_id = prevList[i].obstacle_id;
+            newList.push_back(presList[j]);
+        }
+    }
+
+    // 2. prevList에서 매칭되지 않은 장애물 처리
+    for (size_t i = 0; i < prevList.size(); ++i)
+    {
+        int j = assignment[i];
+        // prevList에서 매칭되지 않은 항목을 newList에 추가
+        if (j == -1)
+            newList.push_back(prevList[i]);
+    }
+
+    // 3. presList에서 매칭되지 않은 장애물 처리
+    for (size_t i = 0; i < presList.size(); ++i)
+    {
+        if (std::find(assignment.begin(), assignment.end(), i) == assignment.end())
+        {
+            // presList에서 매칭되지 않은 항목을 newList에 추가
+            presList[i].obstacle_id = id_manager.allocID();
+            newList.push_back(presList[i]);
+        }
+    }
+
+    // 새로운 리스트로 갱신
+    presList = newList;
+}
+
+// // 데이터 융합
+// void processFusion(
+//     std::vector<ObstacleData> &presList,
+//     const std::vector<ObstacleData> &prevList,
+//     const std::vector<int> &assignment)
+// {
+//     std::vector<ObstacleData> newList;
+//     for (size_t i = 0; i < assignment.size(); ++i)
+//     {
+//         int j = assignment[i];
+//         if (j != -1)
+//         {
+//             // const ObstacleData &recentData = (presList[i].timestamp > prevList[j].timestamp) ? presList[i] : prevList[j];
+//             // // adcm::Log::Info() << "recentData 선정";
+//             // ObstacleData fused;
+
+//             // // 신뢰성 기반으로 위치 융합
+//             // std::vector<double> positionsX = {presList[i].fused_position_x, prevList[j].fused_position_x};
+//             // std::vector<double> positionsY = {presList[i].fused_position_y, prevList[j].fused_position_y};
+//             // std::vector<double> positionsZ = {presList[i].fused_position_z, prevList[j].fused_position_z};
+
+//             // std::vector<double> variances = {1.0 / presList[i].standard_deviation, 1.0 / prevList[j].standard_deviation};
+
+//             // fused.fused_position_x = calculateWeightedPosition(positionsX, variances);
+//             // fused.fused_position_y = calculateWeightedPosition(positionsY, variances);
+//             // fused.fused_position_z = calculateWeightedPosition(positionsZ, variances);
+
+//             // fused.fused_position_x = recentData.fused_position_x;
+//             // fused.fused_position_y = recentData.fused_position_y;
+//             // fused.fused_position_z = recentData.fused_position_z;
+
+//             // // 나머지 정보는 최신 데이터로
+//             // fused.obstacle_id = recentData.obstacle_id;
+//             // fused.obstacle_class = recentData.obstacle_class;
+//             // fused.map_2d_location = recentData.map_2d_location;
+//             // fused.stop_count = recentData.stop_count;
+//             // fused.fused_cuboid_x = recentData.fused_cuboid_x;
+//             // fused.fused_cuboid_y = recentData.fused_cuboid_y;
+//             // fused.fused_cuboid_z = recentData.fused_cuboid_z;
+//             // fused.fused_heading_angle = recentData.fused_heading_angle;
+//             // fused.fused_velocity_x = recentData.fused_velocity_x;
+//             // fused.fused_velocity_y = recentData.fused_velocity_y;
+//             // fused.fused_velocity_z = recentData.fused_velocity_z;
+//             // fused.standard_deviation = recentData.standard_deviation;
+//             // fused.timestamp = recentData.timestamp;
+
+//             // newList.push_back(fused);
+
+//             newList.push_back(presList[i]);
+//         }
+//     }
+
+//     for (size_t j = 0; j < presList.size(); ++j)
+//     {
+//         // assignment에 존재하지 않는 j 값을 가지는 항목들을 추가
+//         if (std::find(assignment.begin(), assignment.end(), j) == assignment.end())
+//         {
+//             newList.push_back(presList[j]);
+//         }
+//     }
+
+//     presList = newList;
+// }
+
+// 새 데이터에 대한 ID 관리 및 부여
+void assignIDsForNewData(
+    std::vector<ObstacleData> &resultFusionList,
+    const std::vector<ObstacleData> &currentFusionList,
+    const std::vector<int> &assignment)
+{
+    // 기존 매칭된 인덱스 집합
+    std::set<int> matchedIndices(assignment.begin(), assignment.end());
+    for (size_t i = 0; i < currentFusionList.size(); ++i)
+    {
+        if (i >= assignment.size() || matchedIndices.find(i) == matchedIndices.end())
+        {
+            ObstacleData newObstacle = currentFusionList[i];
+            newObstacle.obstacle_id = id_manager.allocID();
+            resultFusionList.push_back(newObstacle);
+        }
+        else
+        {
+            resultFusionList.push_back(currentFusionList[i]);
+        }
+    }
+}
+
+// 장애물 리스트 융합 및 이전 데이터와 비교
+std::vector<ObstacleData> mergeAndCompareLists(
+    const std::vector<ObstacleData> &previousFusionList,
+    std::vector<ObstacleData> listMain,
+    std::vector<ObstacleData> listSub1,
+    std::vector<ObstacleData> listSub2,
+    const VehicleData &mainVehicle,
+    const VehicleData &sub1Vehicle,
+    const VehicleData &sub2Vehicle)
+{
+    std::vector<VehicleData> nonEmptyVehicles;
+    std::vector<std::vector<ObstacleData>> nonEmptyLists;
+    std::vector<ObstacleData> mergedList;
+
+    if (mainVehicle.timestamp != 0)
+    {
+        nonEmptyVehicles.push_back(mainVehicle);
+        nonEmptyLists.push_back(listMain);
+    }
+    if (sub1Vehicle.timestamp != 0)
+    {
+        nonEmptyVehicles.push_back(sub1Vehicle);
+        nonEmptyLists.push_back(listSub1);
+    }
+    if (sub2Vehicle.timestamp != 0)
+    {
+        nonEmptyVehicles.push_back(sub2Vehicle);
+        nonEmptyLists.push_back(listSub2);
+    }
+
+    adcm::Log::Info() << "융합: 빈 데이터 제외 완료: " << nonEmptyLists.size() << ", " << nonEmptyVehicles.size();
+    // 융합할 리스트 필터링
+    if (nonEmptyLists.size() == 1)
+    {
+        // 유일한 리스트 하나가 있을 경우 그대로 사용
+        mergedList = nonEmptyLists[0];
+    }
+
+    else
+    {
+        // filterVehicleData(nonEmptyLists[0], nonEmptyVehicles[1]);
+        // filterVehicleData(nonEmptyLists[1], nonEmptyVehicles[0]);
+
+        // if (nonEmptyLists.size() > 2)
+        // {
+        //     filterVehicleData(nonEmptyLists[0], nonEmptyVehicles[2]);
+        //     filterVehicleData(nonEmptyLists[1], nonEmptyVehicles[2]);
+        //     filterVehicleData(nonEmptyLists[2], nonEmptyVehicles[0]);
+        //     filterVehicleData(nonEmptyLists[2], nonEmptyVehicles[1]);
+        // }
+        // adcm::Log::Info() << "융합: 차량 데이터 필터 완료";
+        // 둘 이상 리스트가 있을 때 융합 수행
+        auto handleFusionForPair = [&](const std::vector<ObstacleData> &listA, const std::vector<ObstacleData> &listB)
+        {
+            std::vector<ObstacleData> fusionList = listA;
+            if (!listA.empty() && !listB.empty())
+            {
+                auto distMatrix = createDistanceMatrix(listA, listB);
+                auto assignment = solveAssignment(distMatrix);
+                processFusion(fusionList, listB, assignment);
+            }
+            return fusionList;
+        };
+
+        // 처음 두 개 리스트 융합
+        // for (auto first : nonEmptyLists[0])
+        //     adcm::Log::Info() << first.obstacle_id << ": [" << first.fused_position_x << ", " << first.fused_position_y << "]";
+        // for (auto second : nonEmptyLists[1])
+        //     adcm::Log::Info() << second.obstacle_id << ": [" << second.fused_position_x << ", " << second.fused_position_y << "]";
+
+        mergedList = handleFusionForPair(nonEmptyLists[0], nonEmptyLists[1]);
+        // adcm::Log::Info() << "융합: 융합 1번 완료";
+
+        // 세 번째 리스트가 있다면 그 결과와 함께 융합
+        if (nonEmptyLists.size() > 2)
+        {
+            mergedList = handleFusionForPair(mergedList, nonEmptyLists[2]);
+            // adcm::Log::Info() << "융합: 융합 2번 완료";
+        }
+    }
+
+    if (mergedList.empty())
+    {
+        if (previousFusionList.empty())
+            adcm::Log::Info() << "장애물 리스트 비어있음";
+        else
+            adcm::Log::Info() << "현재 TimeStamp 장애물 X, 이전 TimeStamp 장애물리스트 그대로 사용";
+        return previousFusionList;
+    }
+    else
+    {
+        if (previousFusionList.empty())
+        {
+            for (auto &obstacle : mergedList)
+                obstacle.obstacle_id = id_manager.allocID();
+            adcm::Log::Info() << "새로운 장애물 리스트 생성: " << id_manager.getNum();
+            return mergedList;
+        }
+
+        else
+        {
+            adcm::Log::Info() << "previousFusionList size: " << previousFusionList.size();
+            adcm::Log::Info() << "mergedList size: " << mergedList.size();
+            // adcm::Log::Info() << "융합: 이전 데이터와 융합하여 ID부여 시도";
+            auto distMatrix = createDistanceMatrix(previousFusionList, mergedList);
+            // adcm::Log::Info() << "융합: 거리배열 생성";
+            auto assignment = solveAssignment(distMatrix);
+            adcm::Log::Info() << "융합: Munkres Algorithm 적용: " << assignment.size();
+            for (int i = 0; i < assignment.size(); i++)
+                adcm::Log::Info() << "assignment" << i << ": " << assignment[i];
+
+            processFusion(mergedList, previousFusionList, assignment);
+            adcm::Log::Info() << "융합: 이전 데이터와 융합 완료";
+            for (auto merge : mergedList)
+            {
+                adcm::Log::Info() << "융합리스트 장애물id: " << merge.obstacle_id;
+            }
+            // std::vector<ObstacleData> finalList;
+            // assignIDsForNewData(finalList, mergedList, assignment);
+            adcm::Log::Info() << "융합: ID부여 완료: " << id_manager.getNum();
+            return mergedList;
+        }
+    }
+}
+
+// VehicleData -> vehicleListStruct(맵데이터 호환)
+adcm::vehicleListStruct ConvertToVehicleListStruct(const VehicleData &vehicle, std::vector<adcm::map_2dListVector> &map)
+{
+    adcm::vehicleListStruct vehicle_final;
+    vehicle_final.vehicle_class = vehicle.vehicle_class;
+    vehicle_final.timestamp = vehicle.timestamp;
+    for (const auto &point : vehicle.map_2d_location)
+    {
+        adcm::map2dIndex index_to_push = {point.x, point.y};
+
+        map[index_to_push.x][index_to_push.y].vehicle_class = vehicle_final.vehicle_class;
+        map[index_to_push.x][index_to_push.y].road_z = 1;
+        // adcm::Log::Info() << "(" << index_to_push.x << ", " << index_to_push.y << ") pushed to vehicle " << vehicle.vehicle_class;
+        // adcm::Log::Info() << "map[" << index_to_push.x << "][" <<index_to_push.y << "] = " <<  map[index_to_push.x][index_to_push.y].vehicle_class;
+        // adcm::Log::Info() << "map[" << index_to_push.x << "][" <<index_to_push.y << "] = " <<  map[index_to_push.x][index_to_push.y].road_z;
+
+        vehicle_final.map_2d_location.push_back(index_to_push);
+    }
+    vehicle_final.position_long = vehicle.position_long;
+    vehicle_final.position_lat = vehicle.position_lat;
+    vehicle_final.position_height = vehicle.position_height;
+    vehicle_final.position_x = vehicle.position_x;
+    vehicle_final.position_y = vehicle.position_y;
+    vehicle_final.position_z = vehicle.position_z;
+    vehicle_final.yaw = vehicle.yaw;
+    vehicle_final.roll = vehicle.roll;
+    vehicle_final.pitch = vehicle.pitch;
+    vehicle_final.velocity_long = vehicle.velocity_long;
+    vehicle_final.velocity_lat = vehicle.velocity_lat;
+    vehicle_final.velocity_x = vehicle.velocity_x;
+    vehicle_final.velocity_y = vehicle.velocity_y;
+    vehicle_final.velocity_ang = vehicle.velocity_ang;
+
+    return vehicle_final;
+}
+
+// ObstacleData -> obstacleListStruct(맵데이터 호환)
+adcm::obstacleListStruct ConvertToObstacleListStruct(const ObstacleData &obstacle, std::vector<adcm::map_2dListVector> &map)
+{
+    adcm::obstacleListStruct obstacle_map; // 장애물 개수 무시
+    obstacle_map.obstacle_id = obstacle.obstacle_id;
+    obstacle_map.obstacle_class = obstacle.obstacle_class;
+    obstacle_map.timestamp = obstacle.timestamp;
+    obstacle_map.map_2d_location.clear();
+    for (auto iter1 = obstacle.map_2d_location.begin(); iter1 != obstacle.map_2d_location.end(); iter1++)
+    {
+        adcm::map2dIndex index_to_push;
+        index_to_push.x = iter1->x;
+        index_to_push.y = iter1->y;
+        map[index_to_push.x][index_to_push.y].obstacle_id = obstacle.obstacle_id;
+        // adcm::Log::Info() << "occupancy index pair of obstacle 1 is " << index_to_push.x << " , " << index_to_push.y;
+        // adcm::Log::Info() << "occupancy index of obstacle id " << obstacle.obstacle_id;
+        // adcm::Log::Info() << "map[" << index_to_push.x << "][" <<index_to_push.y << "] = " <<  map[index_to_push.x][index_to_push.y].obstacle_id;
+        obstacle_map.map_2d_location.push_back(index_to_push);
+    }
+    obstacle_map.stop_count = obstacle.stop_count;
+    obstacle_map.fused_cuboid_x = obstacle.fused_cuboid_x;
+    obstacle_map.fused_cuboid_y = obstacle.fused_cuboid_y;
+    obstacle_map.fused_cuboid_z = obstacle.fused_cuboid_z;
+    obstacle_map.fused_heading_angle = obstacle.fused_heading_angle;
+    obstacle_map.fused_position_x = obstacle.fused_position_x;
+    obstacle_map.fused_position_y = obstacle.fused_position_y;
+    obstacle_map.fused_position_z = obstacle.fused_position_z;
+    obstacle_map.fused_velocity_x = obstacle.fused_velocity_x;
+    obstacle_map.fused_velocity_y = obstacle.fused_velocity_y;
+    obstacle_map.fused_velocity_z = obstacle.fused_velocity_z;
+
+    return obstacle_map;
+}
+
+// 차량 데이터 저장
+void fillVehicleData(VehicleData &vehicle_fill, const std::shared_ptr<adcm::hub_data_Objects> &data)
+{
+    vehicle_fill.vehicle_class = data->vehicle_class;
+    vehicle_fill.timestamp = data->timestamp;
+    vehicle_fill.position_lat = data->position_lat;
+    vehicle_fill.position_long = data->position_long;
+    vehicle_fill.position_height = data->position_height;
+    vehicle_fill.yaw = data->yaw;
+    vehicle_fill.roll = data->roll;
+    vehicle_fill.pitch = data->pitch;
+    vehicle_fill.velocity_long = data->velocity_long;
+    vehicle_fill.velocity_lat = data->velocity_lat;
+    vehicle_fill.velocity_ang = data->velocity_ang;
+    return;
+}
+
+// 장애물 데이터 저장
+void fillObstacleList(std::vector<ObstacleData> &obstacle_list_fill, const std::shared_ptr<adcm::hub_data_Objects> &data)
+{
+    obstacle_list_fill.clear();
+    for (const auto &obstacle : data->obstacle)
+    {
+        ObstacleData obstacle_to_push;
+        obstacle_to_push.obstacle_class = obstacle.obstacle_class;
+        obstacle_to_push.timestamp = data->timestamp;
+        obstacle_to_push.fused_cuboid_x = obstacle.cuboid_x;
+        obstacle_to_push.fused_cuboid_y = obstacle.cuboid_y;
+        obstacle_to_push.fused_cuboid_z = obstacle.cuboid_z;
+        obstacle_to_push.fused_heading_angle = obstacle.heading_angle;
+        obstacle_to_push.fused_position_x = obstacle.position_x;
+        obstacle_to_push.fused_position_y = obstacle.position_y;
+        obstacle_to_push.fused_position_z = obstacle.position_z;
+        obstacle_to_push.fused_velocity_x = obstacle.velocity_x;
+        obstacle_to_push.fused_velocity_y = obstacle.velocity_y;
+        obstacle_to_push.fused_velocity_z = obstacle.velocity_z;
+        obstacle_list_fill.push_back(obstacle_to_push);
+    }
+    return;
+}
+
 // hubData 수신
 void ThreadReceiveHubData()
 {
-    adcm::Log::Info() << "SDK_release_240910_interface v1.8.4";
-    adcm::Log::Info() << "DataFusion_release_241010";
     // adcm::MapData_Provider mapData_provider;
     adcm::HubData_Subscriber hubData_subscriber;
     // INFO("DataFusion .init()");
@@ -595,7 +1144,7 @@ void ThreadReceiveHubData()
     while (continueExecution)
     {
         gMainthread_Loopcount++;
-        VERBOSE("[DataFusion] Application loop");
+        // VERBOSE("[DataFusion] Application loop");
         bool hubData_rxEvent = hubData_subscriber.waitEvent(100); // wait event
         // adcm::Log::Info() << "wait hubData" << gMainthread_Loopcount;
 
@@ -609,133 +1158,55 @@ void ThreadReceiveHubData()
                 gReceivedEvent_count_hub_data++;
                 FusionData fusionData;
                 // 수신된 데이터 handling 위한 추가 코드
+                adcm::Log::Info() << "수신 데이터: " << data->vehicle_class;
                 switch (data->vehicle_class)
                 {
                 case EGO_VEHICLE: // 특장차가 보낸 인지데이터
 
-                    main_vehicle_temp.vehicle_class = EGO_VEHICLE;
-                    main_vehicle_temp.timestamp = data->timestamp;
-                    // main_vehicle_temp.road_z = data->road_z; //vector assignment to fix?
-                    main_vehicle_temp.position_lat = data->position_lat;
-                    main_vehicle_temp.position_long = data->position_long;
-                    main_vehicle_temp.position_height = data->position_height;
-                    main_vehicle_temp.yaw = data->yaw;
-                    main_vehicle_temp.roll = data->roll;
-                    main_vehicle_temp.pitch = data->pitch;
-                    main_vehicle_temp.velocity_long = data->velocity_long;
-                    main_vehicle_temp.velocity_lat = data->velocity_lat;
-                    main_vehicle_temp.velocity_ang = data->velocity_ang;
-
-                    obstacle_list_temp.clear();
-
-                    for (int i = 0; i < data->obstacle.size(); i++)
-                    {
-                        ObstacleData obstacle_to_push;
-                        obstacle_to_push.obstacle_class = data->obstacle[i].obstacle_class;
-                        obstacle_to_push.timestamp = data->timestamp;
-                        obstacle_to_push.fused_cuboid_x = data->obstacle[i].cuboid_x;
-                        obstacle_to_push.fused_cuboid_y = data->obstacle[i].cuboid_y;
-                        obstacle_to_push.fused_cuboid_z = data->obstacle[i].cuboid_z;
-                        obstacle_to_push.fused_heading_angle = data->obstacle[i].heading_angle;
-                        obstacle_to_push.fused_position_x = data->obstacle[i].position_x;
-                        obstacle_to_push.fused_position_y = data->obstacle[i].position_y;
-                        obstacle_to_push.fused_position_z = data->obstacle[i].position_z;
-                        obstacle_to_push.fused_velocity_x = data->obstacle[i].velocity_x;
-                        obstacle_to_push.fused_velocity_y = data->obstacle[i].velocity_y;
-                        obstacle_to_push.fused_velocity_z = data->obstacle[i].velocity_z;
-                        obstacle_list_temp.push_back(obstacle_to_push);
-                        // adcm::Log::Info() << "메인 차량 기준 장애물 위치 : (" << obstacle_to_push.fused_position_x << ", " << obstacle_to_push.fused_position_y << ")";
-                    }
-                    
+                    fillVehicleData(main_vehicle_temp, data);
+                    fillObstacleList(obstacle_list_temp, data);
                     fusionData.vehicle = main_vehicle_temp;
                     fusionData.obstacle_list = obstacle_list_temp;
                     main_vehicle_queue.enqueue(fusionData);
+                    order.push(EGO_VEHICLE);
+                    adcm::Log::Info() << ++receiveVer << "번째 허브 데이터 수신 완료";
                     break;
 
                 case SUB_VEHICLE_1: // 보조차1이 보낸 인지데이터
-                    sub1_vehicle_temp.vehicle_class = SUB_VEHICLE_1;
-                    sub1_vehicle_temp.timestamp = data->timestamp;
-                    // sub1_vehicle_temp.road_z = data->road_z; //vector assignment to fix?
-                    sub1_vehicle_temp.position_lat = data->position_lat;
-                    sub1_vehicle_temp.position_long = data->position_long;
-                    sub1_vehicle_temp.position_height = data->position_height;
-                    sub1_vehicle_temp.yaw = data->yaw;
-                    sub1_vehicle_temp.roll = data->roll;
-                    sub1_vehicle_temp.pitch = data->pitch;
-                    sub1_vehicle_temp.velocity_long = data->velocity_long;
-                    sub1_vehicle_temp.velocity_lat = data->velocity_lat;
-                    sub1_vehicle_temp.velocity_ang = data->velocity_ang;
-
-                    obstacle_list_temp.clear();
-
-                    for (int i = 0; i < data->obstacle.size(); i++)
-                    {
-                        ObstacleData obstacle_to_push;
-                        obstacle_to_push.obstacle_class = data->obstacle[i].obstacle_class;
-                        obstacle_to_push.timestamp = data->timestamp;
-                        obstacle_to_push.fused_cuboid_x = data->obstacle[i].cuboid_x;
-                        obstacle_to_push.fused_cuboid_y = data->obstacle[i].cuboid_y;
-                        obstacle_to_push.fused_cuboid_z = data->obstacle[i].cuboid_z;
-                        obstacle_to_push.fused_heading_angle = data->obstacle[i].heading_angle;
-                        obstacle_to_push.fused_position_x = data->obstacle[i].position_x;
-                        obstacle_to_push.fused_position_y = data->obstacle[i].position_y;
-                        obstacle_to_push.fused_position_z = data->obstacle[i].position_z;
-                        obstacle_to_push.fused_velocity_x = data->obstacle[i].velocity_x;
-                        obstacle_to_push.fused_velocity_y = data->obstacle[i].velocity_y;
-                        obstacle_to_push.fused_velocity_z = data->obstacle[i].velocity_z;
-                        obstacle_list_temp.push_back(obstacle_to_push);
-                        // adcm::Log::Info() << "보조 차량1 기준 장애물 위치 : (" << obstacle_to_push.fused_position_x << ", " << obstacle_to_push.fused_position_y << ")";
-                    }
-                    
+                    fillVehicleData(sub1_vehicle_temp, data);
+                    fillObstacleList(obstacle_list_temp, data);
                     fusionData.vehicle = sub1_vehicle_temp;
                     fusionData.obstacle_list = obstacle_list_temp;
                     sub1_vehicle_queue.enqueue(fusionData);
+                    order.push(SUB_VEHICLE_1);
+                    adcm::Log::Info() << ++receiveVer << "번째 허브 데이터 수신 완료";
                     break;
 
                 case SUB_VEHICLE_2: // 보조차2가 보낸 인지데이터
-                    sub2_vehicle_temp.vehicle_class = SUB_VEHICLE_2;
-                    sub2_vehicle_temp.timestamp = data->timestamp;
-                    // sub2_vehicle_temp.road_z = data->road_z; //vector assignment to fix?
-                    sub2_vehicle_temp.position_lat = data->position_lat;
-                    sub2_vehicle_temp.position_long = data->position_long;
-                    sub2_vehicle_temp.position_height = data->position_height;
-                    sub2_vehicle_temp.yaw = data->yaw;
-                    sub2_vehicle_temp.roll = data->roll;
-                    sub2_vehicle_temp.pitch = data->pitch;
-                    sub2_vehicle_temp.velocity_long = data->velocity_long;
-                    sub2_vehicle_temp.velocity_lat = data->velocity_lat;
-                    sub2_vehicle_temp.velocity_ang = data->velocity_ang;
-
-                    obstacle_list_temp.clear();
-
-                    for (int i = 0; i < data->obstacle.size(); i++)
-                    {
-                        ObstacleData obstacle_to_push;
-                        obstacle_to_push.obstacle_class = data->obstacle[i].obstacle_class;
-                        obstacle_to_push.timestamp = data->timestamp;
-                        obstacle_to_push.fused_cuboid_x = data->obstacle[i].cuboid_x;
-                        obstacle_to_push.fused_cuboid_y = data->obstacle[i].cuboid_y;
-                        obstacle_to_push.fused_cuboid_z = data->obstacle[i].cuboid_z;
-                        obstacle_to_push.fused_heading_angle = data->obstacle[i].heading_angle;
-                        obstacle_to_push.fused_position_x = data->obstacle[i].position_x;
-                        obstacle_to_push.fused_position_y = data->obstacle[i].position_y;
-                        obstacle_to_push.fused_position_z = data->obstacle[i].position_z;
-                        obstacle_to_push.fused_velocity_x = data->obstacle[i].velocity_x;
-                        obstacle_to_push.fused_velocity_y = data->obstacle[i].velocity_y;
-                        obstacle_to_push.fused_velocity_z = data->obstacle[i].velocity_z;
-                        obstacle_list_temp.push_back(obstacle_to_push);
-                        // adcm::Log::Info() << "보조 차량2 기준 장애물 위치 : (" << obstacle_to_push.fused_position_x << ", " << obstacle_to_push.fused_position_y << ")";
-                    }
-                    
+                    fillVehicleData(sub2_vehicle_temp, data);
+                    fillObstacleList(obstacle_list_temp, data);
                     fusionData.vehicle = sub2_vehicle_temp;
                     fusionData.obstacle_list = obstacle_list_temp;
                     sub2_vehicle_queue.enqueue(fusionData);
+                    order.push(SUB_VEHICLE_2);
+                    adcm::Log::Info() << ++receiveVer << "번째 허브 데이터 수신 완료";
                     break;
+
+                case 255: // 보조차1이 보낸 인지데이터
+                    data->vehicle_class = SUB_VEHICLE_1;
+                    fillVehicleData(sub1_vehicle_temp, data);
+                    fillObstacleList(obstacle_list_temp, data);
+                    fusionData.vehicle = sub1_vehicle_temp;
+                    fusionData.obstacle_list = obstacle_list_temp;
+                    sub1_vehicle_queue.enqueue(fusionData);
+                    order.push(SUB_VEHICLE_1);
+                    adcm::Log::Info() << ++receiveVer << "번째 허브 데이터 수신 완료";
+                    break;
+
                 default:
                     adcm::Log::Info() << "data received but belongs to no vehicle hence discarded";
                     break;
                 }
-                // adcm::Log::Info() << "=============KATECH: handling of received data DONE==============";
             }
         }
         if (continueExecution != true)
@@ -810,6 +1281,8 @@ void ThreadReceiveWorkInfo()
             }
             sub_vehicle_size.clear();
             work_boundary.clear();
+            // haveWorkInfo = true;
+            sendEmptyMap = true;
         }
     }
 }
@@ -818,135 +1291,135 @@ void ThreadKatech()
 {
     //==============1.전역변수인 MapData 생성 =================
     adcm::map_data_Objects mapData;
+    IDManager id_manager;
     // 한번 생성후 관제에서 인지데이터를 받을때마다 (100ms) 마다 업데이트
     adcm::Log::Info() << "mapData created for the first time";
     ::adcm::map_2dListStruct map_2dStruct_init;
     map_2dStruct_init.obstacle_id = NO_OBSTACLE;
     map_2dStruct_init.road_z = 0;
-    map_2dStruct_init.vehicle_class = NO_VEHICLE; // 시뮬레이션 데이터 설정때문에 부득이 NO_VEHICLE =5 로 바꿈
-    bool sendEmptyMap = true;                     // 최초 실행 시 빈 맵 전송을 위한 변수
-    int mapVer = 0; // 현재 맵이 몇 번째 맵인지 확인
+    map_2dStruct_init.vehicle_class = NO_VEHICLE; // 시뮬레이션 데이터 설정때문에 부득이 NO_VEHICLE로 바꿈                   // 최초 실행 시 빈 맵 전송을 위한 변수
+    int mapVer = 0;                               // 현재 맵이 몇 번째 맵인지 확인
+    int noDataCounter = 0;                        // 로그 카운터 변수
+
+    std::vector<ObstacleData> obstacle_list;
+
+    adcm::map_2dListVector map_2dListVector;
+    adcm::map_2dListStruct map_2dStruct;
     // 빈 맵 생성
     std::vector<adcm::map_2dListVector> map_2d_test(map_n, adcm::map_2dListVector(map_m, map_2dStruct_init));
     adcm::Log::Info() << "mapData 2d info initialized";
 
     adcm::MapData_Provider mapData_provider;
     mapData_provider.init("DataFusion/DataFusion/PPort_map_data");
-    if (sendEmptyMap)
-    {
-        mapData.map_2d = map_2d_test;
-        mapData_provider.send(mapData);
-        adcm::Log::Info() << "Send empty map data";
-        sendEmptyMap = false;
-    }
-
-    VehicleData main_vehicle;
-    VehicleData sub1_vehicle;
-    VehicleData sub2_vehicle;
-    FusionData main_vehicle_data;
-    FusionData sub1_vehicle_data;
-    FusionData sub2_vehicle_data;
-    std::vector<ObstacleData> obstacle_list;
-
     while (continueExecution)
     {
-        std::this_thread::sleep_for(std::chrono::milliseconds(30));
+        if (sendEmptyMap)
+        {
+            mapData.map_2d = map_2d_test;
+            mapData_provider.send(mapData);
+            adcm::Log::Info() << "Send empty map data";
+            sendEmptyMap = false;
+            continue;
+        }
         // 수신한 허브 데이터가 없으면 송신 X
         if(main_vehicle_queue.size_approx() == 0 && sub1_vehicle_queue.size_approx() == 0 && sub2_vehicle_queue.size_approx() == 0)
         {
-            adcm::Log::Info() << "No Hub Data, sub2_vehicle_queue size(): " << sub2_vehicle_queue.size_approx();
+            noDataCounter++;
+            if (noDataCounter >= 20)
+            {
+                adcm::Log::Info() << "No Hub Data";
+                noDataCounter = 0;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
             continue;
         }
-        adcm::Log::Info() << "송신이 필요한 남은 허브 데이터 개수: " << sub2_vehicle_queue.size_approx();
-        // else
-        // {
-        //     adcm::Log::Info() << "[업데이트 예정 허브 데이터] 메인: " << main_vehicle_temp.timestamp << ", 서브1: " << sub1_vehicle_temp.timestamp
-        //                       << ", 서브2: " << sub2_vehicle_temp.timestamp;
-        //     adcm::Log::Info() << "[현재 맵 데이터] " << mapUpdate;
-        // }
+
+        adcm::Log::Info() << "송신이 필요한 남은 허브 데이터 개수: " << main_vehicle_queue.size_approx() + sub1_vehicle_queue.size_approx() + sub2_vehicle_queue.size_approx();
         std::int8_t map_x = max_a - min_a;
         std::int8_t map_y = max_b - min_b;
-
+        auto startTime = std::chrono::high_resolution_clock::now();
         adcm::Log::Info() << "==============KATECH modified code start==========";
 
-        // (임시) 데이터를 queue에서 꺼내면서 vehicle, obstacle_list 최신화
-        if(main_vehicle_queue.try_dequeue(main_vehicle_data))
+        adcm::Log::Info() << "KATECH: 이번 데이터 기준 차량: " << order.front();
+        //==============1. Data Queue에서 차량 및 장애물 데이터 꺼내면서 위치 변환=================
+        switch (order.front())
         {
+        case EGO_VEHICLE:
+            main_vehicle_queue.try_dequeue(main_vehicle_data);
             main_vehicle = main_vehicle_data.vehicle;
-            obstacle_list = main_vehicle_data.obstacle_list;
-        }
-        if(sub1_vehicle_queue.try_dequeue(sub1_vehicle_data))
-        {
+            obstacle_list_main = main_vehicle_data.obstacle_list;
+            filterVehicleData(obstacle_list_main);
+            gpsToMapcoordinate(main_vehicle);
+            relativeToMapcoordinate(obstacle_list_main, main_vehicle);
+            break;
+
+        case SUB_VEHICLE_1:
+            sub1_vehicle_queue.try_dequeue(sub1_vehicle_data);
             sub1_vehicle = sub1_vehicle_data.vehicle;
-            obstacle_list = sub1_vehicle_data.obstacle_list;
-        }
-        if(sub2_vehicle_queue.try_dequeue(sub2_vehicle_data))
-        {
+            obstacle_list_sub1 = sub1_vehicle_data.obstacle_list;
+            filterVehicleData(obstacle_list_sub1);
+            gpsToMapcoordinate(sub1_vehicle);
+            relativeToMapcoordinate(obstacle_list_sub1, sub1_vehicle);
+            break;
+
+        case SUB_VEHICLE_2:
+            sub2_vehicle_queue.try_dequeue(sub2_vehicle_data);
             sub2_vehicle = sub2_vehicle_data.vehicle;
-            obstacle_list = sub2_vehicle_data.obstacle_list;
+            obstacle_list_sub2 = sub2_vehicle_data.obstacle_list;
+            filterVehicleData(obstacle_list_sub2);
+            gpsToMapcoordinate(sub2_vehicle);
+            relativeToMapcoordinate(obstacle_list_sub2, sub2_vehicle);
+            break;
         }
-        // main_vehicle = main_vehicle_temp;
-        // sub1_vehicle = sub1_vehicle_temp;
-        // sub2_vehicle = sub2_vehicle_temp;
-        // obstacle_list = obstacle_list_temp;
+        adcm::Log::Info() << "차량 및 장애물 좌표계 변환 완료";
 
-        adcm::map_2dListVector map_2dListVector;
-        adcm::map_2dListStruct map_2dStruct;
+        //==============2. 장애물 데이터 융합 / 3. 특장차 및 보조차량 제거 / 4. 장애물 ID 부여 =================
 
+        obstacle_list = mergeAndCompareLists(previous_obstacle_list, obstacle_list_main, obstacle_list_sub1,
+                                             obstacle_list_sub2, main_vehicle, sub1_vehicle, sub2_vehicle);
+        order.pop();
 
-        adcm::Log::Info() << "mapData obstacle list size is at start is" << mapData.obstacle_list.size();
+        // for (auto obstacle : obstacle_list)
+        // {
+        //     adcm::Log::Info() << obstacle.obstacle_class << ": [" << obstacle.fused_position_x << ", " << obstacle.fused_position_y << "]";
+        // }
 
-        //==============1. obstacle 로 인지된 특장차 및 보조 차량 제거 =================
+        adcm::Log::Info() << "장애물 리스트 융합 및 ID 부여 완료";
+        adcm::Log::Info() << "장애물 리스트 사이즈: " << obstacle_list.size();
+        previous_obstacle_list = obstacle_list;
+        // adcm::Log::Info() << "previous_obstacle_list: " << previous_obstacle_list.size();
 
-        adcm::Log::Info() << "특장차 및 보조차량 제거 전 obstacle 사이즈: " << obstacle_list.size();
-        for (auto iter = obstacle_list.begin(); iter != obstacle_list.end();)
-        {
-            //if ((abs(iter->fused_cuboid_x - SUB_VEHICLE_SIZE_X / 10)) < 0.1 && (abs(iter->fused_cuboid_y - SUB_VEHICLE_SIZE_Y / 10)) < 0.1)
-            if (iter->obstacle_class == 51)
-            {
-                adcm::Log::Info() << "보조차량 제거";
-                iter = obstacle_list.erase(iter);
-            }
-            //if ((abs(iter->fused_cuboid_x - MAIN_VEHICLE_SIZE_X / 10)) < 0.1 && (abs(iter->fused_cuboid_y - MAIN_VEHICLE_SIZE_Y / 10)) < 0.1)
-            else if(iter->obstacle_class == 50)
-            {
-                adcm::Log::Info() << "특장차 제거";
-                iter = obstacle_list.erase(iter);
-            }
-            else
-                iter++;
-        }
-        adcm::Log::Info() << "특장차 및 보조차량 제거 후 obstacle 사이즈: " << obstacle_list.size();
+        // adcm::Log::Info() << "mapData obstacle list size is at start is" << mapData.obstacle_list.size();
 
-        //==============2. 차량 좌표계 변환==================================
-        // 차량마다 받은 gps 좌표를 작업공간 map 좌표계로 변환
-        gpsToMapcoordinate(main_vehicle);
-        gpsToMapcoordinate(sub1_vehicle);
-        gpsToMapcoordinate(sub2_vehicle);
-        adcm::Log::Info() << "차량 측위 좌표계 변환 완료";
+        //==============3. obstacle 로 인지된 특장차 및 보조 차량 제거 =================
+        // adcm::Log::Info() << "특장차 및 보조차량 제거 전 obstacle 사이즈: " << obstacle_list.size();
+        // for (auto iter = obstacle_list.begin(); iter != obstacle_list.end();)
+        // {
+        //     // if ((abs(iter->fused_cuboid_x - SUB_VEHICLE_SIZE_X / 10)) < 0.1 && (abs(iter->fused_cuboid_y - SUB_VEHICLE_SIZE_Y / 10)) < 0.1)
+        //     if (iter->obstacle_class == 51)
+        //     {
+        //         adcm::Log::Info() << "보조차량 제거";
+        //         iter = obstacle_list.erase(iter);
+        //     }
+        //     // if ((abs(iter->fused_cuboid_x - MAIN_VEHICLE_SIZE_X / 10)) < 0.1 && (abs(iter->fused_cuboid_y - MAIN_VEHICLE_SIZE_Y / 10)) < 0.1)
+        //     else if (iter->obstacle_class == 50)
+        //     {
+        //         adcm::Log::Info() << "특장차 제거";
+        //         iter = obstacle_list.erase(iter);
+        //     }
+        //     else
+        //         iter++;
+        // }
+        // adcm::Log::Info() << "특장차 및 보조차량 제거 후 obstacle 사이즈: " << obstacle_list.size();
 
-
-        //==============3. 장애물 좌표계 변환=================
-        // 차량 기준 장애물 좌표를 작업공간 map 좌표계로 변환
-        //relativeToMapcoordinate(obstacle_list_filtered, sub2_vehicle);
-        relativeToMapcoordinate(obstacle_list, sub2_vehicle);
-        bool isMainVehicleInRange = checkRange(main_vehicle);
-        bool isSubVehicle1InRange = checkRange(sub1_vehicle);
-        bool isSubVehicle2InRange = checkRange(sub2_vehicle);
-        adcm::Log::Info() << "차량별 장애물 좌표계 변환 완료";
-
-        //TO DO: 4. 차량별 장애물 fusion 여기서 필요
-
-
-        //==============5. 장애물 ID 관리 =================
-
+        //==============4. 장애물 ID 관리 =================
+        /*
         for (auto iter1 = mapData.obstacle_list.begin(); iter1 != mapData.obstacle_list.end(); iter1++)
         {
             // adcm::Log::Info() << "previous obstacle saved in the mapData!" << iter1->obstacle_id;
         }
         std::vector<ObstacleData> obstacle_list_filtered;
         obstacle_list_filtered.clear();
-        IDManager id_manager;
 
         if (mapData.obstacle_list.empty())
         {
@@ -967,11 +1440,9 @@ void ThreadKatech()
                 bool identicalObstacleFound = false;
                 for (auto new_iter = obstacle_list.begin(); new_iter != obstacle_list.end();)
                 {
-                    // 현재 정적장애물 기준 xyz 사이즈와 좌표위치가 10cm 오차 이내로 동일하면 동일 장애물로 associate 
+                    // 현재 정적장애물 기준 xyz 사이즈와 좌표위치가 10cm 오차 이내로 동일하면 동일 장애물로 associate
                     // if ((ABS(iter->fused_cuboid_x - iter1->fused_cuboid_x)< 0.001) && (ABS(iter->fused_cuboid_y - iter1->fused_cuboid_y)< 0.001) && (ABS(iter->fused_cuboid_z - iter1->fused_cuboid_z)<0.001))
-                    if ((ori_iter->fused_cuboid_x == new_iter->fused_cuboid_x) && (ori_iter->fused_cuboid_y == new_iter->fused_cuboid_y) && (ori_iter->fused_cuboid_z == new_iter->fused_cuboid_z)\
-                    && (abs(ori_iter->fused_position_x) - (new_iter->fused_position_x) < 100) && (abs(ori_iter->fused_position_y - new_iter->fused_position_y) < 100) && (abs(ori_iter->fused_position_z - new_iter->fused_position_z) < 100)\
-                    && (ori_iter->obstacle_class == new_iter->obstacle_class))
+                    if ((ori_iter->fused_cuboid_x == new_iter->fused_cuboid_x) && (ori_iter->fused_cuboid_y == new_iter->fused_cuboid_y) && (ori_iter->fused_cuboid_z == new_iter->fused_cuboid_z) && (abs(ori_iter->fused_position_x) - (new_iter->fused_position_x) < 100) && (abs(ori_iter->fused_position_y - new_iter->fused_position_y) < 100) && (abs(ori_iter->fused_position_z - new_iter->fused_position_z) < 100) && (ori_iter->obstacle_class == new_iter->obstacle_class))
                     {
                         adcm::Log::Info() << "fused_position_x: " << ori_iter->fused_position_x << "fused_position_y:" << ori_iter->fused_position_y << "obstacle id" << ori_iter->obstacle_id;
                         adcm::Log::Info() << "new fused_position_x: " << new_iter->fused_position_x << "new fused_position_y:" << new_iter->fused_position_y;
@@ -980,8 +1451,8 @@ void ThreadKatech()
                         obstacle_list_filtered.push_back(*new_iter);
                         new_iter = obstacle_list.erase(new_iter);
                         identicalObstacleFound = true;
-                        break; //if 문 break
-                        //동일한 장애물이 발견되면 obstacle_list 에서 obstacle_list_filtered 로 옮기고 obstacle list 에서는 삭제한다 
+                        break; // if 문 break
+                        // 동일한 장애물이 발견되면 obstacle_list 에서 obstacle_list_filtered 로 옮기고 obstacle list 에서는 삭제한다
                     }
                     else
                     {
@@ -1024,16 +1495,26 @@ void ThreadKatech()
             adcm::Log::Info() << "obstacle filtered are: " << filter_iter->obstacle_id;
         }
         adcm::Log::Info() << "장애물 ID allocation 완료";
+        */
 
+        // 차량이 맵 범위 내에 있는지 체크
+        bool result = checkAllVehicleRange(vehicles);
 
-        if (isMainVehicleInRange || (isSubVehicle1InRange && isSubVehicle2InRange))
+        if (result)
         { // execute only if all true!
             //==============5. 0.1 m/s 미만인 경우 장애물 정지 상태 판정 및 stop_count 값 assign =================
-            for (auto &obstacle : obstacle_list_filtered) {
-                if (std::abs(obstacle.fused_velocity_x) < 0.1 && std::abs(obstacle.fused_velocity_y) < 0.1) {
-                    obstacle.stop_count = 1; // Mark as stationary
-                } else {
-                    obstacle.stop_count = 0; // Not stationary
+            // 수정 예정//
+            for (auto iter = obstacle_list.begin(); iter != obstacle_list.end(); iter++)
+            {
+                if ((abs(iter->fused_velocity_x)) < 0.1 && (abs(iter->fused_velocity_y)) < 0.1)
+                {
+                    iter->stop_count = 1; // 해당 시각 물체 정지상태
+                    // adcm::Log::Info() << "obstacle stopped " << iter->stop_count;
+                }
+                else
+                {
+                    iter->stop_count = 0;
+                    // adcm::Log::Info() << "obstacle not stopped " << iter->stop_count;
                 }
             }
 
@@ -1043,7 +1524,7 @@ void ThreadKatech()
                 for (auto iter = mapData.obstacle_list.begin(); iter != mapData.obstacle_list.end(); iter++)
                 { // 최초 mapData 아무것도 없으면 for loop 들어가지 않음
 
-                    for (auto iter1 = obstacle_list_filtered.begin(); iter1 != obstacle_list_filtered.end(); iter1++)
+                    for (auto iter1 = obstacle_list.begin(); iter1 != obstacle_list.end(); iter1++)
                     {
                         if (iter->obstacle_id == iter1->obstacle_id)
                         { // 동일 장애물
@@ -1060,211 +1541,81 @@ void ThreadKatech()
             }
             mapData.obstacle_list.clear();
 
-            adcm::Log::Info() << "stop count 변동 완료";
-            //==============7. 장애물과 차량의 occupancy 계산해 map_2d_location 값 업데이트 ========
+            // adcm::Log::Info() << "stop count 변동 완료";
+            //==============6. 장애물과 차량의 occupancy 계산해 map_2d_location 값 업데이트 ========
 
-            if (!obstacle_list_filtered.empty())
+            if (!obstacle_list.empty())
+                find4VerticesObstacle(obstacle_list);
+
+            for (const auto &vehicle : vehicles)
             {
-                find4VerticesObstacle(obstacle_list_filtered);
+                if (vehicle->timestamp != 0)
+                    find4VerticesVehicle(*vehicle);
             }
 
-            if (isMainVehicleInRange && main_vehicle.timestamp != 0)
-            {
-                // main vehicle 존재하므로 해당 function execution
-                find4VerticesVehicle(main_vehicle);
-            }
-
-            if (isSubVehicle1InRange && sub1_vehicle.timestamp != 0)
-            {
-                // sub1_vehicle 존재하므로 해당 function execution
-                find4VerticesVehicle(sub1_vehicle);
-            }
-
-            if (isSubVehicle2InRange && sub2_vehicle.timestamp != 0)
-            {
-                // sub2_vehicle 존재하므로 해당 function execution
-                find4VerticesVehicle(sub2_vehicle);
-            }
-
-            //==============8. 현재까지의 데이터를 adcm mapData 형식으로 재구성해서 업데이트 ================
+            //==============7. 현재까지의 데이터를 adcm mapData 형식으로 재구성해서 업데이트 ================
             //================ adcm mapData 내 obstacle list 업데이트 ===============================
 
-            adcm::vehicleListStruct main_vehicle_final;
-            adcm::vehicleListStruct sub1_vehicle_final;
-            adcm::vehicleListStruct sub2_vehicle_final;
-            adcm::Log::Info() << "장애물 mapdata 반영 예정 개수 : " << obstacle_list_filtered.size();
-            for (auto iter = obstacle_list_filtered.begin(); iter != obstacle_list_filtered.end(); iter++)
-            {
-                adcm::obstacleListStruct obstacle_map; // 장애물 개수 무시
-                // adcm::Log::Info() << "obstacle " << count << " start pushing";
-                obstacle_map.obstacle_id = iter->obstacle_id;
-                obstacle_map.obstacle_class = iter->obstacle_class;
-                obstacle_map.timestamp = iter->timestamp;
-                obstacle_map.map_2d_location.clear();
-                for (auto iter1 = iter->map_2d_location.begin(); iter1 != iter->map_2d_location.end(); iter1++)
-                {
-                    adcm::map2dIndex index_to_push;
-                    index_to_push.x = iter1->x;
-                    index_to_push.y = iter1->y;
-                    map_2d_test[index_to_push.x][index_to_push.y].obstacle_id = iter->obstacle_id;
-                    // adcm::Log::Info() << "occupancy index pair of obstacle 1 is " << index_to_push.x << " , " << index_to_push.y;
-                    // adcm::Log::Info() << "occupancy index of obstacle id " << iter->obstacle_id;
-                    // adcm::Log::Info() << "map_2d_test[" << index_to_push.x << "][" <<index_to_push.y << "] = " <<  map_2d_test[index_to_push.x][index_to_push.y].obstacle_id;
-                    obstacle_map.map_2d_location.push_back(index_to_push);
-                }
-                obstacle_map.stop_count = iter->stop_count;
-                obstacle_map.fused_cuboid_x = iter->fused_cuboid_x;
-                obstacle_map.fused_cuboid_y = iter->fused_cuboid_y;
-                obstacle_map.fused_cuboid_z = iter->fused_cuboid_z;
-                obstacle_map.fused_heading_angle = iter->fused_heading_angle;
-                obstacle_map.fused_position_x = iter->fused_position_x;
-                obstacle_map.fused_position_y = iter->fused_position_y;
-                obstacle_map.fused_position_z = iter->fused_position_z;
-                obstacle_map.fused_velocity_x = iter->fused_velocity_x;
-                obstacle_map.fused_velocity_y = iter->fused_velocity_y;
-                obstacle_map.fused_velocity_z = iter->fused_velocity_z;
+            // adcm::Log::Info() << "mapdata 장애물 반영 예정 개수: " << obstacle_list.size();
 
-                mapData.obstacle_list.push_back(obstacle_map);
+            for (auto iter = obstacle_list.begin(); iter != obstacle_list.end(); iter++)
+            {
+                mapData.obstacle_list.push_back(ConvertToObstacleListStruct(*iter, map_2d_test));
             }
-            adcm::Log::Info() << "mapData obstacle list size is " << mapData.obstacle_list.size();
+
+            adcm::Log::Info() << "mapdata 장애물 반영 완료 개수: " << mapData.obstacle_list.size();
 
             //================ adcm mapData 내 vehicle list 업데이트 ===============================
 
             mapData.vehicle_list.clear();
 
-            if (isMainVehicleInRange && main_vehicle.timestamp != 0)
+            for (const auto &vehicle : vehicles)
             {
-                main_vehicle_final.vehicle_class = main_vehicle.vehicle_class;
-                main_vehicle_final.timestamp = main_vehicle.timestamp;
-                main_vehicle_final.map_2d_location.clear();
-                // adcm::Log::Info() << "main_vehicle push to mapData (x:" << main_vehicle.map_2d_location[0].x << " ~ " << main_vehicle.map_2d_location[main_vehicle.map_2d_location.size() - 1].x << " )";
-                // adcm::Log::Info() << "main_vehicle push to mapData (y:" << main_vehicle.map_2d_location[0].y << " ~ " << main_vehicle.map_2d_location[main_vehicle.map_2d_location.size() - 1].y << " )";
-                for (auto iter1 = main_vehicle.map_2d_location.begin(); iter1 < main_vehicle.map_2d_location.end(); iter1++)
-                {
-                    adcm::map2dIndex index_to_push;
-                    index_to_push.x = iter1->x;
-                    index_to_push.y = iter1->y;
-                    map_2d_test[index_to_push.x][index_to_push.y].vehicle_class = main_vehicle_final.vehicle_class;
-                    map_2d_test[index_to_push.x][index_to_push.y].road_z = 1;
-                    // adcm::Log::Info() << "(" << index_to_push.x << ", " << index_to_push.y << ") pushed to vehicle " << main_vehicle.vehicle_class;
-                    // adcm::Log::Info() << "map_2d_test[" << index_to_push.x << "][" <<index_to_push.y << "] = " <<  map_2d_test[index_to_push.x][index_to_push.y].vehicle_class;
-                    // adcm::Log::Info() << "map_2d_test[" << index_to_push.x << "][" <<index_to_push.y << "] = " <<  map_2d_test[index_to_push.x][index_to_push.y].road_z;
-                    main_vehicle_final.map_2d_location.push_back(index_to_push);
-                }
-
-                main_vehicle_final.position_long = main_vehicle.position_long;
-                main_vehicle_final.position_lat = main_vehicle.position_lat;
-                main_vehicle_final.position_height = main_vehicle.position_height;
-                main_vehicle_final.position_x = main_vehicle.position_x;
-                main_vehicle_final.position_y = main_vehicle.position_y;
-                main_vehicle_final.position_z = main_vehicle.position_z;
-                main_vehicle_final.yaw = main_vehicle.yaw;
-                main_vehicle_final.roll = main_vehicle.roll;
-                main_vehicle_final.velocity_long = main_vehicle.velocity_long;
-                main_vehicle_final.velocity_lat = main_vehicle.velocity_lat;
-                main_vehicle_final.velocity_x = main_vehicle.velocity_x;
-                main_vehicle_final.velocity_y = main_vehicle.velocity_y;
-                main_vehicle_final.velocity_ang = main_vehicle.velocity_ang;
-                mapData.vehicle_list.push_back(main_vehicle_final);
-                // INFO("main_vehicle_final pushed to mapData");
+                if (vehicle->timestamp != 0)
+                    mapData.vehicle_list.push_back(ConvertToVehicleListStruct(*vehicle, map_2d_test));
             }
-
-            if (isSubVehicle1InRange  && sub1_vehicle.timestamp != 0)
-            // 테스트용 sub1 값이 있을때만 아래 수행
-            {
-                // adcm::Log::Info() << "sub1_vehicle push to mapData (x:" << sub1_vehicle.map_2d_location.begin()->x << " ~ " << sub1_vehicle.map_2d_location[sub1_vehicle.map_2d_location.size() - 1].x << " )";
-                // adcm::Log::Info() << "sub1_vehicle push to mapData (y:" << sub1_vehicle.map_2d_location.begin()->y << " ~ " << sub1_vehicle.map_2d_location[sub1_vehicle.map_2d_location.size() - 1].y << " )";
-                sub1_vehicle_final.vehicle_class = sub1_vehicle.vehicle_class;
-                sub1_vehicle_final.timestamp = sub1_vehicle.timestamp;
-                sub1_vehicle_final.map_2d_location.clear();
-                for (auto iter1 = sub1_vehicle.map_2d_location.begin(); iter1 < sub1_vehicle.map_2d_location.end(); iter1++)
-                {
-                    adcm::map2dIndex index_to_push;
-                    index_to_push.x = iter1->x;
-                    index_to_push.y = iter1->y;
-                    map_2d_test[index_to_push.x][index_to_push.y].vehicle_class = sub1_vehicle_final.vehicle_class;
-                    map_2d_test[index_to_push.x][index_to_push.y].road_z = 1;
-                    // adcm::Log::Info() << "map_2d_test[" << index_to_push.x << "][" <<index_to_push.y << "] = " <<  map_2d_test[index_to_push.x][index_to_push.y].vehicle_class;
-                    sub1_vehicle_final.map_2d_location.push_back(index_to_push);
-                }
-                sub1_vehicle_final.position_long = sub1_vehicle.position_long;
-                sub1_vehicle_final.position_lat = sub1_vehicle.position_lat;
-                sub1_vehicle_final.position_height = sub1_vehicle.position_height;
-                sub1_vehicle_final.position_x = sub1_vehicle.position_x;
-                sub1_vehicle_final.position_y = sub1_vehicle.position_y;
-                sub1_vehicle_final.position_z = sub1_vehicle.position_z;
-                sub1_vehicle_final.yaw = sub1_vehicle.yaw;
-                sub1_vehicle_final.roll = sub1_vehicle.roll;
-                sub1_vehicle_final.velocity_long = sub1_vehicle.velocity_long;
-                sub1_vehicle_final.velocity_lat = sub1_vehicle.velocity_lat;
-                sub1_vehicle_final.velocity_x = sub1_vehicle.velocity_x;
-                sub1_vehicle_final.velocity_y = sub1_vehicle.velocity_y;
-                sub1_vehicle_final.velocity_ang = sub1_vehicle.velocity_ang;
-
-                mapData.vehicle_list.push_back(sub1_vehicle_final);
-                // INFO("sub1_vehicle_final pushed to mapData");
-            }
-
-            if (isSubVehicle2InRange  && sub2_vehicle.timestamp != 0)
-            {
-                sub2_vehicle_final.vehicle_class = sub2_vehicle.vehicle_class;
-                sub2_vehicle_final.timestamp = sub2_vehicle.timestamp;
-                sub2_vehicle_final.map_2d_location.clear();
-                // adcm::Log::Info() << "sub2_vehicle push to mapData (x:" << sub2_vehicle.map_2d_location.begin()->x << " ~ " << sub2_vehicle.map_2d_location[sub2_vehicle.map_2d_location.size() - 1].x << " )";
-                // adcm::Log::Info() << "sub2_vehicle push to mapData (y:" << sub2_vehicle.map_2d_location.begin()->y << " ~ " << sub2_vehicle.map_2d_location[sub2_vehicle.map_2d_location.size() - 1].y << " )";
-                for (auto iter1 = sub2_vehicle.map_2d_location.begin(); iter1 < sub2_vehicle.map_2d_location.end(); iter1++)
-                {
-                    adcm::map2dIndex index_to_push;
-                    index_to_push.x = iter1->x;
-                    index_to_push.y = iter1->y;
-                    map_2d_test[index_to_push.x][index_to_push.y].vehicle_class = sub2_vehicle_final.vehicle_class;
-                    map_2d_test[index_to_push.x][index_to_push.y].road_z = 1;
-                    // adcm::Log::Info() << "map_2d_test[" << index_to_push.x << "][" <<index_to_push.y << "] = " <<  map_2d_test[index_to_push.x][index_to_push.y].vehicle_class;
-                    sub2_vehicle_final.map_2d_location.push_back(index_to_push);
-                }
-                sub2_vehicle_final.position_long = sub2_vehicle.position_long;
-                sub2_vehicle_final.position_lat = sub2_vehicle.position_lat;
-                sub2_vehicle_final.position_height = sub2_vehicle.position_height;
-                sub2_vehicle_final.position_x = sub2_vehicle.position_x;
-                sub2_vehicle_final.position_y = sub2_vehicle.position_y;
-                sub2_vehicle_final.position_z = sub2_vehicle.position_z;
-                sub2_vehicle_final.yaw = sub2_vehicle.yaw;
-                sub2_vehicle_final.roll = sub2_vehicle.roll;
-                sub2_vehicle_final.velocity_long = sub2_vehicle.velocity_long;
-                sub2_vehicle_final.velocity_lat = sub2_vehicle.velocity_lat;
-                sub2_vehicle_final.velocity_x = sub2_vehicle.velocity_x;
-                sub2_vehicle_final.velocity_y = sub2_vehicle.velocity_y;
-                sub2_vehicle_final.velocity_ang = sub2_vehicle.velocity_ang;
-
-                mapData.vehicle_list.push_back(sub2_vehicle_final);
-                // INFO("sub2_vehicle_final pushed to mapData");
-            }
+            adcm::Log::Info() << "mapdata 차량 반영 완료 개수: " << mapData.vehicle_list.size();
 
             mapData.map_2d.clear();
+
             for (int i = 0; i < map_n; ++i)
             {
                 map_2dListVector.clear();
                 for (int j = 0; j < map_m; ++j)
                 {
-                    // Copy and Reset Data for Each Grid Cell
                     map_2dStruct.obstacle_id = map_2d_test[i][j].obstacle_id;
                     map_2d_test[i][j].obstacle_id = NO_OBSTACLE;
+
+                    // obstacle_id 초기화
 
                     map_2dStruct.vehicle_class = map_2d_test[i][j].vehicle_class;
                     map_2d_test[i][j].vehicle_class = NO_VEHICLE;
 
+                    // vehicle_class 초기화
                     map_2dStruct.road_z = map_2d_test[i][j].road_z;
-                    // road_z 정보는 reset 불필요
+                    // road_z 정보는 계속 가져간다
                     map_2dListVector.push_back(map_2dStruct);
                 }
                 mapData.map_2d.push_back(map_2dListVector);
             }
-            adcm::Log::Info() << "DATA FUSION DONE";
-            adcm::Log::Info() << "map_2d pushed to mapData";
+            // adcm::Log::Info() << "DATA FUSION DONE";
+            // adcm::Log::Info() << "map_2d pushed to mapData";
+            adcm::Log::Info() << "mapdata 융합 완료";
+
+            // map_data_object 의 생성시간 추가
+            // auto now = std::chrono::system_clock::now();
+            // auto mapData_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+            // adcm::Log::Info() << "Current timestamp in milliseconds: " << mapData_timestamp;
+            // mapData.timestamp = mapData_timestamp;
+
             mapData_provider.send(mapData);
+            auto endTime = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double, std::milli> duration = endTime - startTime;
             mapVer++;
-            adcm::Log::Info() << mapVer << "번째 허브 데이터 맵변환 후 전송 완료";
-            adcm::Log::Info() << "mapData send";
+            adcm::Log::Info() << mapVer << "번째 맵데이터 전송 완료";
+            adcm::Log::Info() << "전송에 걸린 시간: " << duration.count() << " ms.";
+            // adcm::Log::Info() << "mapData send";
+            // NatsSend(mapData);
         }
         else
         {
@@ -1278,7 +1629,7 @@ void ThreadMonitor()
 {
     while (continueExecution)
     {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 
         if (gMainthread_Loopcount == 0)
         {
@@ -1329,6 +1680,8 @@ int main(int argc, char *argv[])
     adcm::Log::Info() << "DataFusion: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
     adcm::Log::Info() << "Ok, let's produce some DataFusion data...";
+    adcm::Log::Info() << "SDK release_241008_interface v1.9";
+    adcm::Log::Info() << "DataFusion Build 241217";
     thread_list.push_back(std::thread(ThreadReceiveHubData));
     thread_list.push_back(std::thread(ThreadReceiveWorkInfo));
     thread_list.push_back(std::thread(ThreadMonitor));
