@@ -1337,6 +1337,30 @@ void ThreadReceiveWorkInfo()
         }
     }
 }
+// edge_information 수신
+void ThreadReceiveEdgeInfo()
+{
+    adcm::EdgeInformation_Subscriber edgeInformation_subscriber;
+    edgeInformation_subscriber.init("DataFusion/DataFusion/RPort_edge_information");
+    INFO("ThreadReceiveEdgeInfo start...");
+
+ while (continueExecution)
+    {
+        bool edgeInfo_rxEvent = edgeInformation_subscriber.waitEvent(10000);
+
+        if (edgeInfo_rxEvent)
+        {
+
+            adcm::Log::Verbose() << "[EVENT] DataFusion Edge Information received";
+            adcm::Log::Info() << "DataFusion Edge Information received";
+            while (!edgeInformation_subscriber.isEventQueueEmpty())
+            {
+                auto data = edgeInformation_subscriber.getEvent();
+                adcm::Log::Info() << "[EdgeInfo] EDGE System State: " << data->state;
+            }
+        }
+    }
+}
 
 void ThreadKatech()
 {
@@ -1741,12 +1765,13 @@ int main(int argc, char *argv[])
     adcm::Log::Info() << "DataFusion: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
     adcm::Log::Info() << "Ok, let's produce some DataFusion data...";
-    adcm::Log::Info() << "SDK release_241008_interface v1.9";
-    adcm::Log::Info() << "DataFusion Build 250102";
+    adcm::Log::Info() << "SDK release_241008_interface v2.0";
+    adcm::Log::Info() << "DataFusion Build 250109";
     thread_list.push_back(std::thread(ThreadReceiveHubData));
     thread_list.push_back(std::thread(ThreadReceiveWorkInfo));
     thread_list.push_back(std::thread(ThreadMonitor));
     thread_list.push_back(std::thread(ThreadKatech));
+    thread_list.push_back(std::thread(ThreadReceiveEdgeInfo));
 
     adcm::Log::Info() << "Thread join";
     for (int i = 0; i < static_cast<int>(thread_list.size()); i++)

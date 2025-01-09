@@ -23,6 +23,7 @@
 
 #include "hub_data_subscriber.h"
 #include "work_information_subscriber.h"
+#include "edge_information_subscriber.h"
 #include "id_manager.hpp"
 #include "concurrentqueue.h"
 #include "munkres/src/munkres.h"
