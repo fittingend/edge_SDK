@@ -35,6 +35,12 @@
             "instanceId": 601,
             "eventId": 32769,
             "dataId": 4321
+        },
+        "End2EndEventDataIdMapping" : {
+            "serviceId": 7001,
+            "instanceId": 701,
+            "eventId": 32769,
+            "dataId": 4321
         }
     }
 }

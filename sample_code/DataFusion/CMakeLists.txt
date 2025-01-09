@@ -176,6 +176,7 @@ set(APPLICATION_src
     ${${PROCESS_ARTIFACTS_MAKE_TARGET}_SOURCES}
     ${PROJECT_SOURCE_DIR}/../common/logger/src/logger.cpp
     ${PROJECT_SOURCE_DIR}/../common/service/src/map_data_provider.cpp
+    ${PROJECT_SOURCE_DIR}/../common/service/src/edge_information_subscriber.cpp
     ${PROJECT_SOURCE_DIR}/../common/service/src/hub_data_subscriber.cpp
     ${PROJECT_SOURCE_DIR}/../common/service/src/work_information_subscriber.cpp
 )
@@ -244,9 +245,7 @@ if(HAS_OPENDDS_BINDING)
 endif()
 
 
-
-
-# target_link_libraries(${CMAKE_PROJECT_NAME} ${CMAKE_THREAD_LIBS_INIT} ${ARA_LIBRARIES} ${COMMUNICATION_LIBRARY} ara_com e2exf e2e ara::log ara::exec_execution_client ara::core)
+#target_link_libraries(${CMAKE_PROJECT_NAME} ${CMAKE_THREAD_LIBS_INIT} ${ARA_LIBRARIES} ${COMMUNICATION_LIBRARY} ara_com e2exf e2e ara::log ara::exec_execution_client ara::core)
 
 #NATS용 library 추가
 target_link_libraries(${CMAKE_PROJECT_NAME} ${CMAKE_THREAD_LIBS_INIT} ${ARA_LIBRARIES} ${COMMUNICATION_LIBRARY} ara_com e2exf e2e ara::log ara::exec_execution_client ara::core ${NATS_LIB} ara::core Poco::Net Poco::Foundation Poco::JSON ${Boost_LIBRARIES})
