@@ -1243,16 +1243,16 @@ void ThreadReceiveHubData()
                     adcm::Log::Info() << ++receiveVer << "번째 허브 데이터 수신 완료";
                     break;
 
-                case 255: // 보조차1이 보낸 인지데이터
-                    data->vehicle_class = SUB_VEHICLE_1;
-                    fillVehicleData(sub1_vehicle_temp, data);
-                    fillObstacleList(obstacle_list_temp, data);
-                    fusionData.vehicle = sub1_vehicle_temp;
-                    fusionData.obstacle_list = obstacle_list_temp;
-                    sub1_vehicle_queue.enqueue(fusionData);
-                    order.push(SUB_VEHICLE_1);
-                    adcm::Log::Info() << ++receiveVer << "번째 허브 데이터 수신 완료";
-                    break;
+                // case 255: // 보조차1이 보낸 인지데이터
+                //     data->vehicle_class = SUB_VEHICLE_1;
+                //     fillVehicleData(sub1_vehicle_temp, data);
+                //     fillObstacleList(obstacle_list_temp, data);
+                //     fusionData.vehicle = sub1_vehicle_temp;
+                //     fusionData.obstacle_list = obstacle_list_temp;
+                //     sub1_vehicle_queue.enqueue(fusionData);
+                //     order.push(SUB_VEHICLE_1);
+                //     adcm::Log::Info() << ++receiveVer << "번째 허브 데이터 수신 완료";
+                //     break;
 
                 default:
                     adcm::Log::Info() << "data received but belongs to no vehicle hence discarded";
@@ -1742,7 +1742,7 @@ int main(int argc, char *argv[])
 #endif
     adcm::Log::Info() << "Ok, let's produce some DataFusion data...";
     adcm::Log::Info() << "SDK release_241008_interface v1.9";
-    adcm::Log::Info() << "DataFusion Build 241217";
+    adcm::Log::Info() << "DataFusion Build 250102";
     thread_list.push_back(std::thread(ThreadReceiveHubData));
     thread_list.push_back(std::thread(ThreadReceiveWorkInfo));
     thread_list.push_back(std::thread(ThreadMonitor));
