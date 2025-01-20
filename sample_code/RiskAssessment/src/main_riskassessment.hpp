@@ -4,7 +4,7 @@
 #define STOP_VALUE 10 // 1초간 정지시 정지 장애물로 판단
 #define INVALID_RETURN_VALUE 99999 
 #define M_TO_10CM_PRECISION 10 
-
+#define MAP_ANGLE -86
 
 typedef struct
 {
