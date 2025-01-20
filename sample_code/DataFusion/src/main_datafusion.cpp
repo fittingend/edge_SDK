@@ -486,14 +486,20 @@ void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, Vehi
     for (index.x = min_x; index.x <= max_x; ++index.x) {
         for (index.y = min_y; index.y <= max_y; ++index.y) {
             int cross = 0;
+            // 해당 사변형은 4변을 가지므로 i 
             for (int i = 0; i < 4; i++) {
-                int j = (i + 1) % 4;
+                //As the loop variable i iterates from 0 to 3, j will always represent the next vertex in the sequence
+                int j = (i + 1) % 4; 
                 if ((points[i].y > index.y) != (points[j].y > index.y)) {
+                    //교차점을 구한다
                     double meetX = (points[j].x - points[i].x) * (index.y - points[i].y) / 
                                    (points[j].y - points[i].y) + points[i].x;
+                    //교차점 meetX 가 검증을 진행하는 인덱스의 x 좌표보다 크면 교차발생 cross++
                     if (index.x < meetX) cross++;
                 }
             }
+            //교차횟수 cross가 짝수이면 점은 외부,
+            //교차횟수 cross가 홀수이면 점은 내부에 있음 
             if (cross % 2 != 0) {
                 vehicle.map_2d_location.push_back(index);
                 //map_2d_test[index.x][index.y].vehicle_class = vehicle.vehicle_class;
