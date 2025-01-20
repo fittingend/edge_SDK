@@ -62,7 +62,7 @@ enum VehicleClass
 
 struct Point2D
 {
-    long x, y;
+    double x, y;
 };
 
 struct ObstacleData
@@ -122,7 +122,7 @@ struct VehicleData
 
 struct GridCellData
 {
-    unsigned short obstacle_id;
+    std::uint16_t obstacle_id;
     VehicleClass vehicle_class;
     double road_z; // 2 bytes
 }; // 패딩때문에 토탈 24 bytes
@@ -215,13 +215,12 @@ bool checkAllVehicleRange(const std::vector<VehicleData *> &vehicles);
 
 void gpsToMapcoordinate(VehicleData &vehicle);
 void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData vehicle);
-void ScanLine(long x1, long y1, long x2, long y2, long min_y, long max_y);
 
 void generateRoadZValue(VehicleData target_vehicle, std::vector<adcm::map_2dListVector> &map_2d_test);
 void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, VehicleData &vehicle, std::vector<adcm::map_2dListVector> &map_2d_test);
-void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std::vector<ObstacleData>::iterator iter);
+void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std::vector<ObstacleData>::iterator iter, std::vector<adcm::map_2dListVector> &map_2d_test);
 
-void find4VerticesVehicle(VehicleData &target_vehicle, std::vector<adcm::map_2dListVector> &map_2d_test);
+void find4VerticesVehicle(VehicleData &target_vehicle);
 void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered);
 
 // 차량 데이터 저장

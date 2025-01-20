@@ -436,74 +436,11 @@ void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleDa
     }
 }
 
-void ScanLine(long x1, long y1, long x2, long y2, long min_y, long max_y)
-{
-    long sx, sy, dx1, dy1, dx2, dy2, x, y, m, n, k, cnt;
-
-    sx = x2 - x1;
-    sy = y2 - y1;
-
-    if (sx > 0)
-        dx1 = 1;
-    else if (sx < 0)
-        dx1 = -1;
-    else
-        dx1 = 0;
-
-    if (sy > 0)
-        dy1 = 1;
-    else if (sy < 0)
-        dy1 = -1;
-    else
-        dy1 = 0;
-
-    m = ABS(sx);
-    n = ABS(sy);
-    dx2 = dx1;
-    dy2 = 0;
-
-    if (m < n)
-    {
-        m = ABS(sy);
-        n = ABS(sx);
-        dx2 = 0;
-        dy2 = dy1;
-    }
-
-    x = x1;
-    y = y1;
-    cnt = m + 1;
-    k = n / 2;
-
-    while (cnt--)
-    {
-        if ((y >= min_y) && (y < max_y + 1))
-        {
-            if (x < ContourX[y][0])
-                ContourX[y][0] = x;
-            if (x > ContourX[y][1])
-                ContourX[y][1] = x;
-        }
-
-        k += n;
-        if (k < m)
-        {
-            x += dx2;
-            y += dy2;
-        }
-        else
-        {
-            k -= m;
-            x += dx1;
-            y += dy1;
-        }
-    }
-}
-
+/*
 void generateRoadZValue(VehicleData target_vehicle, std::vector<adcm::map_2dListVector> &map_2d_test)
 {
 // 현재 차량의 position_x position_y 중심으로 좌우전방 5m 를 스캔해서 road_z 값을 1로 지정
-#define SCANNING_RANGE 10
+#define SCANNING_RANGE 30
     // adcm::Log::Info() << "vehicle class " << target_vehicle.vehicle_class << " generateRoadZValue";
 
     int scanned_range_LL_x = floor(target_vehicle.position_x - SUB_VEHICLE_SIZE_X / 2) - SCANNING_RANGE;
@@ -526,60 +463,95 @@ void generateRoadZValue(VehicleData target_vehicle, std::vector<adcm::map_2dList
     }
     // adcm::Log::Info() << "generateRoadZValue finish";
 }
+*/
 
-void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, VehicleData &vehicle, std::vector<adcm::map_2dListVector> &map_2d_test)
+
+void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, VehicleData &vehicle)
 {
-    long arr_x[] = {p0.x, p1.x, p2.x, p3.x};
-    long arr_y[] = {p0.y, p1.y, p2.y, p3.y};
-    // find max x&y and min x&y of the rectangle
-    int n = sizeof(arr_y) / sizeof(arr_y[0]);
-    // Implemented inbuilt function to sort array
-    std::sort(arr_x, arr_x + n);
-    std::sort(arr_y, arr_y + n);
-    long min_x = arr_x[0];
-    long max_x = arr_x[n - 1];
-    long min_y = arr_y[0];
-    long max_y = arr_y[n - 1];
+    // Collect all points in an array
+    Point2D points[] = {p0, p1, p2, p3};
 
-    Point2D index;
-    for (index.y = min_y; index.y < max_y + 1; index.y++)
-    {
-        ContourX[index.y][0] = LONG_MAX; // min X
-        ContourX[index.y][1] = LONG_MIN; // max X
+    // Find min and max values for x and y
+    double min_x = points[0].x, max_x = points[0].x;
+    double min_y = points[0].y, max_y = points[0].y;
+    for (const auto& p : points) {
+        min_x = std::min(min_x, p.x);
+        max_x = std::max(max_x, p.x);
+        min_y = std::min(min_y, p.y);
+        max_y = std::max(max_y, p.y);
     }
 
-    ScanLine(p0.x, p0.y, p1.x, p1.y, min_y, max_y);
-    ScanLine(p1.x, p1.y, p2.x, p2.y, min_y, max_y);
-    ScanLine(p2.x, p2.y, p3.x, p3.y, min_y, max_y);
-    ScanLine(p3.x, p3.y, p0.x, p0.y, min_y, max_y);
-
-    for (index.y = min_y; index.y < max_y + 1; index.y++)
-    {
-        if (ContourX[index.y][1] >= ContourX[index.y][0])
-        {
-            index.x = ContourX[index.y][0];
-            long len = 1 + ContourX[index.y][1] - ContourX[index.y][0];
-
-            // Can draw a horizontal line instead of individual pixels here
-            while (len--)
-            {
-                // occupied
+    Point2D index;
+    //Ray-Casting algorithm 
+    for (index.x = min_x; index.x <= max_x; ++index.x) {
+        for (index.y = min_y; index.y <= max_y; ++index.y) {
+            int cross = 0;
+            // 해당 사변형은 4변을 가지므로 i 
+            for (int i = 0; i < 4; i++) {
+                //As the loop variable i iterates from 0 to 3, j will always represent the next vertex in the sequence
+                int j = (i + 1) % 4; 
+                if ((points[i].y > index.y) != (points[j].y > index.y)) {
+                    //교차점을 구한다
+                    double meetX = (points[j].x - points[i].x) * (index.y - points[i].y) / 
+                                   (points[j].y - points[i].y) + points[i].x;
+                    //교차점 meetX 가 검증을 진행하는 인덱스의 x 좌표보다 크면 교차발생 cross++
+                    if (index.x < meetX) cross++;
+                }
+            }
+            //교차횟수 cross가 짝수이면 점은 외부,
+            //교차횟수 cross가 홀수이면 점은 내부에 있음 
+            if (cross % 2 != 0) {
                 vehicle.map_2d_location.push_back(index);
-                index.x++;
-                /*int x = index.x;
-                int y = index.y;
-                map_2d_test[x][y].road_z= 1;*/
-                // 코드 실행 안됨...우선은 1 을 넣음으로써 scanned 완료된 map
-                // adcm::Log::Info() << "x value is " << index.x << " y value is " << index.y;
+                //map_2d_test[index.x][index.y].vehicle_class = vehicle.vehicle_class;
+                // TO DO: 현재는 물체가 있는 index 는 road_z 값 1로 설정 (아무것도 없으면 0)
+                //map_2d_test[index.x][index.y].road_z = 1;
             }
         }
     }
-
-    // adcm::Log::Info() << "Vehicle class " << vehicle.vehicle_class << " generateOccupancyIndex";
 }
 
-// 기존 map_2d_location 반영 함수 수정
 void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std::vector<ObstacleData>::iterator iter)
+{
+    if (iter == std::vector<ObstacleData>::iterator()) return; // Ensure valid iterator
+
+    // Collect all points in an array
+    Point2D points[] = {p0, p1, p2, p3};
+
+    // Find min and max values for x and y
+    double min_x = points[0].x, max_x = points[0].x;
+    double min_y = points[0].y, max_y = points[0].y;
+    for (const auto& p : points) {
+        min_x = std::min(min_x, p.x);
+        max_x = std::max(max_x, p.x);
+        min_y = std::min(min_y, p.y);
+        max_y = std::max(max_y, p.y);
+    }
+
+    Point2D index;
+
+    for (index.x = min_x; index.x <= max_x; ++index.x) {
+        for (index.y = min_y; index.y <= max_y; ++index.y) {
+            int cross = 0;
+            for (int i = 0; i < 4; i++) {
+                int j = (i + 1) % 4;
+                if ((points[i].y > index.y) != (points[j].y > index.y)) {
+                    double meetX = (points[j].x - points[i].x) * (index.y - points[i].y) / 
+                                   (points[j].y - points[i].y) + points[i].x;
+                    if (index.x < meetX) cross++;
+                }
+            }
+            if (cross % 2 != 0) {
+                iter->map_2d_location.push_back(index);
+                //map_2d_test[index.x][index.y].obstacle_id = iter->obstacle_id;
+                // TO DO: 현재는 물체가 있는 index 는 road_z 값 1로 설정 (아무것도 없으면 0)
+                //map_2d_test[index.x][index.y].road_z = 1;
+            }
+        }
+    }
+}
+
+/*
+void generateOccupancyIndex_ori(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std::vector<ObstacleData>::iterator iter)
 {
     long arr_x[] = {p0.x, p1.x, p2.x, p3.x};
     long arr_y[] = {p0.y, p1.y, p2.y, p3.y};
@@ -618,96 +590,77 @@ void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std:
         }
     }
 }
-
-void find4VerticesVehicle(VehicleData &target_vehicle, std::vector<adcm::map_2dListVector> &map_2d_test)
+*/
+void find4VerticesVehicle(VehicleData &target_vehicle)
 {
     Point2D LU, RU, RL, LL;
+    double half_x;
+    double half_y;
     double theta = target_vehicle.yaw * M_PI / 180;
 
     if (target_vehicle.vehicle_class == EGO_VEHICLE)
     {
-// 특장차일 경우
-#define VEHICLE_SIZE_X MAIN_VEHICLE_SIZE_X
-#define VEHICLE_SIZE_Y MAIN_VEHICLE_SIZE_Y
-        // #define VEHICLE_SIZE_X main_vehicle_size_length
-        // #define VEHICLE_SIZE_Y main_vehicle_size_width
+        half_x = MAIN_VEHICLE_SIZE_X / 2;
+        half_y = MAIN_VEHICLE_SIZE_Y / 2;
     }
+    
     else
     {
-
-#define VEHICLE_SIZE_X SUB_VEHICLE_SIZE_X
-#define VEHICLE_SIZE_Y SUB_VEHICLE_SIZE_Y
-        // #define VEHICLE_SIZE_X sub_vehicle_size[target_vehicle.vehicle_class].length
-        // #define VEHICLE_SIZE_Y sub_vehicle_size[target_vehicle.vehicle_class].width
+        half_x = SUB_VEHICLE_SIZE_X / 2;
+        half_y = SUB_VEHICLE_SIZE_Y / 2;
     }
-    // step1. 4 꼭지점을 각각 찾는다
-    LU.x = target_vehicle.position_x + (cos(theta) * VEHICLE_SIZE_X / 2 - sin(theta) * VEHICLE_SIZE_Y / 2);
-    LU.y = target_vehicle.position_y + (sin(theta) * VEHICLE_SIZE_X / 2 + cos(theta) * VEHICLE_SIZE_Y / 2);
+    // Top-left (LU)
+    LU.x = target_vehicle.position_x + cos(theta) * (-half_x) - sin(theta) * (half_y);
+    LU.y = target_vehicle.position_y + sin(theta) * (-half_x) + cos(theta) * (half_y);
 
-    RU.x = target_vehicle.position_x + (cos(theta) * VEHICLE_SIZE_X / 2 - sin(theta) * VEHICLE_SIZE_Y / 2);
-    RU.y = target_vehicle.position_y - (sin(theta) * VEHICLE_SIZE_X / 2 + cos(theta) * VEHICLE_SIZE_Y / 2);
+    // Top-right (RU)
+    RU.x = target_vehicle.position_x + cos(theta) * (half_x) - sin(theta) * (half_y);
+    RU.y = target_vehicle.position_y + sin(theta) * (half_x) + cos(theta) * (half_y);
 
-    RL.x = target_vehicle.position_x - (cos(theta) * VEHICLE_SIZE_X / 2 - sin(theta) * VEHICLE_SIZE_Y / 2);
-    RL.y = target_vehicle.position_y - (sin(theta) * VEHICLE_SIZE_X / 2 + cos(theta) * VEHICLE_SIZE_Y / 2);
+    // Bottom-right (RL)
+    RL.x = target_vehicle.position_x + cos(theta) * (half_x) - sin(theta) * (-half_y);
+    RL.y = target_vehicle.position_y + sin(theta) * (half_x) + cos(theta) * (-half_y);
 
-    LL.x = target_vehicle.position_x - (cos(theta) * VEHICLE_SIZE_X / 2 - sin(theta) * VEHICLE_SIZE_Y / 2);
-    LL.y = target_vehicle.position_y + (sin(theta) * VEHICLE_SIZE_X / 2 + cos(theta) * VEHICLE_SIZE_Y / 2);
+    // Bottom-left (LL)
+    LL.x = target_vehicle.position_x + cos(theta) * (-half_x) - sin(theta) * (-half_y);
+    LL.y = target_vehicle.position_y + sin(theta) * (-half_x) + cos(theta) * (-half_y);
 
-    // adcm::Log::Info() << "find4VerticesVehicle: LU.x is" << LU.x;
-    // adcm::Log::Info() << "find4VerticesVehicle: LU.y is" << LU.y;
-
-    // adcm::Log::Info() << "find4VerticesVehicle: RU.x is" << RU.x;
-    // adcm::Log::Info() << "find4VerticesVehicle: RU.y is" << RU.y;
-
-    // adcm::Log::Info() << "find4VerticesVehicle: RL.x is" << RL.x;
-    // adcm::Log::Info() << "find4VerticesVehicle: RL.y is" << RL.y;
-
-    // adcm::Log::Info() << "find4VerticesVehicle: LL.x is" << LL.x;
-    // adcm::Log::Info() << "find4VerticesVehicle: LL.y is" << LL.y;
-    // 사각형 map안에 들어와있는지 확인 후 밖으로 나와있으면 범위 안으로 조정
     checkRange(LU);
     checkRange(RU);
     checkRange(RL);
     checkRange(LL);
-    // 다각형 map안에 들어와있는지 확인 후 알림
 
-    generateRoadZValue(target_vehicle, map_2d_test);
-    generateOccupancyIndex(LU, RU, RL, LL, target_vehicle, map_2d_test);
+    //generateRoadZValue(target_vehicle, map_2d_test);
+    //TO DO
+    generateOccupancyIndex(LU, RU, RL, LL, target_vehicle);
+
 }
-void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list)
+void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered)
 {
-    // 4 vertices 를 찾고싶은 해당 obstacle
-    for (auto iter = obstacle_list.begin(); iter < obstacle_list.end(); iter++)
+    for (auto iter = obstacle_list_filtered.begin(); iter < obstacle_list_filtered.end(); iter++)
     {
         Point2D LU, RU, RL, LL;
-        double obstacle_size_x = iter->fused_cuboid_x;
-        double obstacle_size_y = iter->fused_cuboid_y;
+        double half_x = iter->fused_cuboid_x / 2;
+        double half_y = iter->fused_cuboid_y / 2;
         double obstacle_position_x = iter->fused_position_x;
         double obstacle_position_y = iter->fused_position_y;
         double theta = iter->fused_heading_angle * M_PI / 180;
 
-        LU.x = obstacle_position_x + (cos(theta) * (obstacle_size_x / 2) - sin(theta) * (obstacle_size_y / 2));
-        LU.y = obstacle_position_y + (sin(theta) * (obstacle_size_x / 2) + cos(theta) * (obstacle_size_y / 2));
+        // Top-left (LU)
+        LU.x = obstacle_position_x + cos(theta) * (-half_x) - sin(theta) * (half_y);
+        LU.y = obstacle_position_y + sin(theta) * (-half_x) + cos(theta) * (half_y);
 
-        RU.x = obstacle_position_x + (cos(theta) * (obstacle_size_x / 2) - sin(theta) * (obstacle_size_y / 2));
-        RU.y = obstacle_position_y - (sin(theta) * (obstacle_size_x / 2) + cos(theta) * (obstacle_size_y / 2));
+        // Top-right (RU)
+        RU.x = obstacle_position_x + cos(theta) * (half_x) - sin(theta) * (half_y);
+        RU.y = obstacle_position_y + sin(theta) * (half_x) + cos(theta) * (half_y);
 
-        RL.x = obstacle_position_x - (cos(theta) * (obstacle_size_x / 2) - sin(theta) * (obstacle_size_y / 2));
-        RL.y = obstacle_position_y - (sin(theta) * (obstacle_size_x / 2) + cos(theta) * (obstacle_size_y / 2));
+        // Bottom-right (RL)
+        RL.x = obstacle_position_x + cos(theta) * (half_x) - sin(theta) * (-half_y);
+        RL.y = obstacle_position_y + sin(theta) * (half_x) + cos(theta) * (-half_y);
 
-        LL.x = obstacle_position_x - (cos(theta) * (obstacle_size_x / 2) - sin(theta) * (obstacle_size_y / 2));
-        LL.y = obstacle_position_y + (sin(theta) * (obstacle_size_x / 2) + cos(theta) * (obstacle_size_y / 2));
-        // adcm::Log::Info() << "find4VerticesObstacle: LU.x is" << LU.x;
-        // adcm::Log::Info() << "find4VerticesObstacle: LU.y is" << LU.y;
-
-        // adcm::Log::Info() << "find4VerticesObstacle: RU.x is" << RU.x;
-        // adcm::Log::Info() << "find4VerticesObstacle: RU.y is" << RU.y;
-
-        // adcm::Log::Info() << "find4VerticesObstacle: RL.x is" << RL.x;
-        // adcm::Log::Info() << "find4VerticesObstacle: RL.y is" << RL.y;
-
-        // adcm::Log::Info() << "find4VerticesObstacle: LL.x is" << LL.x;
-        // adcm::Log::Info() << "find4VerticesObstacle: LL.y is" << LL.y;
+        // Bottom-left (LL)
+        LL.x = obstacle_position_x + cos(theta) * (-half_x) - sin(theta) * (-half_y);
+        LL.y = obstacle_position_y + sin(theta) * (-half_x) + cos(theta) * (-half_y);
 
         checkRange(LU);
         checkRange(RU);
@@ -716,7 +669,6 @@ void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list)
 
         generateOccupancyIndex(LU, RU, RL, LL, *(&iter));
     }
-    // adcm::Log::Info() << "장애물 꼭짓점 범위 확인완료";
 }
 
 // 유클리디안 거리 계산
@@ -1201,9 +1153,11 @@ void ThreadReceiveHubData()
         // VERBOSE("[DataFusion] Application loop");
         bool hubData_rxEvent = hubData_subscriber.waitEvent(100); // wait event
         // adcm::Log::Info() << "wait hubData" << gMainthread_Loopcount;
+
         if (hubData_rxEvent)
         {
             // adcm::Log::Verbose() << "[EVENT] DataFusion Hub Data received";
+
             while (!hubData_subscriber.isEventQueueEmpty())
             {
                 auto data = hubData_subscriber.getEvent();
@@ -1214,6 +1168,7 @@ void ThreadReceiveHubData()
                 switch (data->vehicle_class)
                 {
                 case EGO_VEHICLE: // 특장차가 보낸 인지데이터
+
                     fillVehicleData(main_vehicle_temp, data);
                     fillObstacleList(obstacle_list_temp, data);
                     fusionData.vehicle = main_vehicle_temp;
@@ -1364,7 +1319,7 @@ void ThreadReceiveEdgeInfo()
 
 void ThreadKatech()
 {
-    //============== 전역변수인 MapData 생성 =================
+    //==============1.전역변수인 MapData 생성 =================
     adcm::map_data_Objects mapData;
     IDManager id_manager;
     // 한번 생성후 관제에서 인지데이터를 받을때마다 (100ms) 마다 업데이트
@@ -1380,14 +1335,12 @@ void ThreadKatech()
 
     adcm::map_2dListVector map_2dListVector;
     adcm::map_2dListStruct map_2dStruct;
-
     // 빈 맵 생성
     std::vector<adcm::map_2dListVector> map_2d_test(map_n, adcm::map_2dListVector(map_m, map_2dStruct_init));
     adcm::Log::Info() << "mapData 2d info initialized";
 
     adcm::MapData_Provider mapData_provider;
     mapData_provider.init("DataFusion/DataFusion/PPort_map_data");
-
     while (continueExecution)
     {
         if (sendEmptyMap)
@@ -1399,7 +1352,7 @@ void ThreadKatech()
             continue;
         }
         // 수신한 허브 데이터가 없으면 송신 X
-        if (main_vehicle_queue.size_approx() == 0 && sub1_vehicle_queue.size_approx() == 0 && sub2_vehicle_queue.size_approx() == 0)
+        if(main_vehicle_queue.size_approx() == 0 && sub1_vehicle_queue.size_approx() == 0 && sub2_vehicle_queue.size_approx() == 0)
         {
             noDataCounter++;
             if (noDataCounter >= 20)
@@ -1541,13 +1494,13 @@ void ThreadKatech()
                         adcm::Log::Info() << "[new]obstacle_class: " << new_iter->obstacle_class;
 
                         adcm::Log::Info() << "Different obstacle detected : " << ori_iter->obstacle_id;
-                        // 동일하지 않은 장애물은 obstacle_list 에 계속 남긴다
+                        //동일하지 않은 장애물은 obstacle_list 에 계속 남긴다
                         ++new_iter;
                     }
                 }
-                if (identicalObstacleFound == false)
+                if(identicalObstacleFound == false)
                 {
-                    // 이전 장애물이 이번엔 발견되지 않았으므로 추후 id return 필요
+                    //이전 장애물이 이번엔 발견되지 않았으므로 추후 id return 필요
                     removedObstacle.push_back(ori_iter->obstacle_id);
                 }
             }
@@ -1560,7 +1513,7 @@ void ThreadKatech()
                 obstacle_list_filtered.push_back(*new_iter);
             }
             // 삭제된 객체에 대한 id 반납
-            for (auto iter = removedObstacle.begin(); iter != removedObstacle.end(); iter++)
+            for (auto iter = removedObstacle.begin(); iter!=removedObstacle.end(); iter++)
             {
                 id_manager.retID(*iter);
             }
@@ -1627,7 +1580,7 @@ void ThreadKatech()
             for (const auto &vehicle : vehicles)
             {
                 if (vehicle->timestamp != 0)
-                    find4VerticesVehicle(*vehicle, map_2d_test);
+                    find4VerticesVehicle(*vehicle);
             }
 
             //==============7. 현재까지의 데이터를 adcm mapData 형식으로 재구성해서 업데이트 ================
@@ -1699,14 +1652,6 @@ void ThreadKatech()
             adcm::Log::Info() << "Invalid input data - no map data sent";
             // mapData_provider.send(mapData);
         }
-
-        /*
-        int i = 30;
-        int j = 50;
-        adcm::Log::Info() << "[" << i << "]" << "[" << j << "]" << "obstacle_id : " << mapData.map_2d[i][j].obstacle_id;
-        adcm::Log::Info() << "[" << i << "]" << "[" << j << "]" << "vehicle_class : " << mapData.map_2d[i][j].vehicle_class;
-        adcm::Log::Info() << "[" << i << "]" << "[" << j << "]" << "road_z : " << mapData.map_2d[i][j].road_z;
-        */
     }
 }
 

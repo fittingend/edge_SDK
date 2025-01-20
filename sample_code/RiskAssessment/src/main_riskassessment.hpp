@@ -50,5 +50,6 @@ enum HazardClass
     SCENARIO_4,
     SCENARIO_5,
     SCENARIO_6,
-    SCENARIO_7
+    SCENARIO_7,
+    SCENARIO_8
 };
