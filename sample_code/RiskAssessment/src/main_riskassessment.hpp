@@ -8,7 +8,7 @@
 
 typedef struct
 {
-    long x, y;
+    double x, y;
 } Point2D; 
 
 enum ObstacleClass
@@ -19,17 +19,6 @@ enum ObstacleClass
     PEDESTRIAN,
     STRUCTURE
 };
-/*
-enum VehicleClass
-{
-    EGO_VEHICLE,
-    SUB_VEHICLE_1,
-    SUB_VEHICLE_2,
-    SUB_VEHICLE_3,
-    SUB_VEHICLE_4,
-    NO_VEHICLE
-};
-*/
 
 enum VehicleClass
 {
