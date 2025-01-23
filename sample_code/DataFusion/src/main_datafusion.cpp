@@ -52,8 +52,8 @@
 #include <string>
 #include <vector>
 
-#define NATS_TEST
-#ifdef NATS_TEST
+#define NATS
+#ifdef NATS
 #include "./NATS_IMPLEMENTATION/NatsConnManager.h"
 #define HMI_SERVER_URL "https://nats.beyless.com"
 
@@ -1712,6 +1712,13 @@ int main(int argc, char *argv[])
     adcm::Log::Info() << "Ok, let's produce some DataFusion data...";
     adcm::Log::Info() << "SDK release_241008_interface v2.0";
     adcm::Log::Info() << "DataFusion Build 250109";
+#ifdef NATS
+    // Code to execute if NATS is defined
+    adcm::Log::Info() << "NATS ON";
+#else
+    // Code to execute if NATS is not defined
+     adcm::Log::Info() << "NATS OFF";
+#endif    
     thread_list.push_back(std::thread(ThreadReceiveHubData));
     thread_list.push_back(std::thread(ThreadReceiveWorkInfo));
     thread_list.push_back(std::thread(ThreadMonitor));

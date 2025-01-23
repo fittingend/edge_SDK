@@ -52,12 +52,12 @@ IDManager id_manager; // 장애물 ID 부여 및 반환
 
 enum VehicleClass
 {
-    EGO_VEHICLE = 240,
-    SUB_VEHICLE_1 = 1,
-    SUB_VEHICLE_2 = 2,
-    SUB_VEHICLE_3 = 3,
-    SUB_VEHICLE_4 = 4,
-    NO_VEHICLE = 5
+    EGO_VEHICLE = 0xF0,
+    SUB_VEHICLE_1 = 0x00,
+    SUB_VEHICLE_2 = 0x01,
+    SUB_VEHICLE_3 = 0x02,
+    SUB_VEHICLE_4 = 0x03,
+    NO_VEHICLE = 0x04
 };
 
 struct Point2D

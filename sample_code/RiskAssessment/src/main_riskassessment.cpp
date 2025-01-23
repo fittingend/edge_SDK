@@ -53,6 +53,7 @@
 #include <csignal>
 #include <stdio.h>
 #include <unordered_set>
+#include <mutex>
 
 #include <ara/com/e2exf/status_handler.h>
 #include <ara/exec/execution_client.h>
@@ -70,7 +71,7 @@
 //추후에 수정 필요 특장차 휠의 지름 (미터단위) - 28인치로 우선 설정
 //================1. global variables=========================
 std::vector<adcm::map_2dListVector> map_2d;
-
+std::mutex mtx;
 obstacleListVector obstacle_list_temp;
 adcm::vehicleListStruct ego_vehicle_temp, sub_vehicle_1_temp, sub_vehicle_2_temp, sub_vehicle_3_temp, sub_vehicle_4_temp;
 doubleVector position_x;
@@ -95,7 +96,6 @@ std::atomic_uint gMainthread_Loopcount{0};
 #include <fstream>  // Required for file handling
 #include <filesystem>
 
-std::mutex mtx; // 뮤텍스 선언
 bool firstTime = true;
 natsStatus s = NATS_OK;
 std::vector<const char*> subject = {"test1.*", "test2.*"};
@@ -324,8 +324,8 @@ void gpsToMapcoordinate(routeVector& route)
         adcm::Log::Info() << "utm_x:" << utm_x;
         adcm::Log::Info() << "utm_y:" << utm_y;
 
-        position_x[count]= (utm_x * cos(angle_radians) - utm_y * sin(angle_radians) - mapOrigin_x) * M_TO_10CM_PRECISION;
-        position_y[count] = (utm_x * sin(angle_radians) + utm_y * cos(angle_radians) - mapOrigin_y) * M_TO_10CM_PRECISION;
+        position_x[count]= static_cast<int>((utm_x * cos(angle_radians) - utm_y * sin(angle_radians) - mapOrigin_x) * M_TO_10CM_PRECISION);
+        position_y[count] = static_cast<int>((utm_x * sin(angle_radians) + utm_y * cos(angle_radians) - mapOrigin_y) * M_TO_10CM_PRECISION);
 
         adcm::Log::Info() << "경로생성 값 gpsToMapcoordinate 좌표변환 before (" << route[count].latitude << " , " << route[count].longitude << ")";
         adcm::Log::Info() << "경로생성 값 gpsToMapcoordinate 좌표변환 after (" << position_x[count] << " , " << position_y[count] << ")";
@@ -773,35 +773,40 @@ void ThreadReceiveBuildPath()
                         adcm::Log::Verbose() << "move_type : " << itr->move_type;
                         adcm::Log::Verbose() << "job_type : " << itr->job_type;
                         adcm::Log::Verbose() << "size : " << itr->size;
-
+                        
                         auto route = itr->route;
-
-                        if (isRouteValid(route))
+                        if(!route.empty()) 
                         {
-                            INFO("Valid 한 경로 수신 > 좌표전환 진행");
-                            position_x.clear();
-                            position_y.clear();
-                            //새로운 경로를 받으면 예전 변환값이 담긴 position_x 와 position_y 초기화
-                            gpsToMapcoordinate(route);
-                        }
-                        else
-                        {
-                            INFO("Invalid 한 경로 수신 > do nothing");
-                        }
+                            if (itr->vehicle_class == EGO_VEHICLE)
+                            {   
+                                if (isRouteValid(route))
+                                {
+                                    INFO("특장차의 경로가 valid 함 => 좌표전환 진행");
+                                    mtx.lock();
+                                    position_x.clear();
+                                    position_y.clear();
+                                    //새로운 경로를 받으면 예전 변환값이 담긴 position_x 와 position_y 초기화
+                                    gpsToMapcoordinate(route);
+                                    mtx.unlock();
+                                }
+                                else
+                                {
+                                    INFO("특장차의 경로가 invalid 함 => do nothing");
+                                }   
+                            }
 
-                        if(!route.empty()) {
                             adcm::Log::Verbose() << "=== route ===";
                             for(auto itr = route.begin(); itr != route.end(); ++itr) {
                                 adcm::Log::Verbose() << "route.latitude : "<< itr->latitude;
                                 adcm::Log::Verbose() << "route.longitude : "<< itr->longitude;
                                 adcm::Log::Verbose() << "route.delta_t : "<< itr->delta_t;
                             }
-                        } else {
-                            adcm::Log::Verbose() << "route Vector empty!!! ";
+                        }
+                        else 
+                        {
+                            adcm::Log::Info() << "route Vector empty!!! ";
                         }
                     }
-                } else {
-                    adcm::Log::Verbose() << "Path Vector empty!!! ";
                 }       
             }
         }
@@ -1493,6 +1498,13 @@ int main(int argc, char* argv[])
     adcm::Log::Info() << "Ok, let's produce some RiskAssessment data...";
     adcm::Log::Info() << "SDK release_250102_interface v2.0";
     adcm::Log::Info() << "RASS binary built on 250121";
+#ifdef NATS
+    // Code to execute if NATS is defined
+    adcm::Log::Info() << "NATS ON";
+#else
+    // Code to execute if NATS is not defined
+     adcm::Log::Info() << "NATS OFF";
+#endif    
     thread_list.push_back(std::thread(ThreadReceiveMapData));
     thread_list.push_back(std::thread(ThreadReceiveBuildPathTest));
     thread_list.push_back(std::thread(ThreadReceiveBuildPath));
