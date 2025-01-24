@@ -300,7 +300,17 @@ bool isRouteValid(routeVector& route)
     }
     return true; // Return true if all values meet the condition
 }
-
+void checkRange(Point2D &point)
+{
+    if (point.x < 0)
+        point.x = 0;
+    if (point.y < 0)
+        point.y = 0;
+    if (point.x > map_n)
+        point.x = map_n - 1;
+    if (point.y > map_m)
+        point.y = map_m - 1;
+}
 
 void gpsToMapcoordinate(routeVector& route)
 {
@@ -323,10 +333,12 @@ void gpsToMapcoordinate(routeVector& route)
         utm_y -= origin_y;
         adcm::Log::Info() << "utm_x:" << utm_x;
         adcm::Log::Info() << "utm_y:" << utm_y;
-
-        position_x[count]= static_cast<int>((utm_x * cos(angle_radians) - utm_y * sin(angle_radians) - mapOrigin_x) * M_TO_10CM_PRECISION);
-        position_y[count] = static_cast<int>((utm_x * sin(angle_radians) + utm_y * cos(angle_radians) - mapOrigin_y) * M_TO_10CM_PRECISION);
-
+        Point2D point;
+        point.x = (utm_x * cos(angle_radians) - utm_y * sin(angle_radians) - mapOrigin_x) * M_TO_10CM_PRECISION;
+        point.y = (utm_x * sin(angle_radians) + utm_y * cos(angle_radians) - mapOrigin_y) * M_TO_10CM_PRECISION;
+        checkRange(point);
+        position_x[count] = point.x;
+        position_y[count] = point.y;
         adcm::Log::Info() << "경로생성 값 gpsToMapcoordinate 좌표변환 before (" << route[count].latitude << " , " << route[count].longitude << ")";
         adcm::Log::Info() << "경로생성 값 gpsToMapcoordinate 좌표변환 after (" << position_x[count] << " , " << position_y[count] << ")";
     }
