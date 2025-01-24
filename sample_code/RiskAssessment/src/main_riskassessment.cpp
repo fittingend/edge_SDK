@@ -694,52 +694,6 @@ void ThreadReceiveMapData()
         }
     }
 }
-void ThreadReceiveBuildPathTest()
-{
-    adcm::Log::Info() << "RiskAssessment ThreadReceiveBuildPathTest";
-    adcm::BuildPathTest_Subscriber buildPathTest_subscriber;
-    buildPathTest_subscriber.init("RiskAssessment/RiskAssessment/RPort_build_path_test");
-    INFO("Thread ThreadReceiveBuildPathTest start...");
-
-    while (continueExecution) {
-        gMainthread_Loopcount++;
-        VERBOSE("[RiskAssessment] Application loop");
-        bool buildPathTest_rxEvent = buildPathTest_subscriber.waitEvent(100); // wait event
-
-        if(buildPathTest_rxEvent) {
-            adcm::Log::Info() << "[EVENT] RiskAssessment Build Path Test received";
-
-            while(!buildPathTest_subscriber.isEventQueueEmpty()) {
-                auto data = buildPathTest_subscriber.getEvent();
-                gReceivedEvent_count_build_path_test++;
-
-                auto size = data->size;
-                auto utm_x = data->utm_x;
-                auto utm_y = data->utm_y;
-
-                adcm::Log::Verbose() << "size : " << size;
-                
-                if(!utm_x.empty()) {
-                    adcm::Log::Verbose() << "=== utm_x ===";
-                    for(auto itr = utm_x.begin(); itr != utm_x.end(); ++itr) {
-                        adcm::Log::Verbose() << *itr;
-                    }
-                } else {
-                    adcm::Log::Verbose() << "utm_x Vector empty!!! ";
-                }
-
-                if(!utm_y.empty()) {
-                    adcm::Log::Verbose() << "=== utm_y ===";
-                    for(auto itr = utm_y.begin(); itr != utm_y.end(); ++itr) {
-                        adcm::Log::Verbose() << *itr;
-                    }
-                } else {
-                    adcm::Log::Verbose() << "utm_y Vector empty!!! ";
-                }
-            }
-        }
-    }
-}
 void ThreadReceiveBuildPath()
 {
     adcm::Log::Info() << "RiskAssessment ThreadReceiveBuildPath";
@@ -1506,7 +1460,6 @@ int main(int argc, char* argv[])
      adcm::Log::Info() << "NATS OFF";
 #endif    
     thread_list.push_back(std::thread(ThreadReceiveMapData));
-    thread_list.push_back(std::thread(ThreadReceiveBuildPathTest));
     thread_list.push_back(std::thread(ThreadReceiveBuildPath));
     thread_list.push_back(std::thread(ThreadMonitor));
     thread_list.push_back(std::thread(ThreadKatech));
