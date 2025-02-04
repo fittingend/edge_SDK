@@ -1409,10 +1409,10 @@ void ThreadKatech()
                                              obstacle_list_sub2, main_vehicle, sub1_vehicle, sub2_vehicle);
         order.pop();
 
-        // for (auto obstacle : obstacle_list)
-        // {
-        //     adcm::Log::Info() << obstacle.obstacle_class << ": [" << obstacle.fused_position_x << ", " << obstacle.fused_position_y << "]";
-        // }
+        for (auto obstacle : obstacle_list)
+        {
+            adcm::Log::Info() << obstacle.obstacle_class << ": [" << obstacle.fused_position_x << ", " << obstacle.fused_position_y << "]";
+        }
 
         adcm::Log::Info() << "장애물 리스트 융합 및 ID 부여 완료";
         adcm::Log::Info() << "장애물 리스트 사이즈: " << obstacle_list.size();
@@ -1710,8 +1710,8 @@ int main(int argc, char *argv[])
     adcm::Log::Info() << "DataFusion: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
     adcm::Log::Info() << "Ok, let's produce some DataFusion data...";
-    adcm::Log::Info() << "SDK release_241008_interface v2.0";
-    adcm::Log::Info() << "DataFusion Build 250109";
+    adcm::Log::Info() << "SDK release_250102_interface v2.0";
+    adcm::Log::Info() << "DataFusion Build 250204";
 #ifdef NATS
     // Code to execute if NATS is defined
     adcm::Log::Info() << "NATS ON";
