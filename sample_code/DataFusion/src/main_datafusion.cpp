@@ -274,9 +274,11 @@ void NatsSend(const adcm::map_data_Objects &mapData)
         std::string mapDataStr = convertMapDataToJsonString(mapData);
         adcm::Log::Info() << "NATS conversion done!";
         natsManager->addJsonData("mapData", mapDataStr);
+        adcm::Log::Info() << "NATS make Json Data!";
         natsManager->NatsPublishJson(pubSubject);
-        adcm::Log::Info() << "NatsPublishJson";
-        saveToJsonFile("mapData", mapDataStr, mapData_count);
+        adcm::Log::Info() << "NATS publish Json!"; //publish가 오래 걸림
+        // saveToJsonFile("mapData", mapDataStr, mapData_count);
+        adcm::Log::Info() << "NATS save Json file!";
     }
     else
     {
@@ -465,7 +467,6 @@ void generateRoadZValue(VehicleData target_vehicle, std::vector<adcm::map_2dList
 }
 */
 
-
 void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, VehicleData &vehicle)
 {
     // Collect all points in an array
@@ -474,7 +475,8 @@ void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, Vehi
     // Find min and max values for x and y
     double min_x = points[0].x, max_x = points[0].x;
     double min_y = points[0].y, max_y = points[0].y;
-    for (const auto& p : points) {
+    for (const auto &p : points)
+    {
         min_x = std::min(min_x, p.x);
         max_x = std::max(max_x, p.x);
         min_y = std::min(min_y, p.y);
@@ -482,29 +484,36 @@ void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, Vehi
     }
 
     Point2D index;
-    //Ray-Casting algorithm 
-    for (index.x = min_x; index.x <= max_x; ++index.x) {
-        for (index.y = min_y; index.y <= max_y; ++index.y) {
+    // Ray-Casting algorithm
+    for (index.x = min_x; index.x <= max_x; ++index.x)
+    {
+        for (index.y = min_y; index.y <= max_y; ++index.y)
+        {
             int cross = 0;
-            // 해당 사변형은 4변을 가지므로 i 
-            for (int i = 0; i < 4; i++) {
-                //As the loop variable i iterates from 0 to 3, j will always represent the next vertex in the sequence
-                int j = (i + 1) % 4; 
-                if ((points[i].y > index.y) != (points[j].y > index.y)) {
-                    //교차점을 구한다
-                    double meetX = (points[j].x - points[i].x) * (index.y - points[i].y) / 
-                                   (points[j].y - points[i].y) + points[i].x;
-                    //교차점 meetX 가 검증을 진행하는 인덱스의 x 좌표보다 크면 교차발생 cross++
-                    if (index.x < meetX) cross++;
+            // 해당 사변형은 4변을 가지므로 i
+            for (int i = 0; i < 4; i++)
+            {
+                // As the loop variable i iterates from 0 to 3, j will always represent the next vertex in the sequence
+                int j = (i + 1) % 4;
+                if ((points[i].y > index.y) != (points[j].y > index.y))
+                {
+                    // 교차점을 구한다
+                    double meetX = (points[j].x - points[i].x) * (index.y - points[i].y) /
+                                       (points[j].y - points[i].y) +
+                                   points[i].x;
+                    // 교차점 meetX 가 검증을 진행하는 인덱스의 x 좌표보다 크면 교차발생 cross++
+                    if (index.x < meetX)
+                        cross++;
                 }
             }
-            //교차횟수 cross가 짝수이면 점은 외부,
-            //교차횟수 cross가 홀수이면 점은 내부에 있음 
-            if (cross % 2 != 0) {
+            // 교차횟수 cross가 짝수이면 점은 외부,
+            // 교차횟수 cross가 홀수이면 점은 내부에 있음
+            if (cross % 2 != 0)
+            {
                 vehicle.map_2d_location.push_back(index);
-                //map_2d_test[index.x][index.y].vehicle_class = vehicle.vehicle_class;
-                // TO DO: 현재는 물체가 있는 index 는 road_z 값 1로 설정 (아무것도 없으면 0)
-                //map_2d_test[index.x][index.y].road_z = 1;
+                // map_2d_test[index.x][index.y].vehicle_class = vehicle.vehicle_class;
+                //  TO DO: 현재는 물체가 있는 index 는 road_z 값 1로 설정 (아무것도 없으면 0)
+                // map_2d_test[index.x][index.y].road_z = 1;
             }
         }
     }
@@ -512,7 +521,8 @@ void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, Vehi
 
 void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std::vector<ObstacleData>::iterator iter)
 {
-    if (iter == std::vector<ObstacleData>::iterator()) return; // Ensure valid iterator
+    if (iter == std::vector<ObstacleData>::iterator())
+        return; // Ensure valid iterator
 
     // Collect all points in an array
     Point2D points[] = {p0, p1, p2, p3};
@@ -520,7 +530,8 @@ void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std:
     // Find min and max values for x and y
     double min_x = points[0].x, max_x = points[0].x;
     double min_y = points[0].y, max_y = points[0].y;
-    for (const auto& p : points) {
+    for (const auto &p : points)
+    {
         min_x = std::min(min_x, p.x);
         max_x = std::max(max_x, p.x);
         min_y = std::min(min_y, p.y);
@@ -529,22 +540,29 @@ void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std:
 
     Point2D index;
 
-    for (index.x = min_x; index.x <= max_x; ++index.x) {
-        for (index.y = min_y; index.y <= max_y; ++index.y) {
+    for (index.x = min_x; index.x <= max_x; ++index.x)
+    {
+        for (index.y = min_y; index.y <= max_y; ++index.y)
+        {
             int cross = 0;
-            for (int i = 0; i < 4; i++) {
+            for (int i = 0; i < 4; i++)
+            {
                 int j = (i + 1) % 4;
-                if ((points[i].y > index.y) != (points[j].y > index.y)) {
-                    double meetX = (points[j].x - points[i].x) * (index.y - points[i].y) / 
-                                   (points[j].y - points[i].y) + points[i].x;
-                    if (index.x < meetX) cross++;
+                if ((points[i].y > index.y) != (points[j].y > index.y))
+                {
+                    double meetX = (points[j].x - points[i].x) * (index.y - points[i].y) /
+                                       (points[j].y - points[i].y) +
+                                   points[i].x;
+                    if (index.x < meetX)
+                        cross++;
                 }
             }
-            if (cross % 2 != 0) {
+            if (cross % 2 != 0)
+            {
                 iter->map_2d_location.push_back(index);
-                //map_2d_test[index.x][index.y].obstacle_id = iter->obstacle_id;
-                // TO DO: 현재는 물체가 있는 index 는 road_z 값 1로 설정 (아무것도 없으면 0)
-                //map_2d_test[index.x][index.y].road_z = 1;
+                // map_2d_test[index.x][index.y].obstacle_id = iter->obstacle_id;
+                //  TO DO: 현재는 물체가 있는 index 는 road_z 값 1로 설정 (아무것도 없으면 0)
+                // map_2d_test[index.x][index.y].road_z = 1;
             }
         }
     }
@@ -603,7 +621,7 @@ void find4VerticesVehicle(VehicleData &target_vehicle)
         half_x = MAIN_VEHICLE_SIZE_X / 2;
         half_y = MAIN_VEHICLE_SIZE_Y / 2;
     }
-    
+
     else
     {
         half_x = SUB_VEHICLE_SIZE_X / 2;
@@ -614,11 +632,11 @@ void find4VerticesVehicle(VehicleData &target_vehicle)
     LU.y = target_vehicle.position_y + sin(theta) * (-half_x) + cos(theta) * (half_y);
 
     // Top-right (RU)
-    RU.x = target_vehicle.position_x + cos(theta) * (half_x) - sin(theta) * (half_y);
+    RU.x = target_vehicle.position_x + cos(theta) * (half_x)-sin(theta) * (half_y);
     RU.y = target_vehicle.position_y + sin(theta) * (half_x) + cos(theta) * (half_y);
 
     // Bottom-right (RL)
-    RL.x = target_vehicle.position_x + cos(theta) * (half_x) - sin(theta) * (-half_y);
+    RL.x = target_vehicle.position_x + cos(theta) * (half_x)-sin(theta) * (-half_y);
     RL.y = target_vehicle.position_y + sin(theta) * (half_x) + cos(theta) * (-half_y);
 
     // Bottom-left (LL)
@@ -630,10 +648,9 @@ void find4VerticesVehicle(VehicleData &target_vehicle)
     checkRange(RL);
     checkRange(LL);
 
-    //generateRoadZValue(target_vehicle, map_2d_test);
-    //TO DO
+    // generateRoadZValue(target_vehicle, map_2d_test);
+    // TO DO
     generateOccupancyIndex(LU, RU, RL, LL, target_vehicle);
-
 }
 void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered)
 {
@@ -651,11 +668,11 @@ void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered)
         LU.y = obstacle_position_y + sin(theta) * (-half_x) + cos(theta) * (half_y);
 
         // Top-right (RU)
-        RU.x = obstacle_position_x + cos(theta) * (half_x) - sin(theta) * (half_y);
+        RU.x = obstacle_position_x + cos(theta) * (half_x)-sin(theta) * (half_y);
         RU.y = obstacle_position_y + sin(theta) * (half_x) + cos(theta) * (half_y);
 
         // Bottom-right (RL)
-        RL.x = obstacle_position_x + cos(theta) * (half_x) - sin(theta) * (-half_y);
+        RL.x = obstacle_position_x + cos(theta) * (half_x)-sin(theta) * (-half_y);
         RL.y = obstacle_position_y + sin(theta) * (half_x) + cos(theta) * (-half_y);
 
         // Bottom-left (LL)
@@ -1198,16 +1215,16 @@ void ThreadReceiveHubData()
                     adcm::Log::Info() << ++receiveVer << "번째 허브 데이터 수신 완료";
                     break;
 
-                // case 255: // 보조차1이 보낸 인지데이터
-                //     data->vehicle_class = SUB_VEHICLE_1;
-                //     fillVehicleData(sub1_vehicle_temp, data);
-                //     fillObstacleList(obstacle_list_temp, data);
-                //     fusionData.vehicle = sub1_vehicle_temp;
-                //     fusionData.obstacle_list = obstacle_list_temp;
-                //     sub1_vehicle_queue.enqueue(fusionData);
-                //     order.push(SUB_VEHICLE_1);
-                //     adcm::Log::Info() << ++receiveVer << "번째 허브 데이터 수신 완료";
-                //     break;
+                    // case 255: // 보조차1이 보낸 인지데이터
+                    //     data->vehicle_class = SUB_VEHICLE_1;
+                    //     fillVehicleData(sub1_vehicle_temp, data);
+                    //     fillObstacleList(obstacle_list_temp, data);
+                    //     fusionData.vehicle = sub1_vehicle_temp;
+                    //     fusionData.obstacle_list = obstacle_list_temp;
+                    //     sub1_vehicle_queue.enqueue(fusionData);
+                    //     order.push(SUB_VEHICLE_1);
+                    //     adcm::Log::Info() << ++receiveVer << "번째 허브 데이터 수신 완료";
+                    //     break;
 
                 default:
                     adcm::Log::Info() << "data received but belongs to no vehicle hence discarded";
@@ -1299,7 +1316,7 @@ void ThreadReceiveEdgeInfo()
     edgeInformation_subscriber.init("DataFusion/DataFusion/RPort_edge_information");
     INFO("ThreadReceiveEdgeInfo start...");
 
- while (continueExecution)
+    while (continueExecution)
     {
         bool edgeInfo_rxEvent = edgeInformation_subscriber.waitEvent(10000);
 
@@ -1352,7 +1369,7 @@ void ThreadKatech()
             continue;
         }
         // 수신한 허브 데이터가 없으면 송신 X
-        if(main_vehicle_queue.size_approx() == 0 && sub1_vehicle_queue.size_approx() == 0 && sub2_vehicle_queue.size_approx() == 0)
+        if (main_vehicle_queue.size_approx() == 0 && sub1_vehicle_queue.size_approx() == 0 && sub2_vehicle_queue.size_approx() == 0)
         {
             noDataCounter++;
             if (noDataCounter >= 20)
@@ -1643,9 +1660,12 @@ void ThreadKatech()
             std::chrono::duration<double, std::milli> duration = endTime - startTime;
             mapVer++;
             adcm::Log::Info() << mapVer << "번째 맵데이터 전송 완료";
-            adcm::Log::Info() << "전송에 걸린 시간: " << duration.count() << " ms.";
-            // adcm::Log::Info() << "mapData send";
-            // NatsSend(mapData);
+            adcm::Log::Info() << "맵데이터 전송에 걸린 시간: " << duration.count() << " ms.";
+            startTime = std::chrono::high_resolution_clock::now();
+            NatsSend(mapData);
+            endTime = std::chrono::high_resolution_clock::now();
+            duration = endTime - startTime;
+            adcm::Log::Info() << "Nats 전송에 걸린 시간: " << duration.count() << " ms.";
         }
         else
         {
@@ -1711,14 +1731,14 @@ int main(int argc, char *argv[])
 #endif
     adcm::Log::Info() << "Ok, let's produce some DataFusion data...";
     adcm::Log::Info() << "SDK release_250102_interface v2.0";
-    adcm::Log::Info() << "DataFusion Build 250204";
+    adcm::Log::Info() << "DataFusion Build 250205";
 #ifdef NATS
     // Code to execute if NATS is defined
     adcm::Log::Info() << "NATS ON";
 #else
     // Code to execute if NATS is not defined
-     adcm::Log::Info() << "NATS OFF";
-#endif    
+    adcm::Log::Info() << "NATS OFF";
+#endif
     thread_list.push_back(std::thread(ThreadReceiveHubData));
     thread_list.push_back(std::thread(ThreadReceiveWorkInfo));
     thread_list.push_back(std::thread(ThreadMonitor));
