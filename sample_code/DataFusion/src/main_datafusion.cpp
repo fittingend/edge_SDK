@@ -51,6 +51,7 @@
 
 #include <string>
 #include <vector>
+#include <set>
 
 #define NATS
 #ifdef NATS
@@ -100,6 +101,9 @@ std::string convertMapDataToJsonString(const adcm::map_data_Objects &mapData)
     std::ostringstream oss; // Use a string stream for easier manipulation
     oss << "{\n";           // Start the JSON object
 
+    // Add the new "timestamp" field
+    oss << "    \"timestamp\": " << mapData.timestamp << ",\n";
+    
     // Convert map_2d to JSON
     oss << "    \"map_2d\": [\n";
     for (size_t i = 0; i < mapData.map_2d.size(); ++i)
@@ -432,7 +436,7 @@ void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleDa
             iter->fused_position_y = rand() % 3;
         }
 
-        // adcm::Log::Info() << "장애물 relativeToMap 좌표변환 after (" << iter->fused_position_x << " , " << iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
+        adcm::Log::Info() << "장애물 relativeToMap 좌표변환 after (" << iter->fused_position_x << " , " << iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
     }
 }
 
@@ -640,8 +644,8 @@ void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered)
     for (auto iter = obstacle_list_filtered.begin(); iter < obstacle_list_filtered.end(); iter++)
     {
         Point2D LU, RU, RL, LL;
-        double half_x = iter->fused_cuboid_x / 2;
-        double half_y = iter->fused_cuboid_y / 2;
+        double half_x = iter->fused_cuboid_x * M_TO_10CM_PRECISION / 2;
+        double half_y = iter->fused_cuboid_y * M_TO_10CM_PRECISION / 2;
         double obstacle_position_x = iter->fused_position_x;
         double obstacle_position_y = iter->fused_position_y;
         double theta = iter->fused_heading_angle * M_PI / 180;
@@ -1173,6 +1177,7 @@ void ThreadReceiveHubData()
                     fillObstacleList(obstacle_list_temp, data);
                     fusionData.vehicle = main_vehicle_temp;
                     fusionData.obstacle_list = obstacle_list_temp;
+                    adcm::Log::Info() << "수신 장애물 리스트 사이즈" <<fusionData.obstacle_list.size();
                     main_vehicle_queue.enqueue(fusionData);
                     order.push(EGO_VEHICLE);
                     adcm::Log::Info() << ++receiveVer << "번째 허브 데이터 수신 완료";
@@ -1183,6 +1188,7 @@ void ThreadReceiveHubData()
                     fillObstacleList(obstacle_list_temp, data);
                     fusionData.vehicle = sub1_vehicle_temp;
                     fusionData.obstacle_list = obstacle_list_temp;
+                    adcm::Log::Info() << "수신 장애물 리스트 사이즈" <<fusionData.obstacle_list.size();
                     sub1_vehicle_queue.enqueue(fusionData);
                     order.push(SUB_VEHICLE_1);
                     adcm::Log::Info() << ++receiveVer << "번째 허브 데이터 수신 완료";
@@ -1193,6 +1199,7 @@ void ThreadReceiveHubData()
                     fillObstacleList(obstacle_list_temp, data);
                     fusionData.vehicle = sub2_vehicle_temp;
                     fusionData.obstacle_list = obstacle_list_temp;
+                    adcm::Log::Info() << "수신 장애물 리스트 사이즈" <<fusionData.obstacle_list.size();
                     sub2_vehicle_queue.enqueue(fusionData);
                     order.push(SUB_VEHICLE_2);
                     adcm::Log::Info() << ++receiveVer << "번째 허브 데이터 수신 완료";
@@ -1628,15 +1635,13 @@ void ThreadKatech()
                 }
                 mapData.map_2d.push_back(map_2dListVector);
             }
-            // adcm::Log::Info() << "DATA FUSION DONE";
-            // adcm::Log::Info() << "map_2d pushed to mapData";
             adcm::Log::Info() << "mapdata 융합 완료";
 
-            // map_data_object 의 생성시간 추가
-            // auto now = std::chrono::system_clock::now();
-            // auto mapData_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-            // adcm::Log::Info() << "Current timestamp in milliseconds: " << mapData_timestamp;
-            // mapData.timestamp = mapData_timestamp;
+            //map_data_object 의 생성시간 추가
+            auto now = std::chrono::system_clock::now();
+            auto mapData_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+            adcm::Log::Info() << "Current timestamp in milliseconds: " << mapData_timestamp;
+            mapData.timestamp = mapData_timestamp;
 
             mapData_provider.send(mapData);
             auto endTime = std::chrono::high_resolution_clock::now();
@@ -1644,8 +1649,12 @@ void ThreadKatech()
             mapVer++;
             adcm::Log::Info() << mapVer << "번째 맵데이터 전송 완료";
             adcm::Log::Info() << "전송에 걸린 시간: " << duration.count() << " ms.";
-            // adcm::Log::Info() << "mapData send";
-            // NatsSend(mapData);
+
+#ifdef NATS
+            NatsSend(mapData);
+            adcm::Log::Info() << "NatsSend";
+
+#endif
         }
         else
         {

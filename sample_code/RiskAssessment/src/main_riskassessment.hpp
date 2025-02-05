@@ -22,11 +22,11 @@ enum ObstacleClass
 enum VehicleClass
 {
     EGO_VEHICLE = 0xF0,
-    SUB_VEHICLE_1 = 0x00,
-    SUB_VEHICLE_2 = 0x01,
-    SUB_VEHICLE_3 = 0x02,
-    SUB_VEHICLE_4 = 0x03,
-    NO_VEHICLE = 0x04
+    SUB_VEHICLE_1 = 0x01,
+    SUB_VEHICLE_2 = 0x02,
+    SUB_VEHICLE_3 = 0x03,
+    SUB_VEHICLE_4 = 0x04,
+    NO_VEHICLE = 0x05
 };
 
 enum HazardClass
