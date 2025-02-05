@@ -315,17 +315,18 @@ namespace adcm
             jsonObj.stringify(payload);
             dataLen = static_cast<int>(payload.str().size());
 
-            // std::cout << " [KBJ] Publish data : " << payload.str().c_str() <<  ", length : " << dataLen << std::endl;
+            adcm::Log::Info() << " [NATS] Publish data : " << payload.str().c_str() << ", length : " << dataLen;
+            adcm::Log::Info() << " [NATS] subject: " << subject;
 
             if (subject != NULL)
             {
                 s = natsConnection_Publish(conn, subject, static_cast<const void *>(payload.str().c_str()), dataLen);
-                adcm::Log::Info() << "[NATS]subject publish...";
+                adcm::Log::Info() << "[NATS] subject publish...";
             }
             else
             {
                 s = NATS_ERR;
-                adcm::Log::Info() << "[NATS]subject is null...";
+                adcm::Log::Info() << "[NATS] subject is null...";
             }
 
             if (s == NATS_OK)

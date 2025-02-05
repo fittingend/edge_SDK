@@ -268,7 +268,7 @@ void NatsSend(const adcm::map_data_Objects &mapData)
     }
     if (s == NATS_OK)
     {
-        const char *pubSubject = "test1.JSON";
+        const char *pubSubject = "mapdata.map";
         natsManager->ClearJsonData();
         adcm::Log::Info() << "NATS conversion start!";
         std::string mapDataStr = convertMapDataToJsonString(mapData);
@@ -278,7 +278,7 @@ void NatsSend(const adcm::map_data_Objects &mapData)
         natsManager->NatsPublishJson(pubSubject);
         adcm::Log::Info() << "NATS publish Json!"; //publish가 오래 걸림
         // saveToJsonFile("mapData", mapDataStr, mapData_count);
-        adcm::Log::Info() << "NATS save Json file!";
+        // adcm::Log::Info() << "NATS save Json file!";
     }
     else
     {
@@ -657,8 +657,8 @@ void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered)
     for (auto iter = obstacle_list_filtered.begin(); iter < obstacle_list_filtered.end(); iter++)
     {
         Point2D LU, RU, RL, LL;
-        double half_x = iter->fused_cuboid_x / 2;
-        double half_y = iter->fused_cuboid_y / 2;
+        double half_x = iter->fused_cuboid_x / 2 * M_TO_10CM_PRECISION;
+        double half_y = iter->fused_cuboid_y / 2 * M_TO_10CM_PRECISION;
         double obstacle_position_x = iter->fused_position_x;
         double obstacle_position_y = iter->fused_position_y;
         double theta = iter->fused_heading_angle * M_PI / 180;
@@ -1026,15 +1026,15 @@ std::vector<ObstacleData> mergeAndCompareLists(
             // adcm::Log::Info() << "융합: 거리배열 생성";
             auto assignment = solveAssignment(distMatrix);
             adcm::Log::Info() << "융합: Munkres Algorithm 적용: " << assignment.size();
-            for (int i = 0; i < assignment.size(); i++)
-                adcm::Log::Info() << "assignment" << i << ": " << assignment[i];
+            // for (int i = 0; i < assignment.size(); i++)
+            //     adcm::Log::Info() << "assignment" << i << ": " << assignment[i];
 
             processFusion(mergedList, previousFusionList, assignment);
             adcm::Log::Info() << "융합: 이전 데이터와 융합 완료";
-            for (auto merge : mergedList)
-            {
-                adcm::Log::Info() << "융합리스트 장애물id: " << merge.obstacle_id;
-            }
+            // for (auto merge : mergedList)
+            // {
+            //     adcm::Log::Info() << "융합리스트 장애물id: " << merge.obstacle_id;
+            // }
             // std::vector<ObstacleData> finalList;
             // assignIDsForNewData(finalList, mergedList, assignment);
             adcm::Log::Info() << "융합: ID부여 완료: " << id_manager.getNum();
@@ -1661,11 +1661,11 @@ void ThreadKatech()
             mapVer++;
             adcm::Log::Info() << mapVer << "번째 맵데이터 전송 완료";
             adcm::Log::Info() << "맵데이터 전송에 걸린 시간: " << duration.count() << " ms.";
-            startTime = std::chrono::high_resolution_clock::now();
+            mapData.map_2d.clear(); //json 데이터 경량화를 위해 map_2d 삭제
             NatsSend(mapData);
             endTime = std::chrono::high_resolution_clock::now();
             duration = endTime - startTime;
-            adcm::Log::Info() << "Nats 전송에 걸린 시간: " << duration.count() << " ms.";
+            adcm::Log::Info() << "맵데이터 + NATS 전송에 걸린 시간: " << duration.count() << " ms.";
         }
         else
         {
@@ -1704,6 +1704,22 @@ void ThreadMonitor()
 
 int main(int argc, char *argv[])
 {
+    // 자동 Build Time 생성
+    time_t timer;
+    struct tm* t;
+    timer = time(NULL);
+    t = localtime(&timer);
+
+    string year = to_string(t -> tm_year-100);
+    string mon = to_string(t -> tm_mon+1);
+    string day = to_string(t -> tm_mday);
+    if(mon.length() == 1)
+        mon.insert(0, "0");
+    if(day.length() == 1)
+        day.insert(0, "0");
+    string b_day = year + mon + day;
+
+
     std::vector<std::thread> thread_list;
     UNUSED(argc);
     UNUSED(argv);
@@ -1731,7 +1747,7 @@ int main(int argc, char *argv[])
 #endif
     adcm::Log::Info() << "Ok, let's produce some DataFusion data...";
     adcm::Log::Info() << "SDK release_250102_interface v2.0";
-    adcm::Log::Info() << "DataFusion Build 250205";
+    adcm::Log::Info() << "DataFusion Build " << b_day;
 #ifdef NATS
     // Code to execute if NATS is defined
     adcm::Log::Info() << "NATS ON";
