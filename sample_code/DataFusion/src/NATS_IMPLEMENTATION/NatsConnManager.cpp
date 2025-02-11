@@ -315,7 +315,7 @@ namespace adcm
             jsonObj.stringify(payload);
             dataLen = static_cast<int>(payload.str().size());
 
-            adcm::Log::Info() << " [NATS] Publish data : " << payload.str().c_str() << ", length : " << dataLen;
+            // adcm::Log::Info() << " [NATS] Publish data : " << payload.str().c_str() << ", length : " << dataLen;
             adcm::Log::Info() << " [NATS] subject: " << subject;
 
             if (subject != NULL)

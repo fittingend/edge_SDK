@@ -49,6 +49,11 @@ using namespace std;
 ///////////////////////////////////////////////////////////////////////
 // 필드 목록
 IDManager id_manager; // 장애물 ID 부여 및 반환
+bool sub1 = false;
+bool sub2 = false;
+
+mutex mtx;
+condition_variable cv;
 
 enum VehicleClass
 {

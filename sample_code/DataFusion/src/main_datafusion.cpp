@@ -57,7 +57,6 @@
 #include "./NATS_IMPLEMENTATION/NatsConnManager.h"
 #define HMI_SERVER_URL "https://nats.beyless.com"
 
-std::mutex mtx; // 뮤텍스 선언
 bool firstTime = true;
 natsStatus s = NATS_OK;
 std::vector<const char *> subject = {"test1.*", "test2.*"};
@@ -254,11 +253,8 @@ void saveToJsonFile(const std::string &key, const std::string &value, int &fileC
     // Increment the file count for the next call
     ++fileCount;
 }
-
-void NatsSend(const adcm::map_data_Objects &mapData)
+void NatsStart()
 {
-    static int mapData_count = 0;
-
     if (firstTime == true)
     {
         adcm::Log::Info() << "NATS first time setup!";
@@ -266,6 +262,10 @@ void NatsSend(const adcm::map_data_Objects &mapData)
         s = natsManager->NatsExecute();
         firstTime = false;
     }
+}
+void NatsSend(const adcm::map_data_Objects &mapData)
+{
+    static int mapData_count = 0;
     if (s == NATS_OK)
     {
         const char *pubSubject = "mapdata.map";
@@ -276,7 +276,7 @@ void NatsSend(const adcm::map_data_Objects &mapData)
         natsManager->addJsonData("mapData", mapDataStr);
         adcm::Log::Info() << "NATS make Json Data!";
         natsManager->NatsPublishJson(pubSubject);
-        adcm::Log::Info() << "NATS publish Json!"; //publish가 오래 걸림
+        adcm::Log::Info() << "NATS publish Json!"; // publish가 오래 걸림
         // saveToJsonFile("mapData", mapDataStr, mapData_count);
         // adcm::Log::Info() << "NATS save Json file!";
     }
@@ -355,7 +355,7 @@ bool checkAllVehicleRange(const std::vector<VehicleData *> &vehicles)
 {
     for (const auto *vehicle : vehicles)
     {
-        adcm::Log::Info() << vehicle->vehicle_class << " 차량 위치: [" << vehicle->position_x << ", " << vehicle->position_y << "]";
+        adcm::Log::Info() << vehicle->vehicle_class << "번 차량 위치: [" << vehicle->position_x << ", " << vehicle->position_y << "]";
         if (vehicle && !checkRange(*vehicle))
         {
             return false;
@@ -1162,7 +1162,7 @@ void ThreadReceiveHubData()
     // INFO("DataFusion .init()");
     // mapData_provider.init("DataFusion/DataFusion/PPort_map_data");
     hubData_subscriber.init("DataFusion/DataFusion/RPort_hub_data");
-    INFO("ThreadReceiveHubData start...");
+    adcm::Log::Info() << "ThreadReceiveHubData start...";
 
     while (continueExecution)
     {
@@ -1190,8 +1190,12 @@ void ThreadReceiveHubData()
                     fillObstacleList(obstacle_list_temp, data);
                     fusionData.vehicle = main_vehicle_temp;
                     fusionData.obstacle_list = obstacle_list_temp;
-                    main_vehicle_queue.enqueue(fusionData);
-                    order.push(EGO_VEHICLE);
+                    {
+                        lock_guard<mutex> lock(mtx);
+                        main_vehicle_queue.enqueue(fusionData);
+                        order.push(EGO_VEHICLE);
+                    }
+                    cv.notify_one();
                     adcm::Log::Info() << ++receiveVer << "번째 허브 데이터 수신 완료";
                     break;
 
@@ -1200,8 +1204,13 @@ void ThreadReceiveHubData()
                     fillObstacleList(obstacle_list_temp, data);
                     fusionData.vehicle = sub1_vehicle_temp;
                     fusionData.obstacle_list = obstacle_list_temp;
-                    sub1_vehicle_queue.enqueue(fusionData);
-                    order.push(SUB_VEHICLE_1);
+                    {
+                        lock_guard<mutex> lock(mtx);
+                        sub1_vehicle_queue.enqueue(fusionData);
+                        order.push(SUB_VEHICLE_1);
+                    }
+                    cv.notify_one();
+
                     adcm::Log::Info() << ++receiveVer << "번째 허브 데이터 수신 완료";
                     break;
 
@@ -1210,8 +1219,13 @@ void ThreadReceiveHubData()
                     fillObstacleList(obstacle_list_temp, data);
                     fusionData.vehicle = sub2_vehicle_temp;
                     fusionData.obstacle_list = obstacle_list_temp;
-                    sub2_vehicle_queue.enqueue(fusionData);
-                    order.push(SUB_VEHICLE_2);
+                    {
+                        lock_guard<mutex> lock(mtx);
+                        sub2_vehicle_queue.enqueue(fusionData);
+                        order.push(SUB_VEHICLE_2);
+                    }
+                    cv.notify_one();
+
                     adcm::Log::Info() << ++receiveVer << "번째 허브 데이터 수신 완료";
                     break;
 
@@ -1244,7 +1258,7 @@ void ThreadReceiveWorkInfo()
     adcm::Log::Info() << "DataFusion ThreadReceiveWorkInfo";
     adcm::WorkInformation_Subscriber workInformation_subscriber;
     workInformation_subscriber.init("DataFusion/DataFusion/RPort_work_information");
-    INFO("ThreadReceiveWorkInfo start...");
+    adcm::Log::Info() << "ThreadReceiveWorkInfo start...";
 
     while (continueExecution)
     {
@@ -1314,7 +1328,7 @@ void ThreadReceiveEdgeInfo()
 {
     adcm::EdgeInformation_Subscriber edgeInformation_subscriber;
     edgeInformation_subscriber.init("DataFusion/DataFusion/RPort_edge_information");
-    INFO("ThreadReceiveEdgeInfo start...");
+    adcm::Log::Info() << "ThreadReceiveEdgeInfo start...";
 
     while (continueExecution)
     {
@@ -1336,6 +1350,8 @@ void ThreadReceiveEdgeInfo()
 
 void ThreadKatech()
 {
+    adcm::Log::Info() << "ThreadKatech start...";
+    NatsStart();
     //==============1.전역변수인 MapData 생성 =================
     adcm::map_data_Objects mapData;
     IDManager id_manager;
@@ -1369,17 +1385,24 @@ void ThreadKatech()
             continue;
         }
         // 수신한 허브 데이터가 없으면 송신 X
-        if (main_vehicle_queue.size_approx() == 0 && sub1_vehicle_queue.size_approx() == 0 && sub2_vehicle_queue.size_approx() == 0)
-        {
-            noDataCounter++;
-            if (noDataCounter >= 20)
-            {
-                adcm::Log::Info() << "No Hub Data";
-                noDataCounter = 0;
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            continue;
-        }
+        adcm::Log::Info() << "Wait Hub Data";
+        unique_lock<mutex> lock(mtx);
+        cv.wait(lock, []
+                { return main_vehicle_queue.size_approx() > 0 ||
+                         sub1_vehicle_queue.size_approx() > 0 ||
+                         sub2_vehicle_queue.size_approx() > 0; });
+
+        // if (main_vehicle_queue.size_approx() == 0 && sub1_vehicle_queue.size_approx() == 0 && sub2_vehicle_queue.size_approx() == 0)
+        // {
+        //     noDataCounter++;
+        //     if (noDataCounter >= 20)
+        //     {
+        //         adcm::Log::Info() << "No Hub Data";
+        //         noDataCounter = 0;
+        //     }
+        //     std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        //     continue;
+        // }
 
         adcm::Log::Info() << "송신이 필요한 남은 허브 데이터 개수: " << main_vehicle_queue.size_approx() + sub1_vehicle_queue.size_approx() + sub2_vehicle_queue.size_approx();
         std::int8_t map_x = max_a - min_a;
@@ -1401,6 +1424,7 @@ void ThreadKatech()
             break;
 
         case SUB_VEHICLE_1:
+            sub1 = true;
             sub1_vehicle_queue.try_dequeue(sub1_vehicle_data);
             sub1_vehicle = sub1_vehicle_data.vehicle;
             obstacle_list_sub1 = sub1_vehicle_data.obstacle_list;
@@ -1410,6 +1434,7 @@ void ThreadKatech()
             break;
 
         case SUB_VEHICLE_2:
+            sub2 = true;
             sub2_vehicle_queue.try_dequeue(sub2_vehicle_data);
             sub2_vehicle = sub2_vehicle_data.vehicle;
             obstacle_list_sub2 = sub2_vehicle_data.obstacle_list;
@@ -1426,10 +1451,10 @@ void ThreadKatech()
                                              obstacle_list_sub2, main_vehicle, sub1_vehicle, sub2_vehicle);
         order.pop();
 
-        for (auto obstacle : obstacle_list)
-        {
-            adcm::Log::Info() << obstacle.obstacle_class << ": [" << obstacle.fused_position_x << ", " << obstacle.fused_position_y << "]";
-        }
+        // for (auto obstacle : obstacle_list)
+        // {
+        //     adcm::Log::Info() << obstacle.obstacle_class << ": [" << obstacle.fused_position_x << ", " << obstacle.fused_position_y << "]";
+        // }
 
         adcm::Log::Info() << "장애물 리스트 융합 및 ID 부여 완료";
         adcm::Log::Info() << "장애물 리스트 사이즈: " << obstacle_list.size();
@@ -1655,17 +1680,22 @@ void ThreadKatech()
             // adcm::Log::Info() << "Current timestamp in milliseconds: " << mapData_timestamp;
             // mapData.timestamp = mapData_timestamp;
 
+            // if (sub1 == false || sub2 == false)
+            // {
+            //     adcm::Log::Info() << "sub1, sub2 데이터 중 비어있는 것이 존재, " << ++mapVer << "번째 mapData 전송 보류";
+            //     continue;
+            // }
+            
             mapData_provider.send(mapData);
             auto endTime = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> duration = endTime - startTime;
-            mapVer++;
-            adcm::Log::Info() << mapVer << "번째 맵데이터 전송 완료";
-            adcm::Log::Info() << "맵데이터 전송에 걸린 시간: " << duration.count() << " ms.";
-            mapData.map_2d.clear(); //json 데이터 경량화를 위해 map_2d 삭제
+            adcm::Log::Info() << ++mapVer << "번째 mapdata 전송 완료";
+            adcm::Log::Info() << "mapdata 전송에 걸린 시간: " << duration.count() << " ms.";
+            mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
             NatsSend(mapData);
             endTime = std::chrono::high_resolution_clock::now();
             duration = endTime - startTime;
-            adcm::Log::Info() << "맵데이터 + NATS 전송에 걸린 시간: " << duration.count() << " ms.";
+            adcm::Log::Info() << "mapdata + NATS 전송에 걸린 시간: " << duration.count() << " ms.";
         }
         else
         {
@@ -1706,19 +1736,18 @@ int main(int argc, char *argv[])
 {
     // 자동 Build Time 생성
     time_t timer;
-    struct tm* t;
+    struct tm *t;
     timer = time(NULL);
     t = localtime(&timer);
 
-    string year = to_string(t -> tm_year-100);
-    string mon = to_string(t -> tm_mon+1);
-    string day = to_string(t -> tm_mday);
-    if(mon.length() == 1)
+    string year = to_string(t->tm_year - 100);
+    string mon = to_string(t->tm_mon + 1);
+    string day = to_string(t->tm_mday);
+    if (mon.length() == 1)
         mon.insert(0, "0");
-    if(day.length() == 1)
+    if (day.length() == 1)
         day.insert(0, "0");
     string b_day = year + mon + day;
-
 
     std::vector<std::thread> thread_list;
     UNUSED(argc);
