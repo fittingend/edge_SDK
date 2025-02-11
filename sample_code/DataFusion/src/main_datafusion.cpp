@@ -1320,6 +1320,7 @@ void ThreadReceiveWorkInfo()
             work_boundary.clear();
             // haveWorkInfo = true;
             sendEmptyMap = true;
+            cv.notify_one();
         }
     }
 }
@@ -1376,6 +1377,15 @@ void ThreadKatech()
     mapData_provider.init("DataFusion/DataFusion/PPort_map_data");
     while (continueExecution)
     {
+        // 수신한 허브 데이터가 없으면 송신 X
+        adcm::Log::Info() << "Wait Hub Data";
+        unique_lock<mutex> lock(mtx);
+        cv.wait(lock, []
+                { return sendEmptyMap == true ||
+                         main_vehicle_queue.size_approx() > 0 ||
+                         sub1_vehicle_queue.size_approx() > 0 ||
+                         sub2_vehicle_queue.size_approx() > 0; });
+
         if (sendEmptyMap)
         {
             mapData.map_2d = map_2d_test;
@@ -1384,14 +1394,6 @@ void ThreadKatech()
             sendEmptyMap = false;
             continue;
         }
-        // 수신한 허브 데이터가 없으면 송신 X
-        adcm::Log::Info() << "Wait Hub Data";
-        unique_lock<mutex> lock(mtx);
-        cv.wait(lock, []
-                { return main_vehicle_queue.size_approx() > 0 ||
-                         sub1_vehicle_queue.size_approx() > 0 ||
-                         sub2_vehicle_queue.size_approx() > 0; });
-
         // if (main_vehicle_queue.size_approx() == 0 && sub1_vehicle_queue.size_approx() == 0 && sub2_vehicle_queue.size_approx() == 0)
         // {
         //     noDataCounter++;
@@ -1685,7 +1687,7 @@ void ThreadKatech()
             //     adcm::Log::Info() << "sub1, sub2 데이터 중 비어있는 것이 존재, " << ++mapVer << "번째 mapData 전송 보류";
             //     continue;
             // }
-            
+
             mapData_provider.send(mapData);
             auto endTime = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> duration = endTime - startTime;
@@ -1697,6 +1699,7 @@ void ThreadKatech()
             duration = endTime - startTime;
             adcm::Log::Info() << "mapdata + NATS 전송에 걸린 시간: " << duration.count() << " ms.";
         }
+
         else
         {
             adcm::Log::Info() << "Invalid input data - no map data sent";
