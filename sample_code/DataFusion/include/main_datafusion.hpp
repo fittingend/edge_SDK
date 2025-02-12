@@ -49,6 +49,7 @@ using namespace std;
 ///////////////////////////////////////////////////////////////////////
 // 필드 목록
 IDManager id_manager; // 장애물 ID 부여 및 반환
+bool ego = false;
 bool sub1 = false;
 bool sub2 = false;
 
@@ -107,7 +108,7 @@ struct VehicleData
     unsigned char vehicle_class;
     std::vector<Point2D> map_2d_location;
     std::uint64_t timestamp;
-    std::vector<double> road_z;
+    std::vector<int> road_z;
     //    double road_z[4];
     double position_long; // x equivalent
     double position_lat;  // y equivalent
@@ -129,7 +130,7 @@ struct GridCellData
 {
     std::uint16_t obstacle_id;
     VehicleClass vehicle_class;
-    double road_z; // 2 bytes
+    int road_z; // 2 bytes
 }; // 패딩때문에 토탈 24 bytes
 
 struct MapData
@@ -218,12 +219,17 @@ bool checkRange(const VehicleData &vehicle);
 void checkRange(Point2D &point);
 bool checkAllVehicleRange(const std::vector<VehicleData *> &vehicles);
 
+void processVehicleData(moodycamel::ConcurrentQueue<FusionData> &vehicleQueue,
+                        FusionData &vehicleData,
+                        VehicleData &vehicle,
+                        std::vector<ObstacleData> &obstacleList,
+                        bool &vehicleFlag);
 void gpsToMapcoordinate(VehicleData &vehicle);
 void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData vehicle);
 
 void generateRoadZValue(VehicleData target_vehicle, std::vector<adcm::map_2dListVector> &map_2d_test);
-void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, VehicleData &vehicle, std::vector<adcm::map_2dListVector> &map_2d_test);
-void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std::vector<ObstacleData>::iterator iter, std::vector<adcm::map_2dListVector> &map_2d_test);
+void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, VehicleData &vehicle);
+void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std::vector<ObstacleData>::iterator iter);
 
 void find4VerticesVehicle(VehicleData &target_vehicle);
 void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered);
@@ -273,6 +279,10 @@ std::vector<ObstacleData> mergeAndCompareLists(
 
 // 장애물이 보조차량, 메인차량인지 확인
 const double POSITION_TOLERANCE = 14.0;
+
+void InitializeMapData(adcm::map_data_Objects& mapData);
+
+void UpdateMapData(adcm::map_data_Objects& mapData, const std::vector<ObstacleData>& obstacle_list, const std::vector<VehicleData>& vehicles);
 
 // VehicleData -> vehicleListStruct(맵데이터 호환)
 adcm::vehicleListStruct ConvertToVehicleListStruct(const VehicleData &vehicle, std::vector<adcm::map_2dListVector> &map);
