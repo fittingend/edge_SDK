@@ -984,8 +984,10 @@ std::vector<ObstacleData> mergeAndCompareLists(
             std::vector<ObstacleData> fusionList = listA;
             if (!listA.empty() && !listB.empty())
             {
-                auto distMatrix = createDistanceMatrix(listA, listB);
+                auto distMatrix = createDistanceMatrix(listB, listA);
                 auto assignment = solveAssignment(distMatrix);
+                // for (int i = 0; i < assignment.size(); i++)
+                //     adcm::Log::Info() << "assignment" << i << ": " << assignment[i];
                 processFusion(fusionList, listB, assignment);
             }
             return fusionList;
@@ -1196,7 +1198,7 @@ void ThreadReceiveHubData()
         gMainthread_Loopcount++;
         if (!hubData_subscriber.waitEvent(10000))
             continue;
-            
+
         while (!hubData_subscriber.isEventQueueEmpty())
         {
             auto data = hubData_subscriber.getEvent();
@@ -1370,7 +1372,6 @@ void ThreadKatech()
     adcm::Log::Info() << "ThreadKatech start...";
     NatsStart();
     //==============1.전역변수인 MapData 생성 =================
-    adcm::map_data_Objects mapData;
     IDManager id_manager;
     adcm::Log::Info() << "mapData created for the first time";
     ::adcm::map_2dListStruct map_2dStruct_init;
@@ -1679,8 +1680,8 @@ void ThreadKatech()
             endTime = std::chrono::high_resolution_clock::now();
             duration = endTime - startTime;
             adcm::Log::Info() << "mapdata + NATS 전송에 걸린 시간: " << duration.count() << " ms.";
-            mapData.map_2d = map_2d_init;                               // 맵 초기화
-            std::this_thread::sleep_for(std::chrono::milliseconds(30)); // 대기시간
+            mapData.map_2d = map_2d_init;                                // 맵 초기화
+            std::this_thread::sleep_for(std::chrono::milliseconds(100)); // 대기시간
         }
 
         else
@@ -1691,6 +1692,15 @@ void ThreadKatech()
     }
 }
 
+void ThreadSend()
+{
+    adcm::MapData_Provider mapData_provider;
+    mapData_provider.init("DataFusion/DataFusion/PPort_map_data");
+    //mutex, condition value 사용
+    
+    //맵전송
+    mapData_provider.send(mapData);
+}
 void ThreadMonitor()
 {
     while (continueExecution)
@@ -1775,6 +1785,7 @@ int main(int argc, char *argv[])
     thread_list.push_back(std::thread(ThreadMonitor));
     thread_list.push_back(std::thread(ThreadKatech));
     thread_list.push_back(std::thread(ThreadReceiveEdgeInfo));
+    thread_list.push_back(std::thread(ThreadSend));
 
     adcm::Log::Info() << "Thread join";
     for (int i = 0; i < static_cast<int>(thread_list.size()); i++)

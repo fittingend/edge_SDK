@@ -210,6 +210,7 @@ double min_a, min_b, max_a, max_b;
 // bool haveWorkInfo = false;
 bool sendEmptyMap = false;
 int receiveVer = 0;
+adcm::map_data_Objects mapData;
 
 ///////////////////////////////////////////////////////////////////////
 // 함수 목록
