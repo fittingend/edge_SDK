@@ -53,8 +53,13 @@ bool ego = false;
 bool sub1 = false;
 bool sub2 = false;
 
+mutex mtx_data;
+mutex mtx_map;
+condition_variable dataReady;
+condition_variable mapReady;
+std::uint8_t send_map = 0;
+
 mutex mtx;
-condition_variable cv;
 
 enum VehicleClass
 {

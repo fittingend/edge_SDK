@@ -1186,10 +1186,8 @@ void fillObstacleList(std::vector<ObstacleData> &obstacle_list_fill, const std::
 // hubData 수신
 void ThreadReceiveHubData()
 {
-    // adcm::MapData_Provider mapData_provider;
     adcm::HubData_Subscriber hubData_subscriber;
     // INFO("DataFusion .init()");
-    // mapData_provider.init("DataFusion/DataFusion/PPort_map_data");
     hubData_subscriber.init("DataFusion/DataFusion/RPort_hub_data");
     adcm::Log::Info() << "ThreadReceiveHubData start...";
 
@@ -1210,30 +1208,31 @@ void ThreadReceiveHubData()
             FusionData fusionData;
             fillVehicleData(fusionData.vehicle, data);
             fillObstacleList(fusionData.obstacle_list, data);
-
-            switch (data->vehicle_class)
             {
-            case EGO_VEHICLE:
-                main_vehicle_queue.enqueue(fusionData);
-                order.push(EGO_VEHICLE);
-                break;
+                lock_guard<mutex> lock(mtx_data);
+                switch (data->vehicle_class)
+                {
+                case EGO_VEHICLE:
+                    main_vehicle_queue.enqueue(fusionData);
+                    order.push(EGO_VEHICLE);
+                    break;
 
-            case SUB_VEHICLE_1:
-                sub1_vehicle_queue.enqueue(fusionData);
-                order.push(SUB_VEHICLE_1);
-                break;
+                case SUB_VEHICLE_1:
+                    sub1_vehicle_queue.enqueue(fusionData);
+                    order.push(SUB_VEHICLE_1);
+                    break;
 
-            case SUB_VEHICLE_2:
-                sub2_vehicle_queue.enqueue(fusionData);
-                order.push(SUB_VEHICLE_2);
-                break;
+                case SUB_VEHICLE_2:
+                    sub2_vehicle_queue.enqueue(fusionData);
+                    order.push(SUB_VEHICLE_2);
+                    break;
 
-            default:
-                adcm::Log::Verbose() << "Unknown vehicle class: " << data->vehicle_class;
-                continue; // 미확인 데이터는 처리하지 않고 다음으로 넘어감
+                default:
+                    adcm::Log::Verbose() << "Unknown vehicle class: " << data->vehicle_class;
+                    continue; // 미확인 데이터는 처리하지 않고 다음으로 넘어감
+                }
             }
-
-            cv.notify_one();
+            dataReady.notify_one();
             adcm::Log::Info() << ++receiveVer << "번째 허브 데이터 수신 완료";
 
             // case 255: // 보조차1이 보낸 인지데이터
@@ -1272,23 +1271,20 @@ void ThreadReceiveWorkInfo()
         while (!workInformation_subscriber.isEventQueueEmpty())
         {
             auto data = workInformation_subscriber.getEvent();
+
+            main_vehicle_size.length = data->main_vehicle.length;
+            main_vehicle_size.width = data->main_vehicle.width;
+
+            sub_vehicle_size.clear();
+            for (const auto &sub_vehicle : data->sub_vehicle)
             {
-                lock_guard<mutex> lock(mtx);
+                sub_vehicle_size.push_back({sub_vehicle.length, sub_vehicle.width});
+            }
 
-                main_vehicle_size.length = data->main_vehicle.length;
-                main_vehicle_size.width = data->main_vehicle.width;
-
-                sub_vehicle_size.clear();
-                for (const auto &sub_vehicle : data->sub_vehicle)
-                {
-                    sub_vehicle_size.push_back({sub_vehicle.length, sub_vehicle.width});
-                }
-
-                work_boundary.clear();
-                for (const auto &boundary : data->working_area_boundary)
-                {
-                    work_boundary.push_back({boundary.x, boundary.y});
-                }
+            work_boundary.clear();
+            for (const auto &boundary : data->working_area_boundary)
+            {
+                work_boundary.push_back({boundary.x, boundary.y});
             }
 
             // 좌표계 변환 전 map 범위 둘러싸는 사각형 좌표
@@ -1339,7 +1335,7 @@ void ThreadReceiveWorkInfo()
 
             // haveWorkInfo = true;
             sendEmptyMap = true;
-            cv.notify_one();
+            mapReady.notify_one();
         }
     }
 }
@@ -1382,39 +1378,22 @@ void ThreadKatech()
 
     // 빈 맵 생성
     std::vector<adcm::map_2dListVector> map_2d_init(map_n, adcm::map_2dListVector(map_m, map_2dStruct_init));
-    std::vector<adcm::map_2dListVector> map_2d_test2(1, adcm::map_2dListVector(1, map_2dStruct_init));
 
     mapData.map_2d = map_2d_init;
-
-    int mapVer = 0;        // 현재 맵이 몇 번째 맵인지 확인
-    int noDataCounter = 0; // 로그 카운터 변수
 
     std::vector<ObstacleData> obstacle_list;
 
     adcm::map_2dListVector map_2dListVector;
-    adcm::map_2dListStruct map_2dStruct;
-
-    adcm::MapData_Provider mapData_provider;
-    mapData_provider.init("DataFusion/DataFusion/PPort_map_data");
 
     while (continueExecution)
     {
         // 수신한 허브 데이터가 없으면 송신 X
         adcm::Log::Info() << "Wait Hub Data";
-        unique_lock<mutex> lock(mtx);
-        cv.wait(lock, []
-                { return sendEmptyMap == true ||
-                         main_vehicle_queue.size_approx() > 0 ||
-                         sub1_vehicle_queue.size_approx() > 0 ||
-                         sub2_vehicle_queue.size_approx() > 0; });
-        if (sendEmptyMap)
-        {
-            mapData.map_2d = map_2d_init;
-            mapData_provider.send(mapData);
-            adcm::Log::Info() << "Send empty map data";
-            sendEmptyMap = false;
-            continue;
-        }
+        unique_lock<mutex> lock(mtx_data);
+        dataReady.wait(lock, []
+                       { return main_vehicle_queue.size_approx() > 0 ||
+                                sub1_vehicle_queue.size_approx() > 0 ||
+                                sub2_vehicle_queue.size_approx() > 0; });
 
         adcm::Log::Info() << "송신이 필요한 남은 허브 데이터 개수: " << main_vehicle_queue.size_approx() + sub1_vehicle_queue.size_approx() + sub2_vehicle_queue.size_approx();
         std::int8_t map_x = max_a - min_a;
@@ -1441,9 +1420,9 @@ void ThreadKatech()
         }
 
         adcm::Log::Info() << "차량 및 장애물 좌표계 변환 완료";
+        lock.unlock();
 
         //==============2. 장애물 데이터 융합 / 3. 특장차 및 보조차량 제거 / 4. 장애물 ID 부여 =================
-
         obstacle_list = mergeAndCompareLists(previous_obstacle_list, obstacle_list_main, obstacle_list_sub1,
                                              obstacle_list_sub2, main_vehicle, sub1_vehicle, sub2_vehicle);
 
@@ -1458,6 +1437,7 @@ void ThreadKatech()
         adcm::Log::Info() << "장애물 리스트 사이즈: " << obstacle_list.size();
         */
         previous_obstacle_list = obstacle_list;
+
         // adcm::Log::Info() << "previous_obstacle_list: " << previous_obstacle_list.size();
 
         // adcm::Log::Info() << "mapData obstacle list size is at start is" << mapData.obstacle_list.size();
@@ -1571,6 +1551,7 @@ void ThreadKatech()
         // 차량이 맵 범위 내에 있는지 체크
         bool result = checkAllVehicleRange(vehicles);
 
+        /*
         if (result)
         { // execute only if all true!
             //==============5. 0.1 m/s 미만인 경우 장애물 정지 상태 판정 및 stop_count 값 assign =================
@@ -1610,96 +1591,119 @@ void ThreadKatech()
                     }
                 }
             }
+            */
 
-            // adcm::Log::Info() << "stop count 변동 완료";
-            //==============6. 장애물과 차량의 occupancy 계산해 map_2d_location 값 업데이트 ========
+        // adcm::Log::Info() << "stop count 변동 완료";
+        //==============6. 장애물과 차량의 occupancy 계산해 map_2d_location 값 업데이트 ========
 
-            if (!obstacle_list.empty())
-                find4VerticesObstacle(obstacle_list);
+        if (!obstacle_list.empty())
+            find4VerticesObstacle(obstacle_list);
 
-            for (const auto &vehicle : vehicles)
-            {
-                if (vehicle->timestamp != 0)
-                    find4VerticesVehicle(*vehicle);
-            }
-
-            //==============7. 현재까지의 데이터를 adcm mapData 형식으로 재구성해서 업데이트 ================
-            //================ adcm mapData 내 obstacle list 업데이트 ===============================
-
-            // adcm::Log::Info() << "mapdata 장애물 반영 예정 개수: " << obstacle_list.size();
-
-            // map_2d에서 map_2d_location이 존재하는 부분만 수정
-            UpdateMapData(mapData, obstacle_list, vehicles);
-
-            // for (int i = 0; i < map_n; ++i)
-            // {
-            //     map_2dListVector.clear();
-            //     for (int j = 0; j < map_m; ++j)
-            //     {
-            //         map_2dStruct.obstacle_id = map_2d_test[i][j].obstacle_id;
-            //         map_2d_test[i][j].obstacle_id = NO_OBSTACLE;
-
-            //         // obstacle_id 초기화
-
-            //         map_2dStruct.vehicle_class = map_2d_test[i][j].vehicle_class;
-            //         map_2d_test[i][j].vehicle_class = NO_VEHICLE;
-
-            //         // vehicle_class 초기화
-            //         map_2dStruct.road_z = map_2d_test[i][j].road_z;
-            //         // road_z 정보는 계속 가져간다
-            //         map_2dListVector.push_back(map_2dStruct);
-            //     }
-            //     mapData.map_2d.push_back(map_2dListVector);
-            // }
-
-            // mapData.map_2d.push_back(map_2dListVector);
-
-            // adcm::Log::Info() << "DATA FUSION DONE";
-            // adcm::Log::Info() << "map_2d pushed to mapData";
-            adcm::Log::Info() << "mapdata 융합 완료";
-
-            // map_data_object 의 생성시간 추가
-            // auto now = std::chrono::system_clock::now();
-            // auto mapData_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-            // adcm::Log::Info() << "Current timestamp in milliseconds: " << mapData_timestamp;
-            // mapData.timestamp = mapData_timestamp;
-
-            // if (sub1 == false || sub2 == false)
-            // {
-            //     adcm::Log::Info() << "sub1, sub2 데이터 중 비어있는 것이 존재, " << ++mapVer << "번째 mapData 전송 보류";
-            //     continue;
-            // }
-
-            mapData_provider.send(mapData);
-            auto endTime = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double, std::milli> duration = endTime - startTime;
-            adcm::Log::Info() << ++mapVer << "번째 mapdata 전송 완료";
-            adcm::Log::Info() << "mapdata 전송에 걸린 시간: " << duration.count() << " ms.";
-            mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
-            NatsSend(mapData);
-            endTime = std::chrono::high_resolution_clock::now();
-            duration = endTime - startTime;
-            adcm::Log::Info() << "mapdata + NATS 전송에 걸린 시간: " << duration.count() << " ms.";
-            mapData.map_2d = map_2d_init;                                // 맵 초기화
-            std::this_thread::sleep_for(std::chrono::milliseconds(100)); // 대기시간
-        }
-
-        else
+        for (const auto &vehicle : vehicles)
         {
-            adcm::Log::Info() << "Invalid input data - no map data sent";
-            // mapData_provider.send(mapData);
+            if (vehicle->timestamp != 0)
+                find4VerticesVehicle(*vehicle);
         }
+
+        //==============7. 현재까지의 데이터를 adcm mapData 형식으로 재구성해서 업데이트 ================
+        //================ adcm mapData 내 obstacle list 업데이트 ===============================
+
+        // adcm::Log::Info() << "mapdata 장애물 반영 예정 개수: " << obstacle_list.size();
+
+        // map_2d에서 map_2d_location이 존재하는 부분만 수정
+        // 맵데이터 수정하며 lock걸기
+        {
+            lock_guard<mutex> map_lock(mtx_map);
+            mapData.map_2d = map_2d_init;
+            UpdateMapData(mapData, obstacle_list, vehicles);
+            send_map++;
+        }
+        adcm::Log::Info() << "mapdata 융합 완료";
+        mapReady.notify_one();
+        // for (int i = 0; i < map_n; ++i)
+        // {
+        //     map_2dListVector.clear();
+        //     for (int j = 0; j < map_m; ++j)
+        //     {
+        //         map_2dStruct.obstacle_id = map_2d_test[i][j].obstacle_id;
+        //         map_2d_test[i][j].obstacle_id = NO_OBSTACLE;
+
+        //         // obstacle_id 초기화
+
+        //         map_2dStruct.vehicle_class = map_2d_test[i][j].vehicle_class;
+        //         map_2d_test[i][j].vehicle_class = NO_VEHICLE;
+
+        //         // vehicle_class 초기화
+        //         map_2dStruct.road_z = map_2d_test[i][j].road_z;
+        //         // road_z 정보는 계속 가져간다
+        //         map_2dListVector.push_back(map_2dStruct);
+        //     }
+        //     mapData.map_2d.push_back(map_2dListVector);
+        // }
+
+        // mapData.map_2d.push_back(map_2dListVector);
+
+        // adcm::Log::Info() << "DATA FUSION DONE";
+        // adcm::Log::Info() << "map_2d pushed to mapData";
+
+        // map_data_object 의 생성시간 추가
+        // auto now = std::chrono::system_clock::now();
+        // auto mapData_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+        // adcm::Log::Info() << "Current timestamp in milliseconds: " << mapData_timestamp;
+        // mapData.timestamp = mapData_timestamp;
+
+        // if (sub1 == false || sub2 == false)
+        // {
+        //     adcm::Log::Info() << "sub1, sub2 데이터 중 비어있는 것이 존재, " << ++mapVer << "번째 mapData 전송 보류";
+        //     continue;
+        // }
+
+        // mapData_provider.send(mapData);
+        // auto endTime = std::chrono::high_resolution_clock::now();
+        // std::chrono::duration<double, std::milli> duration = endTime - startTime;
+        // adcm::Log::Info() << "mapdata 전송에 걸린 시간: " << duration.count() << " ms.";
+        // mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
+        // NatsSend(mapData);
+        // endTime = std::chrono::high_resolution_clock::now();
+        // duration = endTime - startTime;
+        // adcm::Log::Info() << "mapdata + NATS 전송에 걸린 시간: " << duration.count() << " ms.";
+        // mapData.map_2d = map_2d_init;                                // 맵 초기화
+        // std::this_thread::sleep_for(std::chrono::milliseconds(100)); // 대기시간
     }
 }
 
 void ThreadSend()
 {
+    adcm::Log::Info() << "ThreadSend start...";
+
+    int mapVer = 0; // 현재 맵이 몇 번째 맵인지 확인
+
     adcm::MapData_Provider mapData_provider;
     mapData_provider.init("DataFusion/DataFusion/PPort_map_data");
-    //mutex, condition value 사용
-    
-    //맵전송
-    mapData_provider.send(mapData);
+    // mutex, condition value 사용
+
+    while (continueExecution)
+    {
+        unique_lock<mutex> lock(mtx_map);
+        mapReady.wait(lock, []
+                      { return sendEmptyMap == true ||
+                               send_map >= 3; });
+
+        if (sendEmptyMap)
+        {
+            mapData_provider.send(mapData);
+            adcm::Log::Info() << "Send empty map data";
+            sendEmptyMap = false;
+            continue;
+        }
+
+        // 맵전송
+        mapData_provider.send(mapData);
+        mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
+        NatsSend(mapData);
+        adcm::Log::Info() << ++mapVer << "번째 mapdata 전송 완료";
+        send_map = 0;
+    }
 }
 void ThreadMonitor()
 {
