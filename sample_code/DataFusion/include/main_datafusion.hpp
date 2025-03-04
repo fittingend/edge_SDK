@@ -224,12 +224,15 @@ void GPStoUTM(double lat, double lon, double &utmX, double &utmY);
 bool checkRange(const VehicleData &vehicle);
 void checkRange(Point2D &point);
 bool checkAllVehicleRange(const std::vector<VehicleData *> &vehicles);
-
+/*
 void processVehicleData(moodycamel::ConcurrentQueue<FusionData> &vehicleQueue,
                         FusionData &vehicleData,
                         VehicleData &vehicle,
-                        std::vector<ObstacleData> &obstacleList,
-                        bool &vehicleFlag);
+                        std::vector<ObstacleData> &obstacleList);
+*/
+void processVehicleData(FusionData &vehicleData,
+                        VehicleData &vehicle,
+                        std::vector<ObstacleData> &obstacleList);
 void gpsToMapcoordinate(VehicleData &vehicle);
 void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData vehicle);
 
@@ -286,9 +289,9 @@ std::vector<ObstacleData> mergeAndCompareLists(
 // 장애물이 보조차량, 메인차량인지 확인
 const double POSITION_TOLERANCE = 14.0;
 
-void InitializeMapData(adcm::map_data_Objects& mapData);
+void InitializeMapData(adcm::map_data_Objects &mapData);
 
-void UpdateMapData(adcm::map_data_Objects& mapData, const std::vector<ObstacleData>& obstacle_list, const std::vector<VehicleData>& vehicles);
+void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleData> &obstacle_list, const std::vector<VehicleData> &vehicles);
 
 // VehicleData -> vehicleListStruct(맵데이터 호환)
 adcm::vehicleListStruct ConvertToVehicleListStruct(const VehicleData &vehicle, std::vector<adcm::map_2dListVector> &map);

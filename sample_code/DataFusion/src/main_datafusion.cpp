@@ -366,12 +366,11 @@ bool checkAllVehicleRange(const std::vector<VehicleData *> &vehicles)
     }
     return true;
 }
-
+/*
 void processVehicleData(moodycamel::ConcurrentQueue<FusionData> &vehicleQueue,
                         FusionData &vehicleData,
                         VehicleData &vehicle,
-                        std::vector<ObstacleData> &obstacleList,
-                        bool &vehicleFlag)
+                        std::vector<ObstacleData> &obstacleList)
 {
     vehicleQueue.try_dequeue(vehicleData);
     vehicle = vehicleData.vehicle;
@@ -379,7 +378,18 @@ void processVehicleData(moodycamel::ConcurrentQueue<FusionData> &vehicleQueue,
     filterVehicleData(obstacleList);
     gpsToMapcoordinate(vehicle);
     relativeToMapcoordinate(obstacleList, vehicle);
-    vehicleFlag = true;
+}
+*/
+
+void processVehicleData(FusionData &vehicleData,
+                        VehicleData &vehicle,
+                        std::vector<ObstacleData> &obstacleList)
+{
+    vehicle = vehicleData.vehicle;
+    obstacleList = vehicleData.obstacle_list;
+    filterVehicleData(obstacleList);
+    gpsToMapcoordinate(vehicle);
+    relativeToMapcoordinate(obstacleList, vehicle);
 }
 
 void gpsToMapcoordinate(VehicleData &vehicle)
@@ -1212,18 +1222,22 @@ void ThreadReceiveHubData()
                 lock_guard<mutex> lock(mtx_data);
                 switch (data->vehicle_class)
                 {
+                // <25.03.04> 큐 제거
                 case EGO_VEHICLE:
-                    main_vehicle_queue.enqueue(fusionData);
+                    // main_vehicle_queue.enqueue(fusionData);
+                    main_vehicle_data = fusionData;
                     order.push(EGO_VEHICLE);
                     break;
 
                 case SUB_VEHICLE_1:
                     sub1_vehicle_queue.enqueue(fusionData);
+                    sub1_vehicle_data = fusionData;
                     order.push(SUB_VEHICLE_1);
                     break;
 
                 case SUB_VEHICLE_2:
                     sub2_vehicle_queue.enqueue(fusionData);
+                    sub2_vehicle_data = fusionData;
                     order.push(SUB_VEHICLE_2);
                     break;
 
@@ -1406,16 +1420,19 @@ void ThreadKatech()
         switch (order.front())
         {
         case EGO_VEHICLE:
-            processVehicleData(main_vehicle_queue, main_vehicle_data, main_vehicle, obstacle_list_main, ego);
+            // processVehicleData(main_vehicle_queue, main_vehicle_data, main_vehicle, obstacle_list_main);
             // obstacle_list=obstacle_list_main;
+            processVehicleData(main_vehicle_data, main_vehicle, obstacle_list_main);
             break;
         case SUB_VEHICLE_1:
-            processVehicleData(sub1_vehicle_queue, sub1_vehicle_data, sub1_vehicle, obstacle_list_sub1, sub1);
+            // processVehicleData(sub1_vehicle_queue, sub1_vehicle_data, sub1_vehicle, obstacle_list_sub1);
             // obstacle_list=obstacle_list_sub1;
+            processVehicleData(sub1_vehicle_data, sub1_vehicle, obstacle_list_sub1);
             break;
         case SUB_VEHICLE_2:
-            processVehicleData(sub2_vehicle_queue, sub2_vehicle_data, sub2_vehicle, obstacle_list_sub2, sub2);
+            // processVehicleData(sub2_vehicle_queue, sub2_vehicle_data, sub2_vehicle, obstacle_list_sub2);
             // obstacle_list=obstacle_list_sub2;
+            processVehicleData(sub2_vehicle_data, sub2_vehicle, obstacle_list_sub2);
             break;
         }
 
