@@ -1227,18 +1227,21 @@ void ThreadReceiveHubData()
                     // main_vehicle_queue.enqueue(fusionData);
                     main_vehicle_data = fusionData;
                     order.push(EGO_VEHICLE);
+                    ego = true;
                     break;
 
                 case SUB_VEHICLE_1:
-                    sub1_vehicle_queue.enqueue(fusionData);
+                    // sub1_vehicle_queue.enqueue(fusionData);
                     sub1_vehicle_data = fusionData;
                     order.push(SUB_VEHICLE_1);
+                    sub1 = true;
                     break;
 
                 case SUB_VEHICLE_2:
-                    sub2_vehicle_queue.enqueue(fusionData);
+                    // sub2_vehicle_queue.enqueue(fusionData);
                     sub2_vehicle_data = fusionData;
                     order.push(SUB_VEHICLE_2);
+                    sub2 = true;
                     break;
 
                 default:
@@ -1392,6 +1395,7 @@ void ThreadKatech()
 
     // 빈 맵 생성
     std::vector<adcm::map_2dListVector> map_2d_init(map_n, adcm::map_2dListVector(map_m, map_2dStruct_init));
+    std::vector<adcm::map_2dListVector> map_2d_test(1, adcm::map_2dListVector(1, map_2dStruct_init));
 
     mapData.map_2d = map_2d_init;
 
@@ -1405,14 +1409,12 @@ void ThreadKatech()
         adcm::Log::Info() << "Wait Hub Data";
         unique_lock<mutex> lock(mtx_data);
         dataReady.wait(lock, []
-                       { return main_vehicle_queue.size_approx() > 0 ||
-                                sub1_vehicle_queue.size_approx() > 0 ||
-                                sub2_vehicle_queue.size_approx() > 0; });
+                       { return (ego == true || sub1 == true || sub2 == true); });
 
-        adcm::Log::Info() << "송신이 필요한 남은 허브 데이터 개수: " << main_vehicle_queue.size_approx() + sub1_vehicle_queue.size_approx() + sub2_vehicle_queue.size_approx();
+        // adcm::Log::Info() << "송신이 필요한 남은 허브 데이터 개수: " << main_vehicle_queue.size_approx() + sub1_vehicle_queue.size_approx() + sub2_vehicle_queue.size_approx();
         std::int8_t map_x = max_a - min_a;
         std::int8_t map_y = max_b - min_b;
-        auto startTime = std::chrono::high_resolution_clock::now();
+        // auto startTime = std::chrono::high_resolution_clock::now();
         adcm::Log::Info() << "==============KATECH modified code start==========";
 
         adcm::Log::Info() << "KATECH: 이번 데이터 기준 차량: " << order.front();
@@ -1629,10 +1631,12 @@ void ThreadKatech()
 
         // map_2d에서 map_2d_location이 존재하는 부분만 수정
         // 맵데이터 수정하며 lock걸기
+
         {
             lock_guard<mutex> map_lock(mtx_map);
             mapData.map_2d = map_2d_init;
             UpdateMapData(mapData, obstacle_list, vehicles);
+            // mapData.map_2d = map_2d_test;
             send_map++;
         }
         adcm::Log::Info() << "mapdata 융합 완료";
@@ -1718,6 +1722,9 @@ void ThreadSend()
         mapData_provider.send(mapData);
         mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
         NatsSend(mapData);
+        ego = false;
+        sub1 = false;
+        sub2 = false;
         adcm::Log::Info() << ++mapVer << "번째 mapdata 전송 완료";
         send_map = 0;
     }
