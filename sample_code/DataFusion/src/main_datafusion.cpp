@@ -1245,11 +1245,12 @@ void ThreadReceiveHubData()
             dataReady.notify_one();
             adcm::Log::Info() << ++receiveVer << "번째 허브 데이터 수신 완료";
 
-            {
-                unique_lock<mutex> lock(mtx_send);
-                mapSend.wait(lock, []
-                             { return !send_wait; });
-            }
+            // {
+            //     unique_lock<mutex> lock(mtx_send);
+            //     mapSend.wait(lock, []
+            //                  { return !send_wait; });
+            // }
+            
             // case 255: // 보조차1이 보낸 인지데이터
             //     data->vehicle_class = SUB_VEHICLE_1;
             //     fillVehicleData(sub1_vehicle_temp, data);
@@ -1695,7 +1696,7 @@ void ThreadSend()
                 sendEmptyMap = false;
                 continue;
             }
-            send_wait = true;
+            // send_wait = true;
             adcm::Log::Info() << ++mapVer << "번째 mapdata 전송 시작";
             // 맵전송
             mapData_provider.send(mapData);
@@ -1706,11 +1707,11 @@ void ThreadSend()
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
         }
 
-        {
-            lock_guard<mutex> lock(mtx_send);
-            send_wait = false;
-        }
-        mapSend.notify_one();
+        // {
+        //     lock_guard<mutex> lock(mtx_send);
+        //     send_wait = false;
+        // }
+        // mapSend.notify_one();
     }
 }
 
