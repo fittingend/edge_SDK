@@ -1785,7 +1785,7 @@ int main(int argc, char *argv[])
     adcm::Log::Info() << "DataFusion: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
     adcm::Log::Info() << "Ok, let's produce some DataFusion data...";
-    adcm::Log::Info() << "SDK release_250102_interface v2.0";
+    adcm::Log::Info() << "SDK release_250321_interface v2.1";
     adcm::Log::Info() << "DataFusion Build " << b_day;
 #ifdef NATS
     // Code to execute if NATS is defined
