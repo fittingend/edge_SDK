@@ -1490,13 +1490,13 @@ int main(int argc, char* argv[])
 #ifndef R19_11_1
     adcm::Log::Info() << "RiskAssessment: configure e2e protection";
     bool success = ara::com::e2exf::StatusHandler::Configure("./etc/e2e_dataid_mapping.json",
-                   ara::com::e2exf::ConfigurationFormat::JSON,
+                   ara::com::e2exf::ConfigurationFormat::JSON, 
                    "./etc/e2e_statemachines.json",
                    ara::com::e2exf::ConfigurationFormat::JSON);
     adcm::Log::Info() << "RiskAssessment: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
     adcm::Log::Info() << "Ok, let's produce some RiskAssessment data...";
-    adcm::Log::Info() << "SDK release_250102_interface v2.0";
+    adcm::Log::Info() << "SDK release_250321_interface v2.1, AGX Orin version";
     adcm::Log::Info() << "RASS binary built on 250121";
 #ifdef NATS
     // Code to execute if NATS is defined
