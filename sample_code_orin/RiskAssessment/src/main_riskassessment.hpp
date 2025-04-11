@@ -6,6 +6,7 @@
 #define M_TO_10CM_PRECISION 10 
 #define MAP_ANGLE -86
 
+using namespace std;
 typedef struct
 {
     double x, y;

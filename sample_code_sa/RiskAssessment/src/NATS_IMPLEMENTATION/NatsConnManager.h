@@ -11,6 +11,8 @@
 #include "adcm/impl_type_obstacleliststruct.h"
 #include "impl_type_obstaclelistvector.h"
 
+#include <ara/log/logger.h>
+#include "logger.h"
 
 namespace adcm
 {
