@@ -1,5 +1,5 @@
 /lib
 /doc
-/sample_code/*/build/
+build/
 .vscode
 .DS_Store
