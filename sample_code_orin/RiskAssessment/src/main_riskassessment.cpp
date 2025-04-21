@@ -241,7 +241,7 @@ void NatsSend(const adcm::risk_assessment_Objects& riskAssessment)
         {
             std::cout << "Nats reConnection error" << std::endl;
         }
-    }  
+    }
 }
 #endif
 template <typename T>
@@ -301,8 +301,19 @@ bool isRouteValid(routeVector& route)
     return true; // Return true if all values meet the condition
 }
 
+void checkRange(Point2D &point)
+{
+    if (point.x < 0)
+        point.x = 0;
+    if (point.y < 0)
+        point.y = 0;
+    if (point.x > map_n)
+        point.x = map_n - 1;
+    if (point.y > map_m)
+        point.y = map_m - 1;
+}
 
-void gpsToMapcoordinate(routeVector& route)
+void gpsToMapcoordinate(routeVector &route)
 {
     INFO("[RiskAssessment] gpsToMapcoordinate");
 
@@ -323,10 +334,12 @@ void gpsToMapcoordinate(routeVector& route)
         utm_y -= origin_y;
         adcm::Log::Info() << "utm_x:" << utm_x;
         adcm::Log::Info() << "utm_y:" << utm_y;
-
-        position_x[count]= static_cast<int>((utm_x * cos(angle_radians) - utm_y * sin(angle_radians) - mapOrigin_x) * M_TO_10CM_PRECISION);
-        position_y[count] = static_cast<int>((utm_x * sin(angle_radians) + utm_y * cos(angle_radians) - mapOrigin_y) * M_TO_10CM_PRECISION);
-
+        Point2D mapPoint;
+        mapPoint.x = (utm_x * cos(angle_radians) - utm_y * sin(angle_radians) - mapOrigin_x) * M_TO_10CM_PRECISION;
+        mapPoint.y = (utm_x * sin(angle_radians) + utm_y * cos(angle_radians) - mapOrigin_y) * M_TO_10CM_PRECISION;
+        checkRange(mapPoint);
+        position_x[count] = mapPoint.x;
+        position_y[count] = mapPoint.y;
         adcm::Log::Info() << "경로생성 값 gpsToMapcoordinate 좌표변환 before (" << route[count].latitude << " , " << route[count].longitude << ")";
         adcm::Log::Info() << "경로생성 값 gpsToMapcoordinate 좌표변환 after (" << position_x[count] << " , " << position_y[count] << ")";
     }
@@ -394,13 +407,13 @@ double getDistance_LinearTrajectory(const adcm::obstacleListStruct& obstacle)
         double start_to_end_dot_start_to_obs = cosine_angle * getMagnitude(start_to_end_vector) * getMagnitude(start_to_obs_vector);
         double magnitude_start_to_end = getMagnitude(start_to_end_vector);
 
-        if (start_to_end_dot_start_to_obs > 0 && start_to_end_dot_start_to_obs < pow(magnitude_start_to_end, 2)) 
+        if (start_to_end_dot_start_to_obs > 0 && start_to_end_dot_start_to_obs < pow(magnitude_start_to_end, 2))
         {
             // Calculate perpendicular distance
             double magnitude_start_to_obs = getMagnitude(start_to_obs_vector);
             double distance = magnitude_start_to_obs * sqrt(1 - pow(start_to_end_dot_start_to_obs / (magnitude_start_to_end * magnitude_start_to_obs), 2));
-            
-            adcm::Log::Info() << "Obstacle " << obstacle.obstacle_id << " is within trajectory segment " << count 
+
+            adcm::Log::Info() << "Obstacle " << obstacle.obstacle_id << " is within trajectory segment " << count
                               << ". Distance: " << distance;
             return distance;
         }
@@ -423,8 +436,8 @@ double getLinearApprox(const adcm::obstacleListStruct& obstacle, const adcm::veh
         double obstacle_future_y = obstacle.fused_position_y + obstacle.fused_velocity_y * k;
 
         // Calculate the distance between future positions
-        double temp_distance = sqrt(pow(obstacle_future_x - vehicle_future_x, 2) + 
-                                   pow(obstacle_future_y - vehicle_future_y, 2));
+        double temp_distance = sqrt(pow(obstacle_future_x - vehicle_future_x, 2) +
+                                    pow(obstacle_future_y - vehicle_future_y, 2));
 
         // Update minimum distance if a smaller value is found
         if (temp_distance < min_distance_ego_obs)
@@ -563,7 +576,7 @@ void detectUnscannedPath(adcm::risk_assessment_Objects &riskAssessment)
     }
 }
 
-void calculateShiftedLines(int &x_start, int &x_end, int &y_start, int &y_end, int shift, double &original_m, double &original_c, double &up_c, double &down_c, bool &isVertical, double &x_up, double &x_down) 
+void calculateShiftedLines(int &x_start, int &x_end, int &y_start, int &y_end, int shift, double &original_m, double &original_c, double &up_c, double &down_c, bool &isVertical, double &x_up, double &x_down)
 {
     // Calculate the slope (gradient) of the original line
 
@@ -571,7 +584,7 @@ void calculateShiftedLines(int &x_start, int &x_end, int &y_start, int &y_end, i
     double dy = y_end - y_start;
 
     // Check if the line is vertical
-    if (dx == 0) 
+    if (dx == 0)
     {
         isVertical = true;
         original_m = INFINITY; // Undefined slope
@@ -687,59 +700,16 @@ void ThreadReceiveMapData()
                             break;
                         }
                     }
-                } else {
+                }
+                else
+                {
                     adcm::Log::Verbose() << "vehicle_list Vector empty!!! ";
                 }
             }
         }
     }
 }
-void ThreadReceiveBuildPathTest()
-{
-    adcm::Log::Info() << "RiskAssessment ThreadReceiveBuildPathTest";
-    adcm::BuildPathTest_Subscriber buildPathTest_subscriber;
-    buildPathTest_subscriber.init("RiskAssessment/RiskAssessment/RPort_build_path_test");
-    INFO("Thread ThreadReceiveBuildPathTest start...");
 
-    while (continueExecution) {
-        gMainthread_Loopcount++;
-        VERBOSE("[RiskAssessment] Application loop");
-        bool buildPathTest_rxEvent = buildPathTest_subscriber.waitEvent(100); // wait event
-
-        if(buildPathTest_rxEvent) {
-            adcm::Log::Info() << "[EVENT] RiskAssessment Build Path Test received";
-
-            while(!buildPathTest_subscriber.isEventQueueEmpty()) {
-                auto data = buildPathTest_subscriber.getEvent();
-                gReceivedEvent_count_build_path_test++;
-
-                auto size = data->size;
-                auto utm_x = data->utm_x;
-                auto utm_y = data->utm_y;
-
-                adcm::Log::Verbose() << "size : " << size;
-                
-                if(!utm_x.empty()) {
-                    adcm::Log::Verbose() << "=== utm_x ===";
-                    for(auto itr = utm_x.begin(); itr != utm_x.end(); ++itr) {
-                        adcm::Log::Verbose() << *itr;
-                    }
-                } else {
-                    adcm::Log::Verbose() << "utm_x Vector empty!!! ";
-                }
-
-                if(!utm_y.empty()) {
-                    adcm::Log::Verbose() << "=== utm_y ===";
-                    for(auto itr = utm_y.begin(); itr != utm_y.end(); ++itr) {
-                        adcm::Log::Verbose() << *itr;
-                    }
-                } else {
-                    adcm::Log::Verbose() << "utm_y Vector empty!!! ";
-                }
-            }
-        }
-    }
-}
 void ThreadReceiveBuildPath()
 {
     adcm::Log::Info() << "RiskAssessment ThreadReceiveBuildPath";
@@ -792,7 +762,7 @@ void ThreadReceiveBuildPath()
                                 else
                                 {
                                     INFO("특장차의 경로가 invalid 함 => do nothing");
-                                }   
+                                }
                             }
 
                             adcm::Log::Verbose() << "=== route ===";
@@ -807,7 +777,7 @@ void ThreadReceiveBuildPath()
                             adcm::Log::Info() << "route Vector empty!!! ";
                         }
                     }
-                }       
+                }
             }
         }
     }
@@ -826,7 +796,7 @@ void ThreadKatech()
     adcm::risk_assessment_Objects riskAssessment;
     riskAssessment.riskAssessmentList.clear();
 
-    while (continueExecution) 
+    while (continueExecution)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         obstacle_list = obstacle_list_temp;
@@ -945,7 +915,7 @@ void ThreadKatech()
                 clear_and_free_memory(obstacle_static_stop);
             }
 
-            {   
+            {
                 //=====시나리오 #3. 주행 중 경로 주변 동적 장애물 통행 환경 판단=====
                 adcm::Log::Info() << "=============KATECH: scenario 3 START==============";
 
@@ -973,7 +943,7 @@ void ThreadKatech()
                     }
 
                     double ttc_confidence = (ttc > 0) ? (5 / ttc * 0.7) : 0.0;
-                    double area_confidence = (dist_ego_obs_linear_approx > 0) 
+                    double area_confidence = (dist_ego_obs_linear_approx > 0)
                                             ? (SAFE_DISTANCE / dist_ego_obs_linear_approx * 0.7) 
                                             : 0.0;
 
@@ -988,7 +958,7 @@ void ThreadKatech()
 
                         adcm::Log::Info() << "Risk assessment generated for #3: " 
                                         << obstacle.obstacle_id 
-                                        << " with confidence: " << confidence_scenario_3;
+                                          << " with confidence: " << confidence_scenario_3;
 
                         riskAssessment.riskAssessmentList.push_back(riskAssessment3);
                     }
@@ -1145,17 +1115,17 @@ void ThreadKatech()
                     }
                 }
 
-            adcm::Log::Info() << "scenario 5 DONE";
+                adcm::Log::Info() << "scenario 5 DONE";
 
-            // 메모리 해제
-            clear_and_free_memory(obstacle_pedes_40_50);
-            clear_and_free_memory(obstacle_pedes_new);
+                // 메모리 해제
+                clear_and_free_memory(obstacle_pedes_40_50);
+                clear_and_free_memory(obstacle_pedes_new);
             }
 
             {
                 //=====시나리오 #6. 주행 경로상 통행량이 과다한 환경(차량)=====
                 adcm::Log::Info() << "=============KATECH: scenario 6 START==============";
-                
+
                 obstacleListVector obstacle_vehicle_50_60;
                 obstacleListVector obstacle_vehicle_new;
                 uint64_t ori_timestamp_max = 0, new_timestamp_min = INVALID_RETURN_VALUE, timestamp_diff;
@@ -1182,17 +1152,17 @@ void ThreadKatech()
                                 adcm::Log::Info() << "시나리오6-ii) 주행경로 반경 15m 초과 장애물 삭제: " << iter.obstacle_id;
                                 return true;
                             }
-                            return false;
-                        }),
+                                       return false;
+                                   }),
                     obstacle_vehicle_50_60.end());
 
                 // 최초 실행시 장애물 리스트만 생성
-                if (obstacle_vehicle_initial.empty()) 
+                if (obstacle_vehicle_initial.empty())
                 {
                     adcm::Log::Info() << "시나리오6 최초 실행하므로 장애물 리스트만 생성하고 다음 loop 에 분석을 이어서 한다";
                     obstacle_vehicle_initial.assign(obstacle_vehicle_50_60.begin(), obstacle_vehicle_50_60.end());
                 }
-                else 
+                else
                 {
                     // 신규 객체 추출 (set을 사용하여 중복 제거)
                     std::unordered_set<int> initial_obstacle_ids;
@@ -1205,7 +1175,7 @@ void ThreadKatech()
                             obstacle_vehicle_new.push_back(iter);
                     }
 
-                    if (obstacle_vehicle_new.empty()) 
+                    if (obstacle_vehicle_new.empty())
                     {
                         adcm::Log::Info() << "NO new obstacle. #6 terminates here";
                     }
@@ -1341,7 +1311,7 @@ void ThreadKatech()
                         int minY = std::min({p1.y, p2.y, p3.y, p4.y});
                         int maxY = std::max({p1.y, p2.y, p3.y, p4.y});
 
-                        for (int x = minX; x <= maxX; ++x) 
+                        for (int x = minX; x <= maxX; ++x)
                         {
                             for (int y = minY; y <= maxY; ++y) 
                             {
@@ -1372,7 +1342,7 @@ void ThreadKatech()
                                 }
                             }
 
-                            if (risk_count == 20) 
+                            if (risk_count == 20)
                             {
                                 risk_count = 0;
                                 break; // x 루프도 종료
@@ -1505,9 +1475,9 @@ int main(int argc, char* argv[])
 #ifndef R19_11_1
     adcm::Log::Info() << "RiskAssessment: configure e2e protection";
     bool success = ara::com::e2exf::StatusHandler::Configure("./etc/e2e_dataid_mapping.json",
-                   ara::com::e2exf::ConfigurationFormat::JSON, 
-                   "./etc/e2e_statemachines.json",
-                   ara::com::e2exf::ConfigurationFormat::JSON);
+                                                             ara::com::e2exf::ConfigurationFormat::JSON,
+                                                             "./etc/e2e_statemachines.json",
+                                                             ara::com::e2exf::ConfigurationFormat::JSON);
     adcm::Log::Info() << "RiskAssessment: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
     adcm::Log::Info() << "Ok, let's produce some RiskAssessment data...";
@@ -1518,23 +1488,23 @@ int main(int argc, char* argv[])
     adcm::Log::Info() << "NATS ON";
 #else
     // Code to execute if NATS is not defined
-     adcm::Log::Info() << "NATS OFF";
-#endif    
+    adcm::Log::Info() << "NATS OFF";
+#endif
     thread_list.push_back(std::thread(ThreadReceiveMapData));
-    thread_list.push_back(std::thread(ThreadReceiveBuildPathTest));
     thread_list.push_back(std::thread(ThreadReceiveBuildPath));
     thread_list.push_back(std::thread(ThreadMonitor));
     thread_list.push_back(std::thread(ThreadKatech));
 
-
     adcm::Log::Info() << "Thread join";
-    for(int i = 0; i < static_cast<int>(thread_list.size()); i++) {
+    for (int i = 0; i < static_cast<int>(thread_list.size()); i++)
+    {
         thread_list[i].join();
     }
 
     adcm::Log::Info() << "done.";
 
-    if(!ara::core::Deinitialize()) {
+    if (!ara::core::Deinitialize())
+    {
         // No interaction with ARA is possible here since some ARA resources can be destroyed already
         return EXIT_FAILURE;
     }

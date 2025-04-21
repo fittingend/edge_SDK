@@ -311,6 +311,18 @@ bool isRouteValid(routeVector &route)
     return true; // Return true if all values meet the condition
 }
 
+void checkRange(Point2D &point)
+{
+    if (point.x < 0)
+        point.x = 0;
+    if (point.y < 0)
+        point.y = 0;
+    if (point.x > map_n)
+        point.x = map_n - 1;
+    if (point.y > map_m)
+        point.y = map_m - 1;
+}
+
 void gpsToMapcoordinate(routeVector &route)
 {
     INFO("[RiskAssessment] gpsToMapcoordinate");
@@ -332,10 +344,12 @@ void gpsToMapcoordinate(routeVector &route)
         utm_y -= origin_y;
         adcm::Log::Info() << "utm_x:" << utm_x;
         adcm::Log::Info() << "utm_y:" << utm_y;
-
-        position_x[count] = static_cast<int>((utm_x * cos(angle_radians) - utm_y * sin(angle_radians) - mapOrigin_x) * M_TO_10CM_PRECISION);
-        position_y[count] = static_cast<int>((utm_x * sin(angle_radians) + utm_y * cos(angle_radians) - mapOrigin_y) * M_TO_10CM_PRECISION);
-
+        Point2D mapPoint;
+        mapPoint.x = (utm_x * cos(angle_radians) - utm_y * sin(angle_radians) - mapOrigin_x) * M_TO_10CM_PRECISION;
+        mapPoint.y = (utm_x * sin(angle_radians) + utm_y * cos(angle_radians) - mapOrigin_y) * M_TO_10CM_PRECISION;
+        checkRange(mapPoint);
+        position_x[count] = mapPoint.x;
+        position_y[count] = mapPoint.y;
         adcm::Log::Info() << "경로생성 값 gpsToMapcoordinate 좌표변환 before (" << route[count].latitude << " , " << route[count].longitude << ")";
         adcm::Log::Info() << "경로생성 값 gpsToMapcoordinate 좌표변환 after (" << position_x[count] << " , " << position_y[count] << ")";
     }
@@ -719,63 +733,7 @@ void ThreadReceiveMapData()
         }
     }
 }
-void ThreadReceiveBuildPathTest()
-{
-    adcm::Log::Info() << "RiskAssessment ThreadReceiveBuildPathTest";
-    adcm::BuildPathTest_Subscriber buildPathTest_subscriber;
-    buildPathTest_subscriber.init("RiskAssessment/RiskAssessment/RPort_build_path_test");
-    INFO("Thread ThreadReceiveBuildPathTest start...");
 
-    while (continueExecution)
-    {
-        gMainthread_Loopcount++;
-        VERBOSE("[RiskAssessment] Application loop");
-        bool buildPathTest_rxEvent = buildPathTest_subscriber.waitEvent(100); // wait event
-
-        if (buildPathTest_rxEvent)
-        {
-            adcm::Log::Info() << "[EVENT] RiskAssessment Build Path Test received";
-
-            while (!buildPathTest_subscriber.isEventQueueEmpty())
-            {
-                auto data = buildPathTest_subscriber.getEvent();
-                gReceivedEvent_count_build_path_test++;
-
-                auto size = data->size;
-                auto utm_x = data->utm_x;
-                auto utm_y = data->utm_y;
-
-                adcm::Log::Verbose() << "size : " << size;
-
-                if (!utm_x.empty())
-                {
-                    adcm::Log::Verbose() << "=== utm_x ===";
-                    for (auto itr = utm_x.begin(); itr != utm_x.end(); ++itr)
-                    {
-                        adcm::Log::Verbose() << *itr;
-                    }
-                }
-                else
-                {
-                    adcm::Log::Verbose() << "utm_x Vector empty!!! ";
-                }
-
-                if (!utm_y.empty())
-                {
-                    adcm::Log::Verbose() << "=== utm_y ===";
-                    for (auto itr = utm_y.begin(); itr != utm_y.end(); ++itr)
-                    {
-                        adcm::Log::Verbose() << *itr;
-                    }
-                }
-                else
-                {
-                    adcm::Log::Verbose() << "utm_y Vector empty!!! ";
-                }
-            }
-        }
-    }
-}
 void ThreadReceiveBuildPath()
 {
     adcm::Log::Info() << "RiskAssessment ThreadReceiveBuildPath";
@@ -1576,7 +1534,6 @@ int main(int argc, char *argv[])
     adcm::Log::Info() << "NATS OFF";
 #endif
     thread_list.push_back(std::thread(ThreadReceiveMapData));
-    thread_list.push_back(std::thread(ThreadReceiveBuildPathTest));
     thread_list.push_back(std::thread(ThreadReceiveBuildPath));
     thread_list.push_back(std::thread(ThreadMonitor));
     thread_list.push_back(std::thread(ThreadKatech));
