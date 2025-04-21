@@ -1700,6 +1700,13 @@ void ThreadSend()
             }
             // send_wait = true;
             adcm::Log::Info() << ++mapVer << "번째 mapdata 전송 시작";
+
+            //map_data_object 의 생성시간 추가
+            auto now = std::chrono::system_clock::now();
+            auto mapData_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+            adcm::Log::Info() << "Current timestamp in milliseconds: " << mapData_timestamp;
+            mapData.timestamp = mapData_timestamp;
+            
             // 맵전송
             mapData_provider.send(mapData);
             auto endTime = std::chrono::high_resolution_clock::now();
@@ -1804,11 +1811,12 @@ int main(int argc, char *argv[])
     adcm::Log::Info() << "SDK release_250321_interface v2.1, AGX Orin version";
     adcm::Log::Info() << "DataFusion Build " << b_day;
 
-    //파일 경로 얻
+    // 파일 경로 얻기
     char result[PATH_MAX];
     ssize_t count = readlink("/proc/self/exe", result, PATH_MAX);
     std::string path;
-    if (count != -1) {
+    if (count != -1)
+    {
         path = std::string(result, count);
     }
 
