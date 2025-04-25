@@ -1437,7 +1437,7 @@ void ThreadMonitor()
 {
     while (continueExecution)
     {
-        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+        std::this_thread::sleep_for(std::chrono::milliseconds(20000));
 
         if (gMainthread_Loopcount == 0)
         {
@@ -1465,16 +1465,6 @@ void ThreadMonitor()
             else
             {
                 adcm::Log::Info() << "build_path event timeout!!!";
-            }
-
-            if (gReceivedEvent_count_build_path_test != 0)
-            {
-                adcm::Log::Info() << "build_path_test Received count = " << gReceivedEvent_count_build_path_test;
-                gReceivedEvent_count_build_path_test = 0;
-            }
-            else
-            {
-                adcm::Log::Info() << "build_path_test event timeout!!!";
             }
         }
     }

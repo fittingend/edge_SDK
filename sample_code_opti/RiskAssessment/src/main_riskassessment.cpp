@@ -484,7 +484,10 @@ void symmDiff(const obstacleListVector &vec1, const obstacleListVector &vec2, ob
         j++;
     }
 }
-void detectUnscannedPath(adcm::risk_assessment_Objects &riskAssessment)
+void detectUnscannedPath(const map2dVector& map_2d,
+                         const doubleVector& position_x,
+                         const doubleVector& position_y,
+                         adcm::risk_assessment_Objects& riskAssessment)
 {
     bool breakFlag; // 지정된 전역경로 (x1,y1) 과 (x2, y2) 사이 하나라도
     for (int count = 0; count < position_x.size() - 1; count++)
