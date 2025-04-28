@@ -171,12 +171,14 @@ set(OPENDDS_MAKE_TARGET ${APP_NAME}Generated)
 # Define source files
 set(APPLICATION_src
     src/main_riskassessment.cpp
-    src/NATS_IMPLEMENTATION/NatsConnManager.cpp
+    src/RiskAssessmentUtils.cpp 
+    src/RiskScenarios.cpp
+    src/NATS/NatsConnManager.cpp
+    src/NATS/NatsHandler.cpp
     ${${PROCESS_ARTIFACTS_MAKE_TARGET}_SOURCES}
     ${PROJECT_SOURCE_DIR}/../common/logger/src/logger.cpp
     ${PROJECT_SOURCE_DIR}/../common/service/src/risk_assessment_provider.cpp
     ${PROJECT_SOURCE_DIR}/../common/service/src/build_path_subscriber.cpp
-    ${PROJECT_SOURCE_DIR}/../common/service/src/build_path_test_subscriber.cpp
     ${PROJECT_SOURCE_DIR}/../common/service/src/map_data_subscriber.cpp
 )
 
@@ -244,7 +246,7 @@ if(HAS_OPENDDS_BINDING)
 endif()
 
 
-target_link_libraries(${CMAKE_PROJECT_NAME} ${CMAKE_THREAD_LIBS_INIT} ${ARA_LIBRARIES} ${COMMUNICATION_LIBRARY} ara_com e2exf e2e ara::log ara::exec_execution_client ara::core)
+#target_link_libraries(${CMAKE_PROJECT_NAME} ${CMAKE_THREAD_LIBS_INIT} ${ARA_LIBRARIES} ${COMMUNICATION_LIBRARY} ara_com e2exf e2e ara::log ara::exec_execution_client ara::core)
 
 #NATS용 library 추가
 target_link_libraries(${CMAKE_PROJECT_NAME} ${CMAKE_THREAD_LIBS_INIT} ${ARA_LIBRARIES} ${COMMUNICATION_LIBRARY} ara_com e2exf e2e ara::log ara::exec_execution_client ara::core ${NATS_LIB} ara::core Poco::Net Poco::Foundation Poco::JSON ${Boost_LIBRARIES})
