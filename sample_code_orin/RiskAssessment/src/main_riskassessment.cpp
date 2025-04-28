@@ -227,8 +227,8 @@ void ThreadRASS()
             std::lock_guard<std::mutex> mapLock(mtx_map);
             adcm::Log::Info() << "[PROCESS] Start processing received map data";
             riskAssessment.riskAssessmentList.clear();
-            evaluateScenario1(obstacle_list, ego_vehicle, riskAssessment);
-            evaluateScenario2(obstacle_list, ego_vehicle, riskAssessment);
+            evaluateScenario1(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
+            evaluateScenario2(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
             evaluateScenario3(obstacle_list, ego_vehicle, riskAssessment);
             evaluateScenario4(obstacle_list, ego_vehicle, riskAssessment);
             evaluateScenario5(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);

@@ -81,10 +81,14 @@ enum HazardClass {
 // 시나리오 1 ~ 6: 공통 파라미터
 extern void evaluateScenario1(const obstacleListVector& obstacle_list,
                         const adcm::vehicleListStruct& ego_vehicle,
+                        const doubleVector& path_x,
+                        const doubleVector& path_y,
                         adcm::risk_assessment_Objects& riskAssessment);
 
 void evaluateScenario2(const obstacleListVector& obstacle_list,
                         const adcm::vehicleListStruct& ego_vehicle,
+                        const doubleVector& path_x,
+                        const doubleVector& path_y,
                         adcm::risk_assessment_Objects& riskAssessment);
 
 void evaluateScenario3(const obstacleListVector& obstacle_list,
@@ -124,12 +128,16 @@ void checkRange(Point2D &point);
 void gpsToMapcoordinate(const routeVector& route, 
                         doubleVector& path_x, 
                         doubleVector& path_y);
-double getDistance(adcm::obstacleListStruct obstacle1, adcm::obstacleListStruct obstacle2);
-double getDistance(adcm::obstacleListStruct obstacle, adcm::vehicleListStruct vehicle);
+double calculateDistance(adcm::obstacleListStruct obstacle1, adcm::obstacleListStruct obstacle2);
+double calculateDistance(adcm::obstacleListStruct obstacle, adcm::vehicleListStruct vehicle);
 double getMagnitude(Point2D point);
-double getTTC(const adcm::obstacleListStruct& obstacle, const adcm::vehicleListStruct& vehicle);
-double getDistance_LinearTrajectory(const adcm::obstacleListStruct& obstacle, const doubleVector& path_x, const doubleVector& path_y);
-double getLinearApprox(const adcm::obstacleListStruct& obstacle, const adcm::vehicleListStruct& vehicle);
+bool getTTC(const adcm::obstacleListStruct& obstacle, const adcm::vehicleListStruct& vehicle, double& ttc);
+bool calculateMinDistanceToPath(const adcm::obstacleListStruct& obstacle,
+                                const doubleVector& path_x, 
+                                const doubleVector& path_y,
+                                double& out_distance);
+//bool calculateDistanceToPath(const adcm::obstacleListStruct& obstacle, const doubleVector& path_x, const doubleVector& path_y, double& out_distance);
+bool calculateMinDistanceLinear(const adcm::obstacleListStruct& obstacle, const adcm::vehicleListStruct& vehicle, double& min_distance);
 void symmDiff(const obstacleListVector& vec1, const obstacleListVector& vec2, obstacleListVector &output, int n, int m);
 void detectUnscannedPath(const std::vector<adcm::map_2dListVector>& map_2d,
                          const doubleVector& path_x,
