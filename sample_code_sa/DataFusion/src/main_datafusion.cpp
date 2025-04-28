@@ -423,8 +423,8 @@ void gpsToMapcoordinate(VehicleData &vehicle)
     // vehicle.velocity_x = (velocity_ang * (-sin(theta) * (position_x - alpha) + (cos(theta) * (position_y - beta)))) + (velocity_x * cos(theta)) + (velocity_y * sin(theta));
     // vehicle.velocity_y = (velocity_ang * (-cos(theta) * (position_x - alpha) - (sin(theta) * (position_y - beta)))) + (velocity_x * -sin(theta)) + (velocity_y * cos(theta));
     vehicle.yaw = -(vehicle.yaw + MAP_ANGLE - 90); // 맵에 맞춰 차량 각도 회전
-    // adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
-    // adcm::Log::Info() << "timestamp: " << vehicle.timestamp << " 차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.yaw << ")";
+    adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
+    adcm::Log::Info() << "timestamp: " << vehicle.timestamp << " 차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.yaw << ")";
 }
 
 void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData vehicle)
@@ -1213,6 +1213,10 @@ void ThreadReceiveHubData()
                 FusionData fusionData;
                 fillVehicleData(fusionData.vehicle, data);
                 fillObstacleList(fusionData.obstacle_list, data);
+                for(int i=0; i<fusionData.vehicle.road_z.size(); i++)
+                    adcm::Log::Info() << "road_z: " << fusionData.vehicle.road_z[i];\
+                if(fusionData.vehicle.road_z.size()==0)
+                    adcm::Log::Info() << "road_z empty";
 
                 switch (data->vehicle_class)
                 {
@@ -1412,6 +1416,7 @@ void ThreadKatech()
             dataReady.wait(lock, []
                            { return (ego == true && sub1 == true && sub2 == true); });
 
+            std::this_thread::sleep_for(std::chrono::milliseconds(500)); // 대기시간
             // adcm::Log::Info() << "송신이 필요한 남은 허브 데이터 개수: " << main_vehicle_queue.size_approx() + sub1_vehicle_queue.size_approx() + sub2_vehicle_queue.size_approx();
             std::int8_t map_x = max_a - min_a;
             std::int8_t map_y = max_b - min_b;
