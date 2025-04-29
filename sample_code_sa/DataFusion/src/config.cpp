@@ -16,8 +16,8 @@ public:
     void setDefault(boost::property_tree::ptree& pt, std::string& serverAddress, int& serverPort, bool& useSSL)
     {
         // 멤버 변수에 값 저장
-            serverAddress = pt.get<std::string>("Network.NATSServerAddress", "127.0.0.1"); // 기본값 설정
-            serverPort = pt.get<int>("Network.ServerPort", 4222); // 기본값 설정
+            serverAddress = pt.get<std::string>("Network.NATSServerAddress", "https://nats.beyless.com"); // 기본값 설정
+            serverPort = pt.get<int>("Network.ServerPort", 0); // 기본값 설정
             useSSL = pt.get<bool>("Network.UseSSL", false); // 기본값 설정
     }
 

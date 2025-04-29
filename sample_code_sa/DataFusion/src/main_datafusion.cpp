@@ -259,7 +259,7 @@ void NatsStart()
     if (firstTime == true)
     {
         adcm::Log::Info() << "NATS first time setup!";
-        natsManager = std::make_shared<adcm::etc::NatsConnManager>("192.168.100.233:4222", subject, onMsg, asyncCb, adcm::etc::NatsConnManager::Mode::Default);
+        natsManager = std::make_shared<adcm::etc::NatsConnManager>(nats_server_url.c_str(), subject, onMsg, asyncCb, adcm::etc::NatsConnManager::Mode::Default);
         s = natsManager->NatsExecute();
         firstTime = false;
     }
@@ -286,7 +286,7 @@ void NatsSend(const adcm::map_data_Objects &mapData)
         adcm::Log::Info() << "NATS connection error";
         try
         {
-            natsManager = std::make_shared<adcm::etc::NatsConnManager>("192.168.100.233:4222", subject, onMsg, asyncCb, adcm::etc::NatsConnManager::Mode::Default);
+            natsManager = std::make_shared<adcm::etc::NatsConnManager>(nats_server_url.c_str(), subject, onMsg, asyncCb, adcm::etc::NatsConnManager::Mode::Default);
             s = natsManager->NatsExecute();
         }
         catch (std::exception e)
@@ -1214,6 +1214,14 @@ void ThreadReceiveHubData()
                 fillVehicleData(fusionData.vehicle, data);
                 fillObstacleList(fusionData.obstacle_list, data);
 
+                if(fusionData.vehicle.road_z.size()!=0)
+                {
+                    for(int i=0; i<fusionData.vehicle.road_z.size(); i++)
+                        adcm::Log::Info() << "road_z: " << fusionData.vehicle.road_z[i];
+                }
+                else
+                    adcm::Log::Info() << "road_z empty";
+
                 switch (data->vehicle_class)
                 {
                 // <25.03.04> 큐 제거
@@ -1833,7 +1841,12 @@ int main(int argc, char *argv[])
         config.print();
     }
 
-    nats_server_url = config.serverAddress + ":" + to_string(config.serverPort);
+    if(config.serverPort == 0)
+        nats_server_url = config.serverAddress;
+    else
+    {
+        nats_server_url = config.serverAddress + ":" + to_string(config.serverPort);
+    }
     adcm::Log::Info() << "NATS_SERVER_URL: " << nats_server_url;
 
 #ifdef NATS
