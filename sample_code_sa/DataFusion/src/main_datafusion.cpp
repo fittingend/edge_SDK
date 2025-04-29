@@ -1069,6 +1069,7 @@ adcm::vehicleListStruct ConvertToVehicleListStruct(const VehicleData &vehicle, s
         auto &map_cell = map[index_to_push.x][index_to_push.y];
         map_cell.vehicle_class = vehicle_final.vehicle_class;
         map_cell.road_z = 1;
+        //road_z 값은 여기에 반영
         vehicle_final.map_2d_location.push_back(index_to_push);
     }
 
@@ -1213,14 +1214,17 @@ void ThreadReceiveHubData()
                 FusionData fusionData;
                 fillVehicleData(fusionData.vehicle, data);
                 fillObstacleList(fusionData.obstacle_list, data);
-
-                if(fusionData.vehicle.road_z.size()!=0)
+                
+                if(data->road_z.size()!=0)
                 {
-                    for(int i=0; i<fusionData.vehicle.road_z.size(); i++)
-                        adcm::Log::Info() << "road_z: " << fusionData.vehicle.road_z[i];
+                    adcm::Log::Info() << "road_z size: "<< data->road_z.size();
+                    for(int i=0; i<data->road_z.size(); i++)
+                        adcm::Log::Info() << i << "번째 road_z: " << data->road_z[i];
                 }
                 else
                     adcm::Log::Info() << "road_z empty";
+                //road_z는 차량 주변 10m x 10m, 차량 사이즈+주변 2m 제외
+                //road_z는 맵 기준 100x100 사이즈의 배열인데, 이를 왼쪽 위부터 1차원 배열로 변환해서 옴
 
                 switch (data->vehicle_class)
                 {
