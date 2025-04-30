@@ -1,6 +1,8 @@
 /lib
 /doc
 build/
+build_sa/
+build_orin/
 .vscode
 .DS_Store
 sample_code_opti/
