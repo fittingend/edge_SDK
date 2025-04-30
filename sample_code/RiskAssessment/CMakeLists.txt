@@ -56,6 +56,24 @@ add_compile_definitions(DEFAULT_LOG_TAG="${PROC_NAME}")
 include(GNUInstallDirs)
 include(AUTOSAR/apd)
 
+# SDK Options
+option(sa "Build with sa SDK" OFF)
+option(orin "Build with orin SDK" OFF)
+
+# SDK common Path
+set(COMMON_DIR "")
+
+# set common directory by SDK
+if(sa)
+    message(STATUS "Building with SA SDK")
+    set(COMMON_DIR "${PROJECT_SOURCE_DIR}/../common_sa")
+elseif(orin)
+    message(STATUS "Building with ORIN SDK")
+    set(COMMON_DIR "${PROJECT_SOURCE_DIR}/../common_orin")
+else()
+    message(FATAL_ERROR "No SDK specified. Please enable either SA_SDK or ORIN_SDK.")
+endif()
+
 # Generic stuff (ara generator and arxmls)
 find_package(ara-gen REQUIRED)
 
@@ -173,11 +191,11 @@ set(APPLICATION_src
     src/main_riskassessment.cpp
     src/NATS_IMPLEMENTATION/NatsConnManager.cpp
     ${${PROCESS_ARTIFACTS_MAKE_TARGET}_SOURCES}
-    ${PROJECT_SOURCE_DIR}/../common/logger/src/logger.cpp
-    ${PROJECT_SOURCE_DIR}/../common/service/src/risk_assessment_provider.cpp
-    ${PROJECT_SOURCE_DIR}/../common/service/src/build_path_subscriber.cpp
-    ${PROJECT_SOURCE_DIR}/../common/service/src/build_path_test_subscriber.cpp
-    ${PROJECT_SOURCE_DIR}/../common/service/src/map_data_subscriber.cpp
+    ${COMMON_DIR}/logger/src/logger.cpp
+    ${COMMON_DIR}/service/src/risk_assessment_provider.cpp
+    ${COMMON_DIR}/service/src/build_path_subscriber.cpp
+    ${COMMON_DIR}/service/src/build_path_test_subscriber.cpp
+    ${COMMON_DIR}/service/src/map_data_subscriber.cpp
 )
 
 if(HAS_VSOMEIP_BINDING OR HAS_WRSOMEIP_BINDING)
@@ -221,9 +239,9 @@ if(HAS_VSOMEIP_BINDING OR HAS_WRSOMEIP_BINDING)
         ${GEN_DEST}/includes
         ${ARA_INCLUDE_DIRS}
         ${PROJECT_SOURCE_DIR}/include
-        ${PROJECT_SOURCE_DIR}/../common/service/inc
-        ${PROJECT_SOURCE_DIR}/../common/e2e
-        SYSTEM ${PROJECT_SOURCE_DIR}/../common/logger/inc
+        ${COMMON_DIR}/service/inc
+        ${COMMON_DIR}/e2e
+        SYSTEM ${COMMON_DIR}/logger/inc
     )
 endif()
 
@@ -237,9 +255,9 @@ if(HAS_OPENDDS_BINDING)
         ${GEN_DEST}/includes
         ${ARA_INCLUDE_DIRS}
         ${PROJECT_SOURCE_DIR}/include
-        ${PROJECT_SOURCE_DIR}/../common/service/inc
-        ${PROJECT_SOURCE_DIR}/../common/e2e
-        SYSTEM ${PROJECT_SOURCE_DIR}/../common/logger/inc
+        ${COMMON_DIR}/service/inc
+        ${COMMON_DIR}/e2e
+        SYSTEM ${COMMON_DIR}/logger/inc
     )
 endif()
 
@@ -268,9 +286,9 @@ apd_install_app_file_rename(${CMAKE_PROJECT_NAME} etc ${SI_MANIFEST_FILENAME} se
 #apd_install_app_service_instance_manifest(${CMAKE_PROJECT_NAME} ${SI_MANIFEST_FILENAME})
 
 # E2E protection configs
-apd_install_app_file(${CMAKE_PROJECT_NAME} etc ${PROJECT_SOURCE_DIR}/../common/e2e/e2e_dataid_mapping.json)
-apd_install_app_file(${CMAKE_PROJECT_NAME} etc ${PROJECT_SOURCE_DIR}/../common/e2e/e2e_statemachines.json)
-apd_install_app_file(${CMAKE_PROJECT_NAME} vsomeip ${PROJECT_SOURCE_DIR}/../common/e2e/vsomeip.json)
+apd_install_app_file(${CMAKE_PROJECT_NAME} etc ${COMMON_DIR}/e2e/e2e_dataid_mapping.json)
+apd_install_app_file(${CMAKE_PROJECT_NAME} etc ${COMMON_DIR}/e2e/e2e_statemachines.json)
+apd_install_app_file(${CMAKE_PROJECT_NAME} vsomeip ${COMMON_DIR}/e2e/vsomeip.json)
 
 #apd_install_app_file(${CMAKE_PROJECT_NAME} etc ${PROJECT_SOURCE_DIR}/etc/e2e_dataid_mapping.json)
 #apd_install_app_file(${CMAKE_PROJECT_NAME} etc ${PROJECT_SOURCE_DIR}/etc/e2e_statemachines.json)
