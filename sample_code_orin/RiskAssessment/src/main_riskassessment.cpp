@@ -48,8 +48,6 @@
 #include "main_riskassessment.hpp"
 #include "NATS/NatsHandler.hpp"
 
-//define NATS
-
 //전역변수
 std::mutex mtx_map, mtx_rass, mtx_path, mtx_cv;
 std::vector<adcm::map_2dListVector> map_2d;

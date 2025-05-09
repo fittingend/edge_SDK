@@ -13,6 +13,8 @@
 #include <atomic>
 #include <cmath>
 #include <vector>
+#include <algorithm>
+
 
 // ==== ARA & Logger 관련 헤더 ====
 #include <ara/com/e2exf/status_handler.h>
@@ -104,7 +106,7 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
                         const doubleVector& path_x,
                         const doubleVector& path_y,
                         adcm::risk_assessment_Objects& riskAssessment);
-
+void resetScenario5State();
 void evaluateScenario6(const obstacleListVector& obstacle_list,
                         const adcm::vehicleListStruct& ego_vehicle,
                         const doubleVector& path_x,
@@ -121,15 +123,27 @@ void evaluateScenario8(const doubleVector& path_x,
                         const doubleVector& path_y,
                         const std::vector<adcm::map_2dListVector>& map_2d,
                         adcm::risk_assessment_Objects& riskAssessment);
+
+// ==== confidence 값을 clamp 해주는 clampValue 함수 선언 ====
+template <typename T>
+T clampValue(const T& value, const T& low, const T& high) {
+    if (value < low) return low;
+    if (value > high) return high;
+    return value;
+}
 // ==== utils 함수 선언 ====
+
+bool extractNewObstacles(obstacleListVector vec_old, 
+                        obstacleListVector vec_new, 
+                        obstacleListVector& vec_output);
 void GPStoUTM(double lat, double lon, double &utmX, double &utmY);
 bool isRouteValid(routeVector& route);
 void checkRange(Point2D &point);
 void gpsToMapcoordinate(const routeVector& route, 
                         doubleVector& path_x, 
                         doubleVector& path_y);
-double calculateDistance(adcm::obstacleListStruct obstacle1, adcm::obstacleListStruct obstacle2);
-double calculateDistance(adcm::obstacleListStruct obstacle, adcm::vehicleListStruct vehicle);
+double calculateDistance(const adcm::obstacleListStruct& obstacle1, const adcm::obstacleListStruct& obstacle2);
+double calculateDistance(const adcm::obstacleListStruct& obstacle, const adcm::vehicleListStruct& vehicle);
 double getMagnitude(Point2D point);
 bool getTTC(const adcm::obstacleListStruct& obstacle, const adcm::vehicleListStruct& vehicle, double& ttc);
 bool calculateMinDistanceToPath(const adcm::obstacleListStruct& obstacle,

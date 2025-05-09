@@ -1,6 +1,7 @@
 #include "main_riskassessment.hpp"
-static obstacleListVector obstacle_fix, obstacle_previous;   // 시나리오 5용 전역변수
-static int newObsFound; //시나리오 5용 변수 
+static obstacleListVector obstacle_fix, obstacle_previous, obstacle_new_accmulated;   // 시나리오 5용 전역변수
+static int newObsFound; //시나리오 5용 전역 변수 
+static uint64_t init_timestamp_max, new_timestamp_min; //시나리오 5용 전역 변수
 static obstacleListVector obstacle_vehicle_initial; // 시나리오 6용 전역변수
 
 
@@ -247,94 +248,156 @@ void evaluateScenario4(const obstacleListVector& obstacle_list,
     }
     adcm::Log::Info() << "scenario 4 DONE";
 }
-
+/**
+ * @brief 시나리오 5: 보행자 밀집 및 신규 객체 출현 기반 위험 판단
+ *
+ * ego 차량 주변 (40m~50m) 내에서 보행자가 일정 수 이상 탐지되고,
+ * 주행 경로 반경 10m 이내며
+ * 이후 10초 이내에 새로운 보행자가 등장하며,
+ * 등장한 보행자 간 거리가 20m 이하인 경우 위험 판단 수행.
+ * 이때 ego 차량과 가장 가까운 보행자를 대상으로 confidence 값을 계산하여 평가 목록에 추가.
+ * 현재 구조로 obstacle_list 에서 장애물이 계속 추가가 되지 있던 장애물이 없어지지는 않음 -> 이 가정하에 알고리즘 작성
+ * confidence 값은 min_distance = 0이면 1.0 (가장 위험)하며 min_distance = 200이면 0.0 (경계선), min_distance > 200이면 0으로 클램핑
+ * @param obstacle_list      현재 인지된 장애물 리스트
+ * @param ego_vehicle        ego 차량 정보 (위치 등)
+ * @param path_x             전역 경로 x 좌표 리스트
+ * @param path_y             전역 경로 y 좌표 리스트
+ * @param riskAssessment     시나리오 판단 결과가 저장될 객체
+ */
 void evaluateScenario5(const obstacleListVector& obstacle_list, 
                        const adcm::vehicleListStruct& ego_vehicle, 
                        const doubleVector& path_x, 
                        const doubleVector& path_y,
                        adcm::risk_assessment_Objects& riskAssessment)
 {
-    adcm::Log::Info() << "=============KATECH: scenario 5 START==============";
+    using namespace adcm;
+    Log::Info() << "=============KATECH: scenario 5 START==============";
 
+    constexpr double MIN_DISTANCE = 400.0;     // 40m
+    constexpr double MAX_DISTANCE = 500.0;     // 50m
+    constexpr double DISTANCE_TO_PATH = 100.0; // 10m
+    constexpr double MAX_DISTANCE_BTW_OBS = 200.0;
+    constexpr double TIMESTAMP_THRESHOLD = 1000.0;
+   
+    // (1) 보행자 필터링 및 거리 조건
     obstacleListVector obstacle_current, obstacle_new;
-    constexpr double MIN_DISTANCE = 400.0;   // 40m
-    constexpr double MAX_DISTANCE = 500.0;   // 50m
-    constexpr double DISTANCE_THRESHOLD = 100.0;   // 10m
-    constexpr double TIMESTAMP_THRESHOLD = 1000;   // 현재 시뮬레이션에서는 timetampe 1 이 10ms 이므로 이므로 10s=10000ms=>1000 값 이내면 신규객  
-    constexpr double CONFIDENCE_WEIGHT = 0.7;
-
     for (const auto& obs : obstacle_list) {
-        double distance = calculateDistance(obs, ego_vehicle);
-        if (MIN_DISTANCE < distance && distance < MAX_DISTANCE && obs.obstacle_class == PEDESTRIAN) {
+        if (obs.obstacle_class != PEDESTRIAN) continue;
+
+        double dist = calculateDistance(obs, ego_vehicle);
+        if (dist < MIN_DISTANCE || dist > MAX_DISTANCE) continue;
+
+        double path_dist;
+        if (calculateMinDistanceToPath(obs, path_x, path_y, path_dist) && path_dist <= DISTANCE_TO_PATH)
             obstacle_current.push_back(obs);
-        }
+        else
+            Log::Debug() << "제거된 장애물 ID: " << obs.obstacle_id << " | 경로 거리: " << path_dist;
     }
 
-    obstacle_current.erase(
-        std::remove_if(obstacle_current.begin(), obstacle_current.end(),
-                    [&](const auto& obs) { 
-                        double min_distance;
-                        bool valid = calculateMinDistanceToPath(obs, path_x, path_y, min_distance);
-                        if (!valid || min_distance > MAX_KEEP_DISTANCE) {
-                            adcm::Log::Debug() << "제거된 장애물 ID: " << obs.obstacle_id 
-                                                << " | 거리: " << (valid ? min_distance : -1);
-                            return true;
-                        }
-                        return false;
-                    }),
-        obstacle_current.end());
-
-    //obstacle_previous 최초 생성
+    // (2) 최초 프레임일 경우 기준 설정
     if (obstacle_previous.empty()) {
         obstacle_previous = obstacle_current;
-    } else {
-        //t 의 obstacle_init 와 t+1 의 obstacle_temp를 비교해 새로운 객체가 인지되었다면 obstacle_new 에 저장
-        if (extractNewObstacles(obstacle_previous, obstacle_temp, obstacle_new))
-        {
-            newObsFound++;
-            if (newObsFound == 1)
-            {
-                //새로운 객체가 발견되었으므로 해당 obstacle_init 는 obstacle_fix 에 저장해놓고 비교 기준으로 삼는다
-                adcm::Log::Info() << "New obstacle first detected! 시나리오 5 계속";
-                obstacle_fix = obstacle_previous;
+        return;
+    }
+
+   // (3) 신규 객체 추출
+    if (extractNewObstacles(obstacle_previous, obstacle_current, obstacle_new)) {
+        newObsFound++;
+
+        if (newObsFound == 1) {
+            Log::Info() << "New obstacle first detected! 시나리오 5 계속";
+            obstacle_fix = obstacle_previous; 
+            obstacle_new_accmulated = obstacle_new; // obstacle_new_accmulated 초기화
+
+            //신규 객체가 발견되기 바로 이전 프레임 obstacle_fix 의 timestamp 값을 init_timestamp_max 로 저장한다 
+            init_timestamp_max = 0.0;
+            for (const auto& obs : obstacle_fix) {
+                init_timestamp_max = std::max(init_timestamp_max, obs.timestamp);
             }
         }
 
-        if(newObsFound >=2)
-        { 
-            for (const auto& iter : obstacle_fix)
-                init_timestamp_max = std::max(init_timestamp_max, iter.timestamp);
+        if (newObsFound >= 2) {
+            obstacle_new_accmulated.insert(obstacle_new_accmulated.end(), obstacle_new.begin(), obstacle_new.end());
 
-            for (const auto& iter : obstacle_new)
-                new_timestamp_min = std::min(new_timestamp_min, iter.timestamp);
+            new_timestamp_min = std::numeric_limits<double>::max();
+            for (const auto& obs : obstacle_new_accmulated) {
+                new_timestamp_min = std::min(new_timestamp_min, obs.timestamp);
+            }
 
-            double timestamp_diff = new_timestamp_min - ori_timestamp_max;
+            uint64_t timestamp_diff = new_timestamp_min - init_timestamp_max;
+            Log::Info() << "timestamp diff: " << timestamp_diff;
 
-            if (timestamp_diff < TIMESTAMP_THRESHOLD)
-            {
-                adcm::Log::Info() << "10초 이내 신규객체 발견";
-                //=========iv) 객체 출현시간 10s 이내일때 객체간 최대거리 계산
-                for (const auto& obs_fix : obstacle_fix)
-                {
-                    for (const auto& obs_new : obstacle_new)
-                    {
-                        distance = calculateDistance(obs_fix, obs_new);
-                        max_distance = std::max(max_distance, distance);
+            if (timestamp_diff < TIMESTAMP_THRESHOLD) {
+                double max_distance = 0.0;
+                for (size_t i = 0; i < obstacle_current.size(); ++i) {
+                    for (size_t j = i + 1; j < obstacle_current.size(); ++j) {
+                        if (obstacle_current[i].obstacle_class != PEDESTRIAN || 
+                            obstacle_current[j].obstacle_class != PEDESTRIAN) continue;
+
+                        max_distance = std::max(max_distance, calculateDistance(obstacle_current[i], obstacle_current[j]));
                     }
                 }
-                adcm::Log::Info() << "객체간 최대거리: " << max_distance;
-                if (max_distance < MIN_DISTANCE)
+
+                Log::Info() << "객체간 최대거리: " << max_distance;
+                if (max_distance < MAX_DISTANCE_BTW_OBS) {
+                    double min_distance = std::numeric_limits<double>::max();
+                    obstacleListStruct closest_obs;
+
+                    for (const auto& obs : obstacle_current) {
+                        double dist = calculateDistance(obs, ego_vehicle);
+                        if (dist < min_distance) {
+                            min_distance = dist;
+                            closest_obs = obs;
+                        }
+                    }
+                    double confidence = clampValue((MAX_DISTANCE_BTW_OBS - min_distance) / MAX_DISTANCE_BTW_OBS, 0.0, 1.0);
+
+                    riskAssessmentStruct scenario5{
+                        .obstacle_id = closest_obs.obstacle_id,
+                        .hazard_class = SCENARIO_5,
+                        .confidence = confidence
+                    };
+
+                    Log::Info() << "위험판단 시나리오 #5 | ID: " << closest_obs.obstacle_id
+                                << " | confidence: " << confidence;
+
+                    riskAssessment.riskAssessmentList.push_back(scenario5);
+                    resetScenario5State();
+                }
+            } else {
+                //해당 else statement 는 삭제해도 무관 
+                Log::Info() << "[Scenario 5] 두 번째 객체 10초 내 미등장 → 초기화";
+                resetScenario5State();
             }
         }
-
-
-            adcm::Log::Info() << "새로운 객체 등장X. 시나리오 5 종료";
-            obstacle_previous = obstacle_current;
     }
-    adcm::Log::Info() << "scenario 5 DONE";
 
+    // (4) 첫 객체만 감지된 상태에서 시간이 너무 지나도 초기화
+    if (newObsFound == 1) {
+        uint64_t now_timestamp = 0.0;
+        for (const auto& obs : obstacle_current)
+            now_timestamp = std::max(now_timestamp, obs.timestamp);
+
+        uint64_t timestamp_diff = now_timestamp - init_timestamp_max;
+
+        if (timestamp_diff >= TIMESTAMP_THRESHOLD) {
+            Log::Info() << "[Scenario 5] 첫 객체만 있고 10초 경과 → 상태 초기화";
+            resetScenario5State();
+        }
+    }
+
+    obstacle_previous = obstacle_current;
+    Log::Info() << "============= scenario 5 DONE =============";
 }
 
+void resetScenario5State() {
+    newObsFound = 0;
+    obstacle_fix.clear();
+    obstacle_new_accmulated.clear();
+    init_timestamp_max = 0.0;
+    new_timestamp_min = std::numeric_limits<double>::max();
+}
+/*
 //=====시나리오 #6. 주행 경로상 통행량이 과다한 환경(차량)=====
 void evaluateScenario6(const obstacleListVector& obstacle_list, 
                        const adcm::vehicleListStruct& ego_vehicle, 
@@ -550,4 +613,4 @@ void evaluateScenario8(const doubleVector& path_x,
     adcm::Log::Info() << "scenario 8 DONE";
 }
 
-
+*/
