@@ -112,6 +112,7 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
                         const doubleVector& path_x,
                         const doubleVector& path_y,
                         adcm::risk_assessment_Objects& riskAssessment);
+void resetScenario6State();
 
 // 시나리오 7: 경로와 맵 정보 필요
 void evaluateScenario7(const doubleVector& path_x,

@@ -295,43 +295,52 @@ void ThreadSend()
 
     while (continueExecution)
     {
-        {
-            std::unique_lock<std::mutex> lock(mtx_rass);
-            // rassReady.wait(lock, []
-            //                { return sendEmptyMap == true ||
-            //                        isRassAvail > 0; });
-            auto startTime = std::chrono::high_resolution_clock::now();
+        std::unique_lock<std::mutex> lock(mtx_rass);
 
-            adcm::Log::Info() << ++rassVer << "번째 위험판단 값 전송 시작";
-            if (riskAssessment.riskAssessmentList.size() != 0)
-            {
-                //risktAssessment object 의 생성시간 추가
-                auto now = std::chrono::system_clock::now();
-                auto riskAssessment_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-                adcm::Log::Info() << "Current timestamp in milliseconds: " << riskAssessment_timestamp;
-                riskAssessment.timestamp = riskAssessment_timestamp;
-                riskAssessment_provider.send(riskAssessment);
-                adcm::Log::Info() << "riskAssessment sent!";
+        if (!riskAssessment.riskAssessmentList.empty())
+        {
+            auto t_start_total = std::chrono::high_resolution_clock::now();
+
+            // 타임스탬프 설정
+            auto now = std::chrono::system_clock::now();
+            auto riskAssessment_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+            riskAssessment.timestamp = riskAssessment_timestamp;
+
+            adcm::Log::Info() << "[" << ++rassVer << "차] 위험판단 전송 시작, timestamp: " << riskAssessment_timestamp;
+
+            // [1] 일반 전송 시간 측정
+            auto t_start_send = std::chrono::high_resolution_clock::now();
+            riskAssessment_provider.send(riskAssessment);
+            auto t_end_send = std::chrono::high_resolution_clock::now();
+            adcm::Log::Info() << "→ 위험판단 전송 완료";
+
+            auto send_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end_send - t_start_send).count();
+            adcm::Log::Info() << "→ 위험판단 전송 소요 시간: " << send_duration_ms << " ms";
 
 #ifdef NATS
-                adcm::Log::Info() << "NATS 전송 시작";
-                NatsSend(riskAssessment);
+            // [2] NATS 전송 시간 측정
+            auto t_start_nats = std::chrono::high_resolution_clock::now();
+            adcm::Log::Info() << "→ NATS 전송 시작";
+            NatsSend(riskAssessment);
+            auto t_end_nats = std::chrono::high_resolution_clock::now();
+            adcm::Log::Info() << "→ NATS 전송 완료";
+
+            auto nats_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end_nats - t_start_nats).count();
+            adcm::Log::Info() << "→ NATS 전송 소요 시간: " << nats_duration_ms << " ms";
 #endif
-            }
-            else
-            {
-                adcm::Log::Info() << "riskAssessment size is 0, do NOT send";
-            }
-            
-            riskAssessment.riskAssessmentList.clear();
-            std::this_thread::sleep_for(std::chrono::milliseconds(200)); // 대기시간
+
+            auto t_end_total = std::chrono::high_resolution_clock::now();
+            auto total_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end_total - t_start_total).count();
+            adcm::Log::Info() << "→ 전체 전송 처리 시간: " << total_duration_ms << " ms";
+        }
+        else
+        {
+            adcm::Log::Info() << "[" << ++rassVer << "차] 위험판단 없음 → 전송 생략";
         }
 
-        // {
-        //     lock_guard<mutex> lock(mtx_send);
-        //     send_wait = false;
-        // }
-        // mapSend.notify_one();
+        riskAssessment.riskAssessmentList.clear();
+        lock.unlock();
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
 }
 
