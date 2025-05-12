@@ -74,6 +74,11 @@ else()
     message(FATAL_ERROR "No SDK specified. Please enable either SA_SDK or ORIN_SDK.")
 endif()
 
+#Build Time
+string(TIMESTAMP BUILD_TIMESTAMP "%Y-%m-%d %H:%M:%S")
+
+add_definitions(-DBUILD_TIMESTAMP="${BUILD_TIMESTAMP}")
+
 # Generic stuff (ara generator and arxmls)
 find_package(ara-gen REQUIRED)
 

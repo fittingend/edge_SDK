@@ -144,8 +144,8 @@ struct GridCellData
 {
     std::uint16_t obstacle_id;
     VehicleClass vehicle_class;
-    int road_z; // 2 bytes
-}; // 패딩때문에 토탈 24 bytes
+    int road_z;
+}; // 패딩때문에 토탈 12 bytes
 
 struct MapData
 {

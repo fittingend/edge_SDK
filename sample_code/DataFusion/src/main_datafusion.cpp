@@ -1821,7 +1821,7 @@ int main(int argc, char *argv[])
 #endif
     adcm::Log::Info() << "Ok, let's produce some DataFusion data...";
     adcm::Log::Info() << "SDK release_250314_interface v2.1";
-    adcm::Log::Info() << "DataFusion Build " << b_day;
+    adcm::Log::Info() << "DataFusion Build " << BUILD_TIMESTAMP;
 
     // 파일 경로 얻
     char result[PATH_MAX];

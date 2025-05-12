@@ -63,6 +63,11 @@ option(orin "Build with orin SDK" OFF)
 # SDK common Path
 set(COMMON_DIR "")
 
+#Build Time
+string(TIMESTAMP BUILD_TIMESTAMP "%Y-%m-%d %H:%M:%S")
+
+add_definitions(-DBUILD_TIMESTAMP="${BUILD_TIMESTAMP}")
+
 # set common directory by SDK
 if(sa)
     message(STATUS "Building with SA SDK")
