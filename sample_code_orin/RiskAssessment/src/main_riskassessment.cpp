@@ -47,7 +47,17 @@
 
 #include "main_riskassessment.hpp"
 #include "NATS/NatsHandler.hpp"
+/**
+  * 쓰레드간 관례
+  * [1] ThreadReceiveMapData
+           ↓ (notify)
+    [2] ThreadRASS
+           ↓ (notify)
+    [3] ThreadSend
 
+    ※ 전제 조건:
+    - ThreadRASS는 ThreadReceiveBuildPath에서 path를 한번이라도 받아야 실행됨 (path_x, path_y ≠ 0)
+*/
 //전역변수
 std::mutex mtx_map, mtx_rass, mtx_path, mtx_cv;
 std::vector<adcm::map_2dListVector> map_2d;
@@ -62,8 +72,15 @@ adcm::risk_assessment_Objects riskAssessment;
 
 bool isMapAvailable = false;
 bool isPathAvailable = false;
-std::condition_variable cv_mapData;
+std::condition_variable cv_mapData, cv_rass;
 
+/**
+ * @brief 맵 데이터 수신 쓰레드
+ *
+ * - map_2d, obstacle_list, vehicle_list 수신
+ * - 수신 후 isMapAvailable = true 설정
+ * - 조건변수 cv_mapData를 통해 ThreadRASS를 깨움
+ */
 void ThreadReceiveMapData()
 {
     adcm::MapData_Subscriber mapData_subscriber;
@@ -147,6 +164,8 @@ void ThreadReceiveMapData()
                 {
                     std::lock_guard<std::mutex> lock(mtx_cv);
                     isMapAvailable = true;
+                    adcm::Log::Info() << "Map Available";
+
                 }
                 cv_mapData.notify_one();  // 다른 스레드에게 알림
                 adcm::Log::Info() << "다른 스레드에게 알림";
@@ -155,7 +174,14 @@ void ThreadReceiveMapData()
         }
     }
 }
-
+/**
+ * @brief 경로(Build Path) 수신 쓰레드
+ *
+ * - EGO_VEHICLE의 경로(route)를 수신하면 path_x, path_y 설정
+ * - 최초 1회 수신 시 isPathAvailable = true 설정
+ * - ThreadRASS는 isMapAvailable && isPathAvailable 조건 만족 시 실행됨
+ * - 따로 notify는 하지 않음
+ */
 void ThreadReceiveBuildPath()
 {
     adcm::BuildPath_Subscriber buildPath_subscriber;
@@ -185,20 +211,20 @@ void ThreadReceiveBuildPath()
                     const auto& route = pathItem.route;
                     if (pathItem.vehicle_class == EGO_VEHICLE)
                     {   
-                        //if (isRouteValid(route))
-                        //{
-                            INFO("특장차의 경로 좌표변환 진행");
-                            std::lock_guard<std::mutex> lock(mtx_path);
-                            path_x.clear();
-                            path_y.clear();
-                            //새로운 경로를 받으면 예전 변환값이 담긴 path_x 와 path_y 초기화
-                            gpsToMapcoordinate(route, path_x, path_y);
-                            isPathAvailable = true;
-                        //}
-                        // else
-                        // {
-                        //     INFO("특장차의 경로가 invalid 함 => do nothing");
-                        // }
+                        std::lock_guard<std::mutex> lock(mtx_path);
+                        path_x.clear();
+                        path_y.clear();
+                        //새로운 경로를 받으면 예전 변환값이 담긴 path_x 와 path_y 초기화
+                        INFO("특장차의 경로 좌표변환 진행");
+                        gpsToMapcoordinate(route, path_x, path_y);
+                        
+                        {
+                            std::lock_guard<std::mutex> lock(mtx_cv);
+                            isPathAvailable = true;  // 최초 1회 true면 ThreadRASS 조건 만족
+                            INFO("Path available");
+
+                        }
+
                     }
                     for (const auto& point : route)
                     {
@@ -211,7 +237,13 @@ void ThreadReceiveBuildPath()
         }
     }
 }
-
+/**
+ * @brief 위험 판단 수행 쓰레드
+ *
+ * - cv_mapData 조건변수에 의해 map + path 수신 후 실행됨
+ * - evaluateScenario1~8을 통해 riskAssessment.riskAssessmentList 생성
+ * - 결과가 있을 경우 cv_rass.notify_one()으로 ThreadSend를 깨움
+ */
 void ThreadRASS()
 {
     adcm::Log::Info() << "Thread ThreadRASS start...";
@@ -236,54 +268,47 @@ void ThreadRASS()
 
         }
 
-            adcm::Log::Info() << "build riskAssessment data - size " << riskAssessment.riskAssessmentList.size();
-            adcm::Log::Info() << "========================obstacle and vehicle info===========================";
-            for (auto iter = obstacle_list.begin(); iter != obstacle_list.end(); iter++)
-            {
-                adcm::Log::Info() << "obstacle ID:" << iter->obstacle_id << " obstacle XY position: " << iter->fused_position_x << "," << iter->fused_position_y << " obstacle XY velocity: " << iter->fused_velocity_x << "," << iter->fused_velocity_y;
-            }
+        adcm::Log::Info() << "build riskAssessment data - size " << riskAssessment.riskAssessmentList.size();
 
-            adcm::Log::Info() << "ego-vehicle XY position: " << ego_vehicle.position_x << "," << ego_vehicle.position_y << " ego-vehicle XY velocity: " << ego_vehicle.velocity_x << "," << ego_vehicle.velocity_y;
-            adcm::Log::Info() << "sub-vehicle-1 XY position: " << sub_vehicle_1.position_x << "," << sub_vehicle_1.position_y << " sub-vehicle_1 XY velocity: " << sub_vehicle_1.velocity_x << "," << sub_vehicle_1.velocity_y;
-            adcm::Log::Info() << "sub-vehicle-2 XY position: " << sub_vehicle_2.position_x << "," << sub_vehicle_2.position_y << " sub-vehicle_2 XY velocity: " << sub_vehicle_2.velocity_x << "," << sub_vehicle_2.velocity_y;
-            ;
-            adcm::Log::Info() << "========================RiskAssessment Output===========================";
-            for (auto iter = riskAssessment.riskAssessmentList.begin(); iter < riskAssessment.riskAssessmentList.end(); iter++)
+        if (!riskAssessment.riskAssessmentList.empty())
+        {
+            // notify ThreadSend
+            std::lock_guard<std::mutex> lock(mtx_rass);
+            cv_rass.notify_one();  // 전송 쓰레드 깨움
+        }
+        /*
+        adcm::Log::Info() << "========================obstacle and vehicle info===========================";
+        for (auto iter = obstacle_list.begin(); iter != obstacle_list.end(); iter++)
+        {
+            adcm::Log::Info() << "obstacle ID:" << iter->obstacle_id << " obstacle XY position: " << iter->fused_position_x << "," << iter->fused_position_y << " obstacle XY velocity: " << iter->fused_velocity_x << "," << iter->fused_velocity_y;
+        }
+
+        adcm::Log::Info() << "ego-vehicle XY position: " << ego_vehicle.position_x << "," << ego_vehicle.position_y << " ego-vehicle XY velocity: " << ego_vehicle.velocity_x << "," << ego_vehicle.velocity_y;
+        adcm::Log::Info() << "sub-vehicle-1 XY position: " << sub_vehicle_1.position_x << "," << sub_vehicle_1.position_y << " sub-vehicle_1 XY velocity: " << sub_vehicle_1.velocity_x << "," << sub_vehicle_1.velocity_y;
+        adcm::Log::Info() << "sub-vehicle-2 XY position: " << sub_vehicle_2.position_x << "," << sub_vehicle_2.position_y << " sub-vehicle_2 XY velocity: " << sub_vehicle_2.velocity_x << "," << sub_vehicle_2.velocity_y;
+        adcm::Log::Info() << "========================RiskAssessment Output===========================";
+        for (auto iter = riskAssessment.riskAssessmentList.begin(); iter < riskAssessment.riskAssessmentList.end(); iter++)
+        {
+            if (iter->hazard_class != SCENARIO_7)
             {
-                if (iter->hazard_class != SCENARIO_7)
-                {
-                    adcm::Log::Info() << "riskAssessment - obstacle id:" << iter->obstacle_id << " hazard class:" << iter->hazard_class << " confidence:" << iter->confidence;
-                }
-                else
-                {
-                    adcm::Log::Info() << "riskAssessment - unscanned utm XY value:" << iter->wgs84_xy_start[0].x << "," << iter->wgs84_xy_start[0].y << " hazard class:" << iter->hazard_class << " isHazard:" << iter->isHarzard;
-                }
-            }
-/*            adcm::Log::Info() << "===============================================================";
-            if (riskAssessment.riskAssessmentList.size() != 0)
-            {
-                //risktAssessment object 의 생성시간 추가
-                auto now = std::chrono::system_clock::now();
-                auto riskAssessment_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-                adcm::Log::Info() << "Current timestamp in milliseconds: " << riskAssessment_timestamp;
-                riskAssessment.timestamp = riskAssessment_timestamp;
-                adcm::Log::Info() << "riskAssessment send!";
-                riskAssessment_provider.send(riskAssessment);
-#ifdef NATS
-                NatsSend(riskAssessment);
-#endif
+                adcm::Log::Info() << "riskAssessment - obstacle id:" << iter->obstacle_id << " hazard class:" << iter->hazard_class << " confidence:" << iter->confidence;
             }
             else
             {
-                //NatsSend(riskAssessment); //테스트 용도로 계속 송신하게 한다
-                adcm::Log::Info() << "riskAssessment size is 0, do NOT send";
+                adcm::Log::Info() << "riskAssessment - unscanned utm XY value:" << iter->wgs84_xy_start[0].x << "," << iter->wgs84_xy_start[0].y << " hazard class:" << iter->hazard_class << " isHazard:" << iter->isHarzard;
             }
-            riskAssessment.riskAssessmentList.clear();
-            */
+        }
+        */
+
     }
 }
 
-        
+/**
+ * @brief 위험 판단 결과 전송 쓰레드
+ *
+ * - cv_rass 조건변수로 riskAssessment 생성 완료 알림을 받음
+ * - SOME/IP 및 NATS로 전송 수행
+ */
 void ThreadSend()
 {
     adcm::Log::Info() << "ThreadSend start...";
@@ -296,7 +321,8 @@ void ThreadSend()
     while (continueExecution)
     {
         std::unique_lock<std::mutex> lock(mtx_rass);
-
+        cv_rass.wait(lock, [] {
+            return !riskAssessment.riskAssessmentList.empty() || !continueExecution;});        
         if (!riskAssessment.riskAssessmentList.empty())
         {
             auto t_start_total = std::chrono::high_resolution_clock::now();
