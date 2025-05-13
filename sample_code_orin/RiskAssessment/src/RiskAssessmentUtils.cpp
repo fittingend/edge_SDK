@@ -76,28 +76,27 @@ void gpsToMapcoordinate(const routeVector& route,
     constexpr double origin_y = 3980466.846;
     const double angle_radians = -MAP_ANGLE * M_PI / 180.0;
 
-    for (int count = 0; count < route.size(); count++)
+    for (std::size_t i = 0; i < route.size(); ++i)
     {
-        double utm_x, utm_y; // 해당 경로의 utm x,y 좌표
-        GPStoUTM(route[count].latitude, route[count].longitude, utm_x, utm_y);
+        const auto& point = route[i];
+        double utm_x, utm_y;
+        GPStoUTM(point.latitude, point.longitude, utm_x, utm_y);
 
         utm_x -= origin_x;
         utm_y -= origin_y;
 
-        adcm::Log::Info() << "utm_x:" << utm_x;
-        adcm::Log::Info() << "utm_y:" << utm_y;
-
         Point2D mapPoint;
-
         mapPoint.x = (utm_x * cos(angle_radians) - utm_y * sin(angle_radians) - mapOrigin_x) * M_TO_10CM_PRECISION;
         mapPoint.y = (utm_x * sin(angle_radians) + utm_y * cos(angle_radians) - mapOrigin_y) * M_TO_10CM_PRECISION;
 
         checkRange(mapPoint);
 
-        path_x[count] = mapPoint.x;
-        path_y[count] = mapPoint.y;
-        adcm::Log::Info() << "경로생성 값 gpsToMapcoordinate 좌표변환 before (" << route[count].latitude << " , " << route[count].longitude << ")";
-        adcm::Log::Info() << "경로생성 값 gpsToMapcoordinate 좌표변환 after (" << path_x[count] << " , " << path_y[count] << ")";
+        path_x[i] = mapPoint.x;
+        path_y[i] = mapPoint.y;
+        
+        adcm::Log::Info() << "gpsToMapcoordinate 변환: (" 
+                        << point.latitude << ", " << point.longitude 
+                        << ") → (" << mapPoint.x << ", " << mapPoint.y << ")";
     }
 }
 
@@ -327,7 +326,7 @@ bool extractNewObstacles(obstacleListVector vec_old,
         }
     }
 
-    while (j < vec_new.size())
+while (j < vec_new.size())
     {
         vec_output.push_back(vec_new[j++]);
     }

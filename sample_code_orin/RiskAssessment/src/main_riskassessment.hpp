@@ -34,7 +34,7 @@
 #define MAP_M 1000
 #define MAP_TILT_ANGLE -86
 #define STOP_VALUE 10                // 1초간 정지 시 정지 장애물로 판단
-#define INVALID_RETURN_VALUE 99999 
+//#define INVALID_RETURN_VALUE 99999 
 #define M_TO_10CM_PRECISION 10 
 #define MAP_ANGLE -86
 #define WHEEL_DIAMETER_M 0.71
@@ -54,11 +54,11 @@ enum ObstacleClass {
 
 enum VehicleClass : uint8_t {
     EGO_VEHICLE    = 0xF0,
-    SUB_VEHICLE_1  = 0x00,
-    SUB_VEHICLE_2  = 0x01,
-    SUB_VEHICLE_3  = 0x02,
-    SUB_VEHICLE_4  = 0x03,
-    NO_VEHICLE     = 0x04
+    SUB_VEHICLE_1  = 0x01,
+    SUB_VEHICLE_2  = 0x02,
+    SUB_VEHICLE_3  = 0x03,
+    SUB_VEHICLE_4  = 0x04,
+    NO_VEHICLE     = 0x05
 };
 
 enum HazardClass {
