@@ -62,9 +62,12 @@ mutex mtx_data;
 mutex mtx_map;
 mutex mtx_send;
 condition_variable dataReady;
-condition_variable mapReady;
-condition_variable mapSend;
+condition_variable someipReady;
+condition_variable natsReady;
 std::uint8_t send_map = 0;
+
+queue<adcm::map_data_Objects> map_someip_queue;
+queue<adcm::map_data_Objects> map_nats_queue;
 
 mutex mtx;
 
