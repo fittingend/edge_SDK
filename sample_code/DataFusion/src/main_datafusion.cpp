@@ -1069,7 +1069,7 @@ adcm::vehicleListStruct ConvertToVehicleListStruct(const VehicleData &vehicle, s
         auto &map_cell = map[index_to_push.x][index_to_push.y];
         map_cell.vehicle_class = vehicle_final.vehicle_class;
         map_cell.road_z = 1;
-        //road_z 값은 여기에 반영
+        // road_z 값은 여기에 반영
         vehicle_final.map_2d_location.push_back(index_to_push);
     }
 
@@ -1214,17 +1214,17 @@ void ThreadReceiveHubData()
                 FusionData fusionData;
                 fillVehicleData(fusionData.vehicle, data);
                 fillObstacleList(fusionData.obstacle_list, data);
-                
-                if(data->road_z.size()!=0)
+
+                if (data->road_z.size() != 0)
                 {
-                    adcm::Log::Info() << "road_z size: "<< data->road_z.size();
-                    for(int i=0; i<data->road_z.size(); i++)
+                    adcm::Log::Info() << "road_z size: " << data->road_z.size();
+                    for (int i = 0; i < data->road_z.size(); i++)
                         adcm::Log::Info() << i << "번째 road_z: " << data->road_z[i];
                 }
                 else
                     adcm::Log::Info() << "road_z empty";
-                //road_z는 차량 주변 10m x 10m, 차량 사이즈+주변 2m 제외
-                //road_z는 맵 기준 100x100 사이즈의 배열인데, 이를 왼쪽 위부터 1차원 배열로 변환해서 옴
+                // road_z는 차량 주변 10m x 10m, 차량 사이즈+주변 2m 제외
+                // road_z는 맵 기준 100x100 사이즈의 배열인데, 이를 왼쪽 위부터 1차원 배열로 변환해서 옴
 
                 switch (data->vehicle_class)
                 {
@@ -1260,9 +1260,6 @@ void ThreadReceiveHubData()
 
             // {
             //     unique_lock<mutex> lock(mtx_send);
-            //     mapSend.wait(lock, []
-            //                  { return !send_wait; });
-            // }
 
             // case 255: // 보조차1이 보낸 인지데이터
             //     data->vehicle_class = SUB_VEHICLE_1;
@@ -1364,7 +1361,7 @@ void ThreadReceiveWorkInfo()
 
             // haveWorkInfo = true;
             sendEmptyMap = true;
-            mapReady.notify_one();
+            someipReady.notify_one();
         }
     }
 }
@@ -1634,16 +1631,23 @@ void ThreadKatech()
         // map_2d에서 map_2d_location이 존재하는 부분만 수정
         // 맵데이터 수정하며 lock걸기
 
+        mapData.map_2d = map_2d_init;
+        UpdateMapData(mapData, obstacle_list, vehicles);
+        mapData.map_2d = map_2d_test;
+
         {
-            lock_guard<mutex> map_lock(mtx_map);
-            mapData.map_2d = map_2d_init;
-            UpdateMapData(mapData, obstacle_list, vehicles);
-            // mapData.map_2d = map_2d_test;
-            send_map++;
+            lock_guard<mutex> map_lock(mtx_map_someip);
+            map_someip_queue.push(mapData);
         }
+        someipReady.notify_one();
+
+        {
+            lock_guard<mutex> map_lock(mtx_map_nats);
+            map_nats_queue.push(mapData);
+        }
+        natsReady.notify_one();
 
         adcm::Log::Info() << "mapdata 융합 완료";
-        mapReady.notify_one();
 
         // for (int i = 0; i < map_n; ++i)
         // {
@@ -1698,10 +1702,10 @@ void ThreadSend()
     while (continueExecution)
     {
         {
-            unique_lock<mutex> lock(mtx_map);
-            mapReady.wait(lock, []
-                          { return sendEmptyMap == true ||
-                                   send_map > 0; });
+            unique_lock<mutex> lock(mtx_map_someip);
+            someipReady.wait(lock, []
+                             { return sendEmptyMap == true ||
+                                      !map_someip_queue.empty(); });
             auto startTime = std::chrono::high_resolution_clock::now();
             if (sendEmptyMap)
             {
@@ -1710,36 +1714,73 @@ void ThreadSend()
                 sendEmptyMap = false;
                 continue;
             }
-            // send_wait = true;
+
+            adcm::map_data_Objects tempMap = map_someip_queue.pop();
             adcm::Log::Info() << ++mapVer << "번째 mapdata 전송 시작";
 
             // map_data_object 의 생성시간 추가
             auto now = std::chrono::system_clock::now();
             auto mapData_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-            adcm::Log::Info() << "Current timestamp in milliseconds: " << mapData_timestamp;
-            mapData.timestamp = mapData_timestamp;
+            // adcm::Log::Info() << "Current timestamp in milliseconds: " << mapData_timestamp;
+            tempMap.timestamp = mapData_timestamp;
 
             // 맵전송
+            mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
             mapData_provider.send(mapData);
             auto endTime = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> duration = endTime - startTime;
             adcm::Log::Info() << "로컬 mapdata 전송에 걸린 시간: " << duration.count() << " ms.";
-            adcm::Log::Info() << "로컬 mapdata 전송 완료, NATS 전송 시작";
-            mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
-            NatsSend(mapData);
-            endTime = std::chrono::high_resolution_clock::now();
-            duration = endTime - startTime;
-            adcm::Log::Info() << "mapdata + NATS 전송에 걸린 시간: " << duration.count() << " ms.";
+            // adcm::Log::Info() << "로컬 mapdata 전송 완료, NATS 전송 시작";
+            // mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
+            // NatsSend(mapData);
+            // endTime = std::chrono::high_resolution_clock::now();
+            // duration = endTime - startTime;
+            // adcm::Log::Info() << "mapdata + NATS 전송에 걸린 시간: " << duration.count() << " ms.";
             adcm::Log::Info() << mapVer << "번째 mapdata 전송 완료";
-            send_map = 0;
-            std::this_thread::sleep_for(std::chrono::milliseconds(200)); // 대기시간
+            // send_map = 0;
+            // std::this_thread::sleep_for(std::chrono::milliseconds(200)); // 대기시간
         }
 
         // {
         //     lock_guard<mutex> lock(mtx_send);
         //     send_wait = false;
         // }
-        // mapSend.notify_one();
+    }
+}
+
+void ThreadNATS()
+{
+    adcm::Log::Info() << "ThreadNATS start...";
+
+    while (continueExecution)
+    {
+        {
+            unique_lock<mutex> lock(mtx_map);
+            mapReady.wait(lock, []
+                          { return sendEmptyMap == true ||
+                                   !map_nats_queue.empty(); });
+
+            // // map_data_object 의 생성시간 추가
+            // auto now = std::chrono::system_clock::now();
+            // auto mapData_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+            // adcm::Log::Info() << "Current timestamp in milliseconds: " << mapData_timestamp;
+            // mapData.timestamp = mapData_timestamp;
+
+            // 맵전송
+            mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
+            auto startTime = std::chrono::high_resolution_clock::now();
+            adcm::Log::Info() << "NATS 전송 시작";
+            // mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
+            NatsSend(mapData);
+            auto endTime = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double, std::milli> duration = endTime - startTime;
+            adcm::Log::Info() << "NATS 전송에 걸린 시간: " << duration.count() << " ms.";
+        }
+
+        // {
+        //     lock_guard<mutex> lock(mtx_send);
+        //     send_wait = false;
+        // }
     }
 }
 
@@ -1772,21 +1813,6 @@ void ThreadMonitor()
 
 int main(int argc, char *argv[])
 {
-    // 자동 Build Time 생성
-    time_t timer;
-    struct tm *t;
-    timer = time(NULL);
-    t = localtime(&timer);
-
-    string year = to_string(t->tm_year - 100);
-    string mon = to_string(t->tm_mon + 1);
-    string day = to_string(t->tm_mday);
-    if (mon.length() == 1)
-        mon.insert(0, "0");
-    if (day.length() == 1)
-        day.insert(0, "0");
-    string b_day = year + mon + day;
-
     std::vector<std::thread> thread_list;
     UNUSED(argc);
     UNUSED(argv);
@@ -1820,7 +1846,8 @@ int main(int argc, char *argv[])
     adcm::Log::Info() << "DataFusion: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
     adcm::Log::Info() << "Ok, let's produce some DataFusion data...";
-    adcm::Log::Info() << "SDK release_250314_interface v2.1";
+    adcm::Log::Info() << "SDK release_250314_interface v2.1 for sa8195";
+    // adcm::Log::Info() << "SDK release_250321_interface v2.1 for orin";
     adcm::Log::Info() << "DataFusion Build " << BUILD_TIMESTAMP;
 
     // 파일 경로 얻
@@ -1845,7 +1872,7 @@ int main(int argc, char *argv[])
         config.print();
     }
 
-    if(config.serverPort == 0)
+    if (config.serverPort == 0)
         nats_server_url = config.serverAddress;
     else
     {
@@ -1866,6 +1893,7 @@ int main(int argc, char *argv[])
     thread_list.push_back(std::thread(ThreadKatech));
     thread_list.push_back(std::thread(ThreadReceiveEdgeInfo));
     thread_list.push_back(std::thread(ThreadSend));
+    thread_list.push_back(std::thread(ThreadNATS));
 
     adcm::Log::Info() << "Thread join";
     for (int i = 0; i < static_cast<int>(thread_list.size()); i++)
