@@ -115,7 +115,7 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
     std::remove_if(obstacle_temp.begin(), obstacle_temp.end(),
                     [&](const auto& obs)  {
                         double distance = calculateDistance(obs, ego_vehicle);
-                        if (distance >= DISTANCE_TO_EGO_THRESHOLD) {
+                        if (distance > DISTANCE_TO_EGO_THRESHOLD) {
                         adcm::Log::Info() << "[2-ii] 40m 초과로 제외: ID " << obs.obstacle_id;
                         return true;
                         }
@@ -208,7 +208,7 @@ void evaluateScenario3(const obstacleListVector& obstacle_list,
             riskAssessment.riskAssessmentList.push_back(riskAssessment3);
         }
     }
-    adcm::Log::Info() << "scenario 3 DONE";
+    adcm::Log::Info() << "=============KATECH: scenario 3 DONE==============";
 }
 
 void evaluateScenario4(const obstacleListVector& obstacle_list, 
@@ -252,7 +252,7 @@ void evaluateScenario4(const obstacleListVector& obstacle_list,
             riskAssessment.riskAssessmentList.push_back(riskAssessment4);
         }
     }
-    adcm::Log::Info() << "scenario 4 DONE";
+    adcm::Log::Info() << "=============KATECH: scenario 4 DONE==============";
 }
 /**
  * @brief 시나리오 5: 보행자 밀집 및 신규 객체 출현 기반 위험 판단
@@ -303,6 +303,7 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
     // (2) 최초 프레임일 경우 기준 설정
     if (ped_previous.empty()) {
         ped_previous = ped_current;
+        Log::Info() << "============= scenario 5 DONE (보행자 없음)=============";
         return;
     }
 
@@ -446,6 +447,7 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
 
     if (veh_previous.empty()) {
         veh_previous = veh_current;
+        Log::Info() << "=============KATECH: scenario 6 DONE (ego 차량 주변 (50m~60m) && 주행경로 15m 이내 차 없음)==============";
         return;
     }
 
@@ -549,7 +551,7 @@ void evaluateScenario7(const doubleVector& path_x,
 {
     adcm::Log::Info() << "=============KATECH: scenario 7 START==============";
     detectUnscannedPath(map_2d, path_x, path_y, riskAssessment);
-    adcm::Log::Info() << "scenario 7 DONE";
+    adcm::Log::Info() << "=============KATECH: scenario 7 DONE==============";
 }
 
 void evaluateScenario8(const doubleVector& path_x, 
@@ -578,9 +580,9 @@ void evaluateScenario8(const doubleVector& path_x,
         // Print the line equations
         if (isVertical) 
         {
-            adcm::Log::Info()<< "Original line equation: x = " << x_start << "\n";
-            adcm::Log::Info() << "Line shifted right: x = " << x_up << "\n";
-            adcm::Log::Info() << "Line shifted left: x = " << x_down << "\n";
+            // adcm::Log::Info()<< "Original line equation: x = " << x_start << "\n";
+            // adcm::Log::Info() << "Line shifted right: x = " << x_up << "\n";
+            // adcm::Log::Info() << "Line shifted left: x = " << x_down << "\n";
 
             p1 = {x_down, y_start};  // First line start point
             p2 = {x_down, y_end}; // First line end point
@@ -589,9 +591,9 @@ void evaluateScenario8(const doubleVector& path_x,
         } 
         else 
         {
-            adcm::Log::Info() << "Original line equation: y = " << original_m << "x + " << original_c << "\n";
-            adcm::Log::Info() << "Line shifted up: y = " << original_m << "x + " << up_c << "\n";
-            adcm::Log::Info() << "Line shifted down: y = " << original_m << "x + " << down_c << "\n";
+            // adcm::Log::Info() << "Original line equation: y = " << original_m << "x + " << original_c << "\n";
+            // adcm::Log::Info() << "Line shifted up: y = " << original_m << "x + " << up_c << "\n";
+            // adcm::Log::Info() << "Line shifted down: y = " << original_m << "x + " << down_c << "\n";
 
             // Points of the parallelogram (calculated for x = 0 and x = 10)
             p1 = {x_start, original_m * x_start + up_c};  // First line start point
@@ -639,6 +641,6 @@ void evaluateScenario8(const doubleVector& path_x,
             if (risk_count >= RISK_THRESHOLD) break;
         }
     }
-    adcm::Log::Info() << "scenario 8 DONE";
+    adcm::Log::Info() << "=============KATECH: scenario 8 DONE==============";
 }
 

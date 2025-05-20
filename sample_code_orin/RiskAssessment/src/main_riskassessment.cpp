@@ -48,30 +48,46 @@
 #include "main_riskassessment.hpp"
 #include "NATS/NatsHandler.hpp"
 /**
-  * 쓰레드간 관례
-  * [1] ThreadReceiveMapData
-           ↓ (notify)
-    [2] ThreadRASS
-           ↓ (notify)
-    [3] ThreadSend
+  * 쓰레드간 관계
+[ThreadReceiveMapData]
+    ↓ writes map + sets isMapAvailable
+    ↓ (cv_mapData.notify_one)
 
-    ※ 전제 조건:
-    - ThreadRASS는 ThreadReceiveBuildPath에서 path를 한번이라도 받아야 실행됨 (path_x, path_y ≠ 0)
+[ThreadReceiveBuildPath]
+    ↓ writes path + sets isPathAvailable
+    (no notify, just sets flag)
+
+[ThreadRASS]
+    waits cv_mapData (조건: isMapAvailable && isPathAvailable)
+    ↓ reads map/path, writes riskAssessment
+    ↓ (cv_rass.notify_one)
+
+[ThreadSend]
+    waits cv_rass
+    ↓ reads + sends riskAssessment
 */
-//전역변수
-std::mutex mtx_map, mtx_rass, mtx_path, mtx_cv;
-std::vector<adcm::map_2dListVector> map_2d;
-//경로 path
-doubleVector path_x, path_y;
 
+// ==========================전역변수=================================
+// Shared data
+std::vector<adcm::map_2dListVector> map_2d;
+doubleVector path_x, path_y;
 obstacleListVector obstacle_list;
 adcm::vehicleListStruct ego_vehicle, sub_vehicle_1, sub_vehicle_2, sub_vehicle_3, sub_vehicle_4;
 adcm::risk_assessment_Objects riskAssessment;
 
+// Mutexes
+std::mutex mtx_map;   // map_2d, obstacle_list, vehicle structs
+std::mutex mtx_path;  // path_x, path_y
+std::mutex mtx_rass;  // riskAssessment
+std::mutex mtx_cv;    // isMapAvailable, isPathAvailable flags
 
+// Condition variables
+std::condition_variable cv_mapData;  // ThreadRASS waits on this
+std::condition_variable cv_rass;     // ThreadSend waits on this
+
+// Shared flags
 bool isMapAvailable = false;
 bool isPathAvailable = false;
-std::condition_variable cv_mapData, cv_rass;
 
 /**
  * @brief 맵 데이터 수신 쓰레드
@@ -115,14 +131,12 @@ void ThreadReceiveMapData()
                 if(!obstacle_list.empty())
                 {
                     adcm::Log::Info() << "size of obstacle list received: " << obstacle_list.size();
-                    for(auto itr = obstacle_list.begin(); itr != obstacle_list.end(); ++itr) 
-					{
-                        adcm::Log::Info() << "obstacle_id : " << itr->obstacle_id;
-                        adcm::Log::Info() << "obstacle_class : " << itr->obstacle_class;
-                        adcm::Log::Info() << "timestamp : " << itr->timestamp;
-
-                        //obstacle_list_temp = obstacle_list;//assign to gloabal variable 
-                    }
+                    // for(auto itr = obstacle_list.begin(); itr != obstacle_list.end(); ++itr) 
+                    // {
+                    //     adcm::Log::Info() << "obstacle_id : " << itr->obstacle_id;
+                    //     adcm::Log::Info() << "obstacle_class : " << itr->obstacle_class;
+                    //     adcm::Log::Info() << "timestamp : " << itr->timestamp;
+                    // }
                 } else {
                     adcm::Log::Info() << "obstacle_list Vector empty!!! ";
                 }
@@ -165,11 +179,12 @@ void ThreadReceiveMapData()
 
                 }
                 cv_mapData.notify_one();  // 다른 스레드에게 알림
-                adcm::Log::Info() << "다른 스레드에게 알림";
+                adcm::Log::Info() << "ThreadRass 에게 알림";
             }
         }
     }
 }
+
 /**
  * @brief 경로(Build Path) 수신 쓰레드
  *
@@ -187,7 +202,7 @@ void ThreadReceiveBuildPath()
     while (continueExecution) {
         gMainthread_Loopcount++;
         VERBOSE("[RiskAssessment] Application loop");
-        bool buildPath_rxEvent = buildPath_subscriber.waitEvent(100); // wait event
+        bool buildPath_rxEvent = buildPath_subscriber.waitEvent(1000); // wait event
 
         if(buildPath_rxEvent) {
             adcm::Log::Info() << "[EVENT] RiskAssessment Build Path received";
@@ -195,14 +210,11 @@ void ThreadReceiveBuildPath()
             while(!buildPath_subscriber.isEventQueueEmpty()) {
                 auto data = buildPath_subscriber.getEvent();
                 gReceivedEvent_count_build_path++;
-
-                const auto& Path = data->Path;
-
-                if (Path.empty()) {
-                adcm::Log::Info() << "Received Path is empty.";
-                continue;
+                if (!data) {
+                    adcm::Log::Info() << "[ERROR] getEvent returned null!";
+                    continue;
                 }
-
+                const auto& Path = data->Path;
                 for (const auto& pathItem : Path) {
                     const auto& route = pathItem.route;
                     if (pathItem.vehicle_class == VehicleClass::EGO_VEHICLE)
@@ -244,15 +256,20 @@ void ThreadReceiveBuildPath()
 void ThreadRASS()
 {
     adcm::Log::Info() << "Thread ThreadRASS start...";
-    while (continueExecution)
-    {
+
+    while (continueExecution) {
         std::unique_lock<std::mutex> lock(mtx_cv);
-        cv_mapData.wait(lock, []{ return isMapAvailable && isPathAvailable;});  
-        // 신호가 올 때까지 대기하다 map 데이터와 build path 수신하면 시작
+        cv_mapData.wait(lock, [] {
+            return !continueExecution || (isMapAvailable && isPathAvailable);
+        });
+        if (!continueExecution) break;
+        lock.unlock();
 
         {
-            std::lock_guard<std::mutex> mapLock(mtx_map);
-            std::lock_guard<std::mutex> rassLock(mtx_rass);
+            std::lock_guard<std::mutex> lock_map(mtx_map);
+            std::lock_guard<std::mutex> lock_path(mtx_path);
+            std::lock_guard<std::mutex> lock_rass(mtx_rass);
+
             adcm::Log::Info() << "[PROCESS] Start processing received map data";
             riskAssessment.riskAssessmentList.clear();
 
@@ -273,6 +290,7 @@ void ThreadRASS()
             // notify ThreadSend
             cv_rass.notify_one();  // 전송 쓰레드 깨움
         }
+        isMapAvailable = false;
     }
 }
 
@@ -297,55 +315,43 @@ void ThreadSend()
         cv_rass.wait(lock_rass_cv, [] {
             return !riskAssessment.riskAssessmentList.empty() || !continueExecution;
         });
-        lock_rass_cv.unlock();  // 조건 만족 후 곧바로 unlock
 
         if (!continueExecution) break;
 
-        // [2] 위험판단 데이터 보호: 전송 및 클리어 작업을 mtx_riskAssessment로 감쌈
-        {
-            std::lock_guard<std::mutex> rassLock(mtx_rass);
+        auto t_start_total = std::chrono::high_resolution_clock::now();
+        auto now = std::chrono::system_clock::now();
+        auto riskAssessment_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+        riskAssessment.timestamp = riskAssessment_timestamp;
 
-            if (riskAssessment.riskAssessmentList.empty()) {
-                adcm::Log::Info() << "[" << ++rassVer << "차] 위험판단 없음 → 전송 생략";
-                continue;
-            }
+        adcm::Log::Info() << "[" << ++rassVer << "차] 위험판단 전송 시작, timestamp: " << riskAssessment_timestamp;
 
-            auto t_start_total = std::chrono::high_resolution_clock::now();
+        // [3] 전송 시작
+        auto t_start_send = std::chrono::high_resolution_clock::now();
+        riskAssessment_provider.send(riskAssessment);
+        auto t_end_send = std::chrono::high_resolution_clock::now();
+        adcm::Log::Info() << "→ 위험판단 전송 완료";
 
-            auto now = std::chrono::system_clock::now();
-            auto riskAssessment_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-            riskAssessment.timestamp = riskAssessment_timestamp;
+        auto send_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end_send - t_start_send).count();
+        adcm::Log::Info() << "→ 위험판단 전송 소요 시간: " << send_duration_ms << " ms";
 
-            adcm::Log::Info() << "[" << ++rassVer << "차] 위험판단 전송 시작, timestamp: " << riskAssessment_timestamp;
+    #ifdef NATS
+        auto t_start_nats = std::chrono::high_resolution_clock::now();
+        adcm::Log::Info() << "→ NATS 전송 시작";
+        NatsSend(riskAssessment);
+        auto t_end_nats = std::chrono::high_resolution_clock::now();
+        adcm::Log::Info() << "→ NATS 전송 완료";
 
-            // [3] 전송 시작
-            auto t_start_send = std::chrono::high_resolution_clock::now();
-            riskAssessment_provider.send(riskAssessment);
-            auto t_end_send = std::chrono::high_resolution_clock::now();
-            adcm::Log::Info() << "→ 위험판단 전송 완료";
+        auto nats_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end_nats - t_start_nats).count();
+        adcm::Log::Info() << "→ NATS 전송 소요 시간: " << nats_duration_ms << " ms";
+    #endif
 
-            auto send_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end_send - t_start_send).count();
-            adcm::Log::Info() << "→ 위험판단 전송 소요 시간: " << send_duration_ms << " ms";
+        auto t_end_total = std::chrono::high_resolution_clock::now();
+        auto total_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end_total - t_start_total).count();
+        adcm::Log::Info() << "→ 전체 전송 처리 시간: " << total_duration_ms << " ms";
 
-        #ifdef NATS
-            auto t_start_nats = std::chrono::high_resolution_clock::now();
-            adcm::Log::Info() << "→ NATS 전송 시작";
-            NatsSend(riskAssessment);
-            auto t_end_nats = std::chrono::high_resolution_clock::now();
-            adcm::Log::Info() << "→ NATS 전송 완료";
-
-            auto nats_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end_nats - t_start_nats).count();
-            adcm::Log::Info() << "→ NATS 전송 소요 시간: " << nats_duration_ms << " ms";
-        #endif
-
-            auto t_end_total = std::chrono::high_resolution_clock::now();
-            auto total_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end_total - t_start_total).count();
-            adcm::Log::Info() << "→ 전체 전송 처리 시간: " << total_duration_ms << " ms";
-
-            // [4] 전송 완료 후 위험 판단 데이터 초기화
-            riskAssessment.riskAssessmentList.clear();
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        // [4] 전송 완료 후 위험 판단 데이터 초기화
+        riskAssessment.riskAssessmentList.clear();
+        //std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
 }
 
