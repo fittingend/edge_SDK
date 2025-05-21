@@ -307,16 +307,16 @@ namespace adcm
             natsStatus s = NATS_OK;
             int dataLen = 0;
             std::stringstream payload;
-
             jsonObj.stringify(payload);
-            dataLen = static_cast<int>(payload.str().size());
+            std::string jsonStr = payload.str(); // 1번만 호출
+            dataLen = static_cast<int>(jsonStr.size());
 
             adcm::Log::Info() << " [NATS] Publish data length : " << dataLen;
             adcm::Log::Info() << " [NATS] subject: " << subject;
 
             if (subject != NULL)
             {
-                s = natsConnection_Publish(conn, subject, static_cast<const void *>(payload.str().c_str()), dataLen);
+                s = natsConnection_Publish(conn, subject, jsonStr.data(), dataLen);
                 adcm::Log::Info() << "[NATS] subject publish...";
                 adcm::Log::Info() << "[NATS] return: " << s;
             }
@@ -338,8 +338,8 @@ namespace adcm
             }
             else
             {
-                std::cout << "Error: " << s << " - " << natsStatus_GetText(s) << std::endl;
                 nats_PrintLastErrorStack(stderr);
+                std::cout << "Error: " << s << " - " << natsStatus_GetText(s) << std::endl;
             }
 
             return s;

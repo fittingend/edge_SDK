@@ -52,14 +52,21 @@ using namespace std;
 
 ///////////////////////////////////////////////////////////////////////
 // 필드 목록
+// uint8_t map_n = 2000;
+// uint8_t map_m = 1000;
+
 IDManager id_manager; // 장애물 ID 부여 및 반환
 bool ego = false;
 bool sub1 = false;
 bool sub2 = false;
+bool workego = false;
+bool worksub1 = false;
+bool worksub2 = false;
+bool get_workinfo = false;
 
-bool send_wait = false;
 mutex mtx_data;
-mutex mtx_map;
+mutex mtx_map_someip;
+mutex mtx_map_nats;
 mutex mtx_send;
 condition_variable dataReady;
 condition_variable someipReady;

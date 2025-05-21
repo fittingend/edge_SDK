@@ -1218,8 +1218,8 @@ void ThreadReceiveHubData()
                 if (data->road_z.size() != 0)
                 {
                     adcm::Log::Info() << "road_z size: " << data->road_z.size();
-                    for (int i = 0; i < data->road_z.size(); i++)
-                        adcm::Log::Info() << i << "번째 road_z: " << data->road_z[i];
+                    // for (int i = 0; i < data->road_z.size(); i++)
+                    //     adcm::Log::Info() << i << "번째 road_z: " << data->road_z[i];
                 }
                 else
                     adcm::Log::Info() << "road_z empty";
@@ -1300,12 +1300,18 @@ void ThreadReceiveWorkInfo()
 
             main_vehicle_size.length = data->main_vehicle.length;
             main_vehicle_size.width = data->main_vehicle.width;
+            if (main_vehicle_size.length != 0) // (250520) 메인차량이 있다면 workego = true
+                workego = true;
 
             sub_vehicle_size.clear();
             for (const auto &sub_vehicle : data->sub_vehicle)
             {
                 sub_vehicle_size.push_back({sub_vehicle.length, sub_vehicle.width});
             }
+            if (sub_vehicle_size.size() == 1) // (250520) 서브차량이 있다면 work상태 true
+                worksub1 = true;
+            else if (sub_vehicle_size.size() == 2)
+                worksub2 = true;
 
             work_boundary.clear();
             for (const auto &boundary : data->working_area_boundary)
@@ -1362,6 +1368,7 @@ void ThreadReceiveWorkInfo()
             // haveWorkInfo = true;
             sendEmptyMap = true;
             someipReady.notify_one();
+            get_workinfo = true;
         }
     }
 }
@@ -1419,7 +1426,7 @@ void ThreadKatech()
         {
             unique_lock<mutex> lock(mtx_data);
             dataReady.wait(lock, []
-                           { return (ego == true && sub1 == true && sub2 == true); });
+                           { return (get_workinfo && (!workego || ego) && (!worksub1 || sub1) && (!worksub2 || sub2)); });
 
             // adcm::Log::Info() << "송신이 필요한 남은 허브 데이터 개수: " << main_vehicle_queue.size_approx() + sub1_vehicle_queue.size_approx() + sub2_vehicle_queue.size_approx();
             std::int8_t map_x = max_a - min_a;
@@ -1715,8 +1722,9 @@ void ThreadSend()
                 continue;
             }
 
-            adcm::map_data_Objects tempMap = map_someip_queue.pop();
-            adcm::Log::Info() << ++mapVer << "번째 mapdata 전송 시작";
+            adcm::map_data_Objects tempMap = map_someip_queue.front();
+            map_someip_queue.pop();
+            adcm::Log::Info() << ++mapVer << "번째 로컬 mapdata 전송 시작";
 
             // map_data_object 의 생성시간 추가
             auto now = std::chrono::system_clock::now();
@@ -1725,26 +1733,22 @@ void ThreadSend()
             tempMap.timestamp = mapData_timestamp;
 
             // 맵전송
-            mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
+            // mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
             mapData_provider.send(mapData);
             auto endTime = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> duration = endTime - startTime;
-            adcm::Log::Info() << "로컬 mapdata 전송에 걸린 시간: " << duration.count() << " ms.";
+            // adcm::Log::Info() << "로컬 mapdata 전송에 걸린 시간: " << duration.count() << " ms.";
             // adcm::Log::Info() << "로컬 mapdata 전송 완료, NATS 전송 시작";
             // mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
             // NatsSend(mapData);
             // endTime = std::chrono::high_resolution_clock::now();
             // duration = endTime - startTime;
             // adcm::Log::Info() << "mapdata + NATS 전송에 걸린 시간: " << duration.count() << " ms.";
-            adcm::Log::Info() << mapVer << "번째 mapdata 전송 완료";
+            adcm::Log::Info() << mapVer << "번째 로컬 mapdata 전송 완료, 소요 시간: " << duration.count() << " ms.";
             // send_map = 0;
             // std::this_thread::sleep_for(std::chrono::milliseconds(200)); // 대기시간
         }
 
-        // {
-        //     lock_guard<mutex> lock(mtx_send);
-        //     send_wait = false;
-        // }
     }
 }
 
@@ -1755,32 +1759,25 @@ void ThreadNATS()
     while (continueExecution)
     {
         {
-            unique_lock<mutex> lock(mtx_map);
-            mapReady.wait(lock, []
-                          { return sendEmptyMap == true ||
-                                   !map_nats_queue.empty(); });
+            unique_lock<mutex> lock(mtx_map_nats);
+            natsReady.wait(lock, []
+                           { return sendEmptyMap == true ||
+                                    !map_nats_queue.empty(); });
 
-            // // map_data_object 의 생성시간 추가
-            // auto now = std::chrono::system_clock::now();
-            // auto mapData_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-            // adcm::Log::Info() << "Current timestamp in milliseconds: " << mapData_timestamp;
-            // mapData.timestamp = mapData_timestamp;
+            adcm::map_data_Objects tempMap = map_nats_queue.front();
+            map_nats_queue.pop();
 
             // 맵전송
-            mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
+            // mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
             auto startTime = std::chrono::high_resolution_clock::now();
             adcm::Log::Info() << "NATS 전송 시작";
             // mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
             NatsSend(mapData);
             auto endTime = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> duration = endTime - startTime;
-            adcm::Log::Info() << "NATS 전송에 걸린 시간: " << duration.count() << " ms.";
+            adcm::Log::Info() << "NATS 전송 완료, 소요 시간: " << duration.count() << " ms.";
         }
 
-        // {
-        //     lock_guard<mutex> lock(mtx_send);
-        //     send_wait = false;
-        // }
     }
 }
 
@@ -1846,8 +1843,8 @@ int main(int argc, char *argv[])
     adcm::Log::Info() << "DataFusion: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
     adcm::Log::Info() << "Ok, let's produce some DataFusion data...";
-    adcm::Log::Info() << "SDK release_250314_interface v2.1 for sa8195";
-    // adcm::Log::Info() << "SDK release_250321_interface v2.1 for orin";
+    // adcm::Log::Info() << "SDK release_250314_interface v2.1 for sa8195";
+    adcm::Log::Info() << "SDK release_250321_interface v2.1 for orin";
     adcm::Log::Info() << "DataFusion Build " << BUILD_TIMESTAMP;
 
     // 파일 경로 얻
