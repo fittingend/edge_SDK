@@ -71,7 +71,7 @@ elseif(orin)
     message(STATUS "Building with ORIN SDK")
     set(COMMON_DIR "${PROJECT_SOURCE_DIR}/../common_orin")
 else()
-    message(FATAL_ERROR "No SDK specified. Please enable either SA_SDK or ORIN_SDK.")
+    message(FATAL_ERROR "No SDK specified. Please enable either SA_SDK(-Dsa=ON) or ORIN_SDK(-Dorin=ON).")
 endif()
 
 #Build Time
@@ -194,12 +194,14 @@ set(OPENDDS_MAKE_TARGET ${APP_NAME}Generated)
 # Define source files
 set(APPLICATION_src
     src/main_riskassessment.cpp
-    src/NATS_IMPLEMENTATION/NatsConnManager.cpp
+    src/RiskAssessmentUtils.cpp 
+    src/RiskScenarios.cpp
+    src/NATS/NatsConnManager.cpp
+    src/NATS/NatsHandler.cpp
     ${${PROCESS_ARTIFACTS_MAKE_TARGET}_SOURCES}
     ${COMMON_DIR}/logger/src/logger.cpp
     ${COMMON_DIR}/service/src/risk_assessment_provider.cpp
     ${COMMON_DIR}/service/src/build_path_subscriber.cpp
-    ${COMMON_DIR}/service/src/build_path_test_subscriber.cpp
     ${COMMON_DIR}/service/src/map_data_subscriber.cpp
 )
 
