@@ -7,8 +7,8 @@
 #include <memory>
 #include <string>
 #include <mutex>
-#include "./NATS_IMPLEMENTATION/NatsConnManager.h"
-#include "main_riskassessment.hpp"  // 필요한 데이터 타입 참조
+#include "NatsConnManager.h"
+#include "../main_riskassessment.hpp"  // 필요한 데이터 타입 참조
 
 #define HMI_SERVER_URL  "https://nats.beyless.com"
 

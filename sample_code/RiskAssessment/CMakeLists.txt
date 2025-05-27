@@ -59,7 +59,15 @@ include(AUTOSAR/apd)
 # SDK Options
 option(sa "Build with sa SDK" OFF)
 option(orin "Build with orin SDK" OFF)
+option(nats "Enable NATS integration" OFF)
 
+if (nats)
+    message(STATUS "NATS is enabled")
+    add_definitions(-DNATS)
+else()
+    message(STATUS "NATS is disabled")
+    add_definitions(-UNATS)
+endif()
 # SDK common Path
 set(COMMON_DIR "")
 

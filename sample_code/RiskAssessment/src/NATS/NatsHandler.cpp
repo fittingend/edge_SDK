@@ -9,7 +9,7 @@
 #ifdef NATS
 bool firstTime = true;
 natsStatus s = NATS_OK;
-std::vector<const char*> subject = {"test1.*", "test2.*"};
+std::vector<const char*> subject = {};
 std::shared_ptr<adcm::etc::NatsConnManager> natsManager;
 std::mutex mtx;
 
@@ -103,7 +103,7 @@ void NatsSend(const adcm::risk_assessment_Objects& riskAssessment)
     }
 
     if (s == NATS_OK) {
-        const char* pubSubject = "test2.JSON";
+        const char* pubSubject = "riskAssessment.json";
         natsManager->ClearJsonData();
         std::string riskToStr = convertRiskAssessmentToJsonString(riskAssessment);
         natsManager->addJsonData("riskAssessment", riskToStr);
