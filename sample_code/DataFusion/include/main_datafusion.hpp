@@ -32,28 +32,26 @@
 #include "concurrentqueue.h"
 #include "munkres/src/munkres.h"
 
-#define map_n 2000
-#define map_m 1000
-#define ABS(x) ((x >= 0) ? x : -x)
 #define INVALID_VALUE 999
 
 #define M_TO_10CM_PRECISION 10.0
-#define MAIN_VEHICLE_SIZE_X 10
-#define MAIN_VEHICLE_SIZE_Y 10
-
-#define SUB_VEHICLE_SIZE_X 21.92
-#define SUB_VEHICLE_SIZE_Y 15.99
 #define MAP_ANGLE -86
 
 using namespace std;
 // 사이즈는 10cm 단위 기준
 
-// #define KM_TO_MS_CONVERSION 5/18
-
 ///////////////////////////////////////////////////////////////////////
 // 필드 목록
-// uint8_t map_n = 2000;
-// uint8_t map_m = 1000;
+
+// 맵 x, y 방향 사이즈
+std::uint16_t map_x = 2000;
+std::uint16_t map_y = 1000;
+std::uint8_t type = 0; // 시뮬레이션 = 0, 실증 = 1
+// 맵(0,0)지점의 utm좌표
+double origin_x = 0;
+double origin_y = 0;
+// 실증 상황 사각형 맵의 끝지점 x, y값
+double min_utm_x, min_utm_y, max_utm_x, max_utm_y;
 
 IDManager id_manager; // 장애물 ID 부여 및 반환
 bool ego = false;
@@ -123,8 +121,8 @@ struct VehicleSizeData
 
 struct BoundaryData
 {
-    double x;
-    double y;
+    double lon;
+    double lat;
 };
 
 struct VehicleData
@@ -134,36 +132,21 @@ struct VehicleData
     std::uint64_t timestamp;
     std::vector<int> road_z;
     //    double road_z[4];
-    double position_long; // x equivalent
-    double position_lat;  // y equivalent
+    double position_long; // wgs84좌표 -> x
+    double position_lat;  // wgs84좌표 -> y
     double position_height;
-    double position_x; // new - to assign
-    double position_y; // new - to assign
+    double position_x; // 맵상 x좌표
+    double position_y; // 맵상 y좌표
     double position_z;
     double yaw;
     double roll;
     double pitch;
     double velocity_long;
     double velocity_lat;
-    double velocity_x; // new- to assign
-    double velocity_y; // new- to assign
+    double velocity_x; // 맵상 x방향 속도
+    double velocity_y; // 맵상 y방향 속도
     double velocity_ang;
 };
-
-struct GridCellData
-{
-    std::uint16_t obstacle_id;
-    VehicleClass vehicle_class;
-    int road_z;
-}; // 패딩때문에 토탈 12 bytes
-
-struct MapData
-{
-    GridCellData map_2d[map_n][map_m]; // 각각 24bytes
-    std::vector<ObstacleData> obstacle_list;
-    std::vector<VehicleData> vehicle_list;
-
-}; // maptdata 사이즈는 24*4000*5000+24+24 = 480000048 byte = 약 450MB
 
 enum ObstacleClass
 {
@@ -173,6 +156,7 @@ enum ObstacleClass
     PEDESTRIAN,
     STRUCTURE
 };
+
 /*
 enum VehicleClass
 {
@@ -191,9 +175,9 @@ struct FusionData
     std::vector<ObstacleData> obstacle_list;
 };
 
-moodycamel::ConcurrentQueue<FusionData> main_vehicle_queue;
-moodycamel::ConcurrentQueue<FusionData> sub1_vehicle_queue;
-moodycamel::ConcurrentQueue<FusionData> sub2_vehicle_queue;
+// moodycamel::ConcurrentQueue<FusionData> main_vehicle_queue;
+// moodycamel::ConcurrentQueue<FusionData> sub1_vehicle_queue;
+// moodycamel::ConcurrentQueue<FusionData> sub2_vehicle_queue;
 
 queue<int> order;
 
@@ -218,49 +202,47 @@ std::vector<VehicleData *> vehicles = {&main_vehicle, &sub1_vehicle, &sub2_vehic
 // 이전 TimeStamp의 Obstacle_list
 std::vector<ObstacleData> previous_obstacle_list;
 
-long ContourX[map_m][2];
-bool once = 1;
 // 차량 크기(work_information data)
-
-double utmOrigin_x, utmOrigin_y;
-
-std::uint16_t main_vehicle_size_length;
-std::uint16_t main_vehicle_size_width;
 VehicleSizeData main_vehicle_size;
 std::vector<VehicleSizeData> sub_vehicle_size;
 std::vector<BoundaryData> work_boundary;
-double min_a, min_b, max_a, max_b;
+double min_lon, min_lat, max_lon, max_lat;
 
-// bool haveWorkInfo = false;
 bool sendEmptyMap = false;
 int receiveVer = 0;
 adcm::map_data_Objects mapData;
 
 ///////////////////////////////////////////////////////////////////////
 // 함수 목록
+
+// wgs84 -> utm 좌표변환
 void GPStoUTM(double lat, double lon, double &utmX, double &utmY);
 
+// 좌표 변환 후 맵 오버플로우 방지
 bool checkRange(const VehicleData &vehicle);
 void checkRange(Point2D &point);
+
 bool checkAllVehicleRange(const std::vector<VehicleData *> &vehicles);
-/*
-void processVehicleData(moodycamel::ConcurrentQueue<FusionData> &vehicleQueue,
-                        FusionData &vehicleData,
-                        VehicleData &vehicle,
-                        std::vector<ObstacleData> &obstacleList);
-*/
+
+// 차량 데이터 처리
 void processVehicleData(FusionData &vehicleData,
                         VehicleData &vehicle,
                         std::vector<ObstacleData> &obstacleList);
+// 메인차량, 서브차량 리스트에서 제외
+void filterVehicleData(std::vector<ObstacleData> &obstacles);
 void gpsToMapcoordinate(VehicleData &vehicle);
 void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData vehicle);
 
+// 차량주변 road_z 수정 -> road_index로 수정 예정
 void generateRoadZValue(VehicleData target_vehicle, std::vector<adcm::map_2dListVector> &map_2d_test);
-void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, VehicleData &vehicle);
-void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std::vector<ObstacleData>::iterator iter);
 
+// 차량, 장애물의 꼭짓점 좌표 판단
 void find4VerticesVehicle(VehicleData &target_vehicle);
 void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered);
+
+// map_2d_location 계산
+void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, VehicleData &vehicle);
+void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std::vector<ObstacleData>::iterator iter);
 
 // 차량 데이터 저장
 void fillVehicleData(VehicleData &vehicle_fill, const std::shared_ptr<adcm::hub_data_Objects> &data);
@@ -268,34 +250,27 @@ void fillVehicleData(VehicleData &vehicle_fill, const std::shared_ptr<adcm::hub_
 // 장애물 데이터 저장
 void fillObstacleList(std::vector<ObstacleData> &obstacle_list_fill, const std::shared_ptr<adcm::hub_data_Objects> &data);
 
+// 장애물 리스트 처리 함수 //
 // 유클리디안 거리 계산
 double euclideanDistance(const ObstacleData &a, const ObstacleData &b);
 
 // 거리 행렬 생성
 std::vector<std::vector<double>> createDistanceMatrix(const std::vector<ObstacleData> &listA, const std::vector<ObstacleData> &listB);
 
-// 신뢰성 기반 융합 계산 함수
+// 신뢰성 기반 융합 계산
 double calculateWeightedPosition(const std::vector<double> &positions, const std::vector<double> &variances);
 
-// 헝가리안 알고리즘으로 매칭
+// Munkres 알고리즘으로 매칭
 std::vector<int> solveAssignment(const std::vector<std::vector<double>> &costMatrix);
 
-// 메인차량, 서브차량 리스트에서 제외
-void filterVehicleData(std::vector<ObstacleData> &obstacles);
-
-// 장애물 데이터 병합
+// 장애물 데이터 융합
 void processFusion(
     std::vector<ObstacleData> &presList,
     const std::vector<ObstacleData> &prevList,
     const std::vector<int> &assignment);
 // void processFusion(std::vector<ObstacleData> &fusedList, const std::vector<ObstacleData> &listB, const std::vector<int> &assignment);
 
-// 새 데이터에 대한 ID 관리 및 부여
-void assignIDsForNewData(std::vector<ObstacleData> &resultFusionList,
-                         const std::vector<ObstacleData> &currentFusionList,
-                         const std::vector<int> &assignment);
-
-// 메인 융합 함수
+// 장애물 리스트 융합 및 이전 데이터와 비교
 std::vector<ObstacleData> mergeAndCompareLists(
     const std::vector<ObstacleData> &previousFusionList,
     std::vector<ObstacleData> listMain,
@@ -305,11 +280,7 @@ std::vector<ObstacleData> mergeAndCompareLists(
     const VehicleData &sub1Vehicle,
     const VehicleData &sub2Vehicle);
 
-// 장애물이 보조차량, 메인차량인지 확인
-const double POSITION_TOLERANCE = 14.0;
-
-void InitializeMapData(adcm::map_data_Objects &mapData);
-
+// 차량 리스트, 장애물 리스트 맵데이터에 반영
 void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleData> &obstacle_list, const std::vector<VehicleData> &vehicles);
 
 // VehicleData -> vehicleListStruct(맵데이터 호환)

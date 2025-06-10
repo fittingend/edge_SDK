@@ -298,47 +298,55 @@ void NatsSend(const adcm::map_data_Objects &mapData)
 
 #endif
 
-void GPStoUTM(double lat, double lon, double &utmX, double &utmY)
+void GPStoUTM(double lon, double lat, double &utmX, double &utmY)
 {
+    // 상수 정의
     const double WGS84_A = 6378137.0;
     const double WGS84_E = 0.0818191908;
     const double k0 = 0.9996;
-    const double eSquared = WGS84_E * WGS84_E;
-    const double ePrimeSquared = eSquared / (1 - eSquared);
-    const double RADIANS_PER_DEGREE = M_PI / 180.0;
+    const double eSq = WGS84_E * WGS84_E;
+    const double ePrimeSq = eSq / (1 - eSq);
+    const double DEG_TO_RAD = M_PI / 180.0;
 
+    // UTM Zone 설정 (Zone 52 고정)
     int zone = 52;
-    double lonOrigin = (zone - 1) * 6 - 180 + 3;
-    double lonOriginRad = lonOrigin * RADIANS_PER_DEGREE;
+    double lonOrigin = (zone - 1) * 6 - 180 + 3; // 중앙 자오선
+    double lonOriginRad = lonOrigin * DEG_TO_RAD;
 
-    double latRad = lat * RADIANS_PER_DEGREE;
-    double lonRad = lon * RADIANS_PER_DEGREE;
+    // 위도/경도 라디안 변환
+    double latRad = lat * DEG_TO_RAD;
+    double lonRad = lon * DEG_TO_RAD;
 
-    double sinLatRad = sin(latRad);
-    double cosLatRad = cos(latRad);
-    double tanLatRad = tan(latRad);
+    // 삼각 함수 계산
+    double sinLat = sin(latRad);
+    double cosLat = cos(latRad);
+    double tanLat = tan(latRad);
 
-    double N = WGS84_A / sqrt(1 - eSquared * sinLatRad * sinLatRad);
-    double T = tanLatRad * tanLatRad;
-    double C = ePrimeSquared * cosLatRad * cosLatRad;
-    double A = cosLatRad * (lonRad - lonOriginRad);
+    // 보조 항 계산
+    double N = WGS84_A / sqrt(1 - eSq * pow(sinLat, 2));
+    double T = pow(tanLat, 2);
+    double C = ePrimeSq * pow(cosLat, 2);
+    double A = cosLat * (lonRad - lonOriginRad);
 
-    double M = WGS84_A * ((1 - eSquared / 4 - 3 * eSquared * eSquared / 64 - 5 * eSquared * eSquared * eSquared / 256) * latRad - (3 * eSquared / 8 + 3 * eSquared * eSquared / 32 + 45 * eSquared * eSquared * eSquared / 1024) * sin(2 * latRad) + (15 * eSquared * eSquared / 256 + 45 * eSquared * eSquared * eSquared / 1024) * sin(4 * latRad) - (35 * eSquared * eSquared * eSquared / 3072) * sin(6 * latRad));
+    // 자오선 거리 (Meridional Arc Length)
+    double M =
+        WGS84_A * ((1 - eSq / 4 - 3 * pow(eSq, 2) / 64 - 5 * pow(eSq, 3) / 256) * latRad - (3 * eSq / 8 + 3 * pow(eSq, 2) / 32 + 45 * pow(eSq, 3) / 1024) * sin(2 * latRad) + (15 * pow(eSq, 2) / 256 + 45 * pow(eSq, 3) / 1024) * sin(4 * latRad) - (35 * pow(eSq, 3) / 3072) * sin(6 * latRad));
 
-    utmX = (k0 * N * (A + (1 - T + C) * A * A * A / 6 + (5 - 18 * T + T * T + 72 * C - 58 * ePrimeSquared) * pow(A, 5) / 120) + 500000.0);
+    // UTM X 계산
+    utmX = k0 * N * (A + (1 - T + C) * pow(A, 3) / 6 + (5 - 18 * T + pow(T, 2) + 72 * C - 58 * ePrimeSq) * pow(A, 5) / 120) + 500000.0;
 
-    utmY = (k0 * (M + N * tanLatRad * (A * A / 2 + (5 - T + 9 * C + 4 * C * C) * pow(A, 4) / 24 + (61 - 58 * T + T * T + 600 * C - 330 * ePrimeSquared) * pow(A, 6) / 720)));
+    // UTM Y 계산
+    utmY = k0 * (M + N * tanLat * (pow(A, 2) / 2 + (5 - T + 9 * C + 4 * pow(C, 2)) * pow(A, 4) / 24 + (61 - 58 * T + pow(T, 2) + 600 * C - 330 * ePrimeSq) * pow(A, 6) / 720));
 
+    // 남반구 보정
     if (lat < 0)
-    {
         utmY += 10000000.0;
-    }
 }
 
 bool checkRange(const VehicleData &vehicle)
 {
-    if (vehicle.position_x >= 0 && vehicle.position_x < map_n &&
-        vehicle.position_y >= 0 && vehicle.position_y < map_m)
+    if (vehicle.position_x >= 0 && vehicle.position_x < map_x &&
+        vehicle.position_y >= 0 && vehicle.position_y < map_y)
         return true;
     return false;
 }
@@ -349,10 +357,10 @@ void checkRange(Point2D &point)
         point.x = 0;
     if (point.y < 0)
         point.y = 0;
-    if (point.x > map_n)
-        point.x = map_n - 1;
-    if (point.y > map_m)
-        point.y = map_m - 1;
+    if (point.x > map_x)
+        point.x = map_x - 1;
+    if (point.y > map_y)
+        point.y = map_y - 1;
 }
 
 bool checkAllVehicleRange(const std::vector<VehicleData *> &vehicles)
@@ -396,35 +404,54 @@ void processVehicleData(FusionData &vehicleData,
 
 void gpsToMapcoordinate(VehicleData &vehicle)
 {
-    // wps84기반 gps(global)좌표계를 작업환경 XY 기반의 Map 좌표계로 변환
-    // 시뮬레이터 map 기준 원점(0,0) global좌표
-    double mapOrigin_x = 453.088714;
-    double mapOrigin_y = 507.550078;
-    // 시뮬레이터 기준점 utm좌표
-    double origin_x = 278296.968;
-    double origin_y = 3980466.846;
-    double angle_radians = -MAP_ANGLE * M_PI / 180.0;
-    double velocity_ang = vehicle.velocity_ang;
-    double position_x = vehicle.position_long;
-    double position_y = vehicle.position_lat;
-    double mapVehicle_theta = (vehicle.yaw + MAP_ANGLE) * M_PI / 180.0; // 시뮬레이터 상에서 차량이 바라보는 각도
-    // 차량 utm 좌표로 변환
-    double distance_x, distance_y; // 차량의 utm x,y 좌표
-    GPStoUTM(position_y, position_x, distance_x, distance_y);
-    distance_x -= origin_x;
-    distance_y -= origin_y;
-    vehicle.position_x = (distance_x * cos(angle_radians) - distance_y * sin(angle_radians) - mapOrigin_x) * M_TO_10CM_PRECISION;
-    vehicle.position_y = (distance_x * sin(angle_radians) + distance_y * cos(angle_radians) - mapOrigin_y) * M_TO_10CM_PRECISION;
-    // 속도 (각속도 보정 임시 제외)
-    double velocity_x = vehicle.velocity_long;
-    double velocity_y = vehicle.velocity_lat;
-    vehicle.velocity_x = velocity_x * cos(angle_radians) - velocity_y * sin(angle_radians);
-    vehicle.velocity_y = velocity_x * sin(angle_radians) + velocity_y * cos(angle_radians);
-    // vehicle.velocity_x = (velocity_ang * (-sin(theta) * (position_x - alpha) + (cos(theta) * (position_y - beta)))) + (velocity_x * cos(theta)) + (velocity_y * sin(theta));
-    // vehicle.velocity_y = (velocity_ang * (-cos(theta) * (position_x - alpha) - (sin(theta) * (position_y - beta)))) + (velocity_x * -sin(theta)) + (velocity_y * cos(theta));
-    vehicle.yaw = -(vehicle.yaw + MAP_ANGLE - 90); // 맵에 맞춰 차량 각도 회전
-    // adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
-    // adcm::Log::Info() << "timestamp: " << vehicle.timestamp << " 차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.yaw << ")";
+    if (!type) // 시뮬레이션
+    {
+        // wps84기반 gps(global)좌표계를 작업환경 XY 기반의 Map 좌표계로 변환
+        // 시뮬레이터 map 기준 원점(0,0) global좌표
+        double mapOrigin_x = 453.088714;
+        double mapOrigin_y = 507.550078;
+        // 시뮬레이터 기준점 utm좌표
+        double ref_x = 278296.968;
+        double ref_y = 3980466.846;
+        double angle_radians = -MAP_ANGLE * M_PI / 180.0;
+        double velocity_ang = vehicle.velocity_ang;
+        double position_x = vehicle.position_long;
+        double position_y = vehicle.position_lat;
+        double mapVehicle_theta = (vehicle.yaw + MAP_ANGLE) * M_PI / 180.0; // 시뮬레이터 상에서 차량이 바라보는 각도
+        // 차량 utm 좌표로 변환
+        double distance_x, distance_y; // 차량의 utm x,y 좌표
+        GPStoUTM(position_x, position_y, distance_x, distance_y);
+        distance_x -= ref_x;
+        distance_y -= ref_y;
+        vehicle.position_x = (distance_x * cos(angle_radians) - distance_y * sin(angle_radians) - mapOrigin_x) * M_TO_10CM_PRECISION;
+        vehicle.position_y = (distance_x * sin(angle_radians) + distance_y * cos(angle_radians) - mapOrigin_y) * M_TO_10CM_PRECISION;
+        // 속도 (각속도 보정 임시 제외)
+        double velocity_x = vehicle.velocity_long;
+        double velocity_y = vehicle.velocity_lat;
+        vehicle.velocity_x = velocity_x * cos(angle_radians) - velocity_y * sin(angle_radians);
+        vehicle.velocity_y = velocity_x * sin(angle_radians) + velocity_y * cos(angle_radians);
+        // vehicle.velocity_x = (velocity_ang * (-sin(theta) * (position_x - alpha) + (cos(theta) * (position_y - beta)))) + (velocity_x * cos(theta)) + (velocity_y * sin(theta));
+        // vehicle.velocity_y = (velocity_ang * (-cos(theta) * (position_x - alpha) - (sin(theta) * (position_y - beta)))) + (velocity_x * -sin(theta)) + (velocity_y * cos(theta));
+        vehicle.yaw = -(vehicle.yaw + MAP_ANGLE - 90); // 맵에 맞춰 차량 각도 회전
+        // adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
+        // adcm::Log::Info() << "timestamp: " << vehicle.timestamp << " 차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.yaw << ")";
+    }
+
+    else // 실증
+    {
+        double position_x = vehicle.position_long;
+        double position_y = vehicle.position_lat;
+        double veh_utm_x, veh_utm_y; // 차량 utm 좌표
+        GPStoUTM(position_x, position_y, veh_utm_x, veh_utm_y);
+        vehicle.position_x = (veh_utm_x - origin_x) * M_TO_10CM_PRECISION;
+        vehicle.position_y = (veh_utm_y - origin_y) * M_TO_10CM_PRECISION;
+        // 차량 각도는 유지
+        vehicle.velocity_x = vehicle.velocity_long * M_TO_10CM_PRECISION;
+        vehicle.velocity_y = vehicle.velocity_lat * M_TO_10CM_PRECISION;
+        vehicle.yaw = 90 - vehicle.yaw;
+        // adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
+        // adcm::Log::Info() << "timestamp: " << vehicle.timestamp << " 차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.yaw << ")";
+    }
 }
 
 void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData vehicle)
@@ -433,6 +460,7 @@ void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleDa
     double theta = vehicle.yaw * M_PI / 180.0;
     double velocity_ang = vehicle.velocity_ang;
 
+    adcm::Log::Info() << "차량 위치, yaw: (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.yaw << ")";
     for (auto iter = obstacle_list.begin(); iter != obstacle_list.end(); iter++)
     {
         // adcm::Log::Info() << "장애물 relativeToGlobal 좌표변환 before (" << iter->fused_position_x << " , " << iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
@@ -442,8 +470,6 @@ void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleDa
         double obstacle_velocity_x = iter->fused_velocity_x; // 시뮬 로그 속도의 단위는 m/s인데, 결과 값의 단위는 미정
         double obstacle_velocity_y = iter->fused_velocity_y;
 
-        // iter->fused_position_x = (obstacle_position_x * cos(angle_radians) - obstacle_position_y * sin(angle_radians) - mapOrigin_x) * M_TO_10CM_PRECISION;
-        // iter->fused_position_y = (obstacle_position_x * sin(angle_radians) + obstacle_position_y * cos(angle_radians) - mapOrigin_y) * M_TO_10CM_PRECISION;
         // adcm::Log::Info() << "장애물 relativeToMap 좌표변환 before (" << iter->fused_position_x << " , " << iter->fused_position_y << ", " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
         // adcm::Log::Info() << main_vehicle.yaw << "각 회전한 값 : (" << (obstacle_position_x)*cos(theta) - (obstacle_position_y)*sin(theta) << ", " << (obstacle_position_x)*sin(theta) + (obstacle_position_y)*cos(theta) << ")";
 
@@ -454,6 +480,8 @@ void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleDa
         iter->fused_velocity_y = obstacle_velocity_x + vehicle.velocity_y;
 
         iter->fused_heading_angle = vehicle.yaw + iter->fused_heading_angle;
+
+        // 장애물 데이터 오버플로우 방지
         if (iter->fused_position_x < 0)
         {
             iter->fused_position_x = rand() % 3;
@@ -464,7 +492,7 @@ void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleDa
             iter->fused_position_y = rand() % 3;
         }
 
-        // adcm::Log::Info() << "장애물 relativeToMap 좌표변환 after (" << iter->fused_position_x << " , " << iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
+        // adcm::Log::Info() << iter->obstacle_class << " 장애물 relativeToMap 좌표변환 after (" << iter->fused_position_x << " , " << iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
     }
 }
 
@@ -486,7 +514,7 @@ void generateRoadZValue(VehicleData target_vehicle, std::vector<adcm::map_2dList
     {
         for (int j = scanned_range_LL_y; j < (scanned_range_RU_y + 1); j++)
         {
-            if (i >= 0 && j >= 0 && i < map_n && j < map_m)
+            if (i >= 0 && j >= 0 && i < map_x && j < map_y)
             {
                 map_2d_test[i][j].road_z = 1;
                 // adcm::Log::Info() << "main vehicle generateRoadZValue[" << i << "]["<< j << "]:" << map_2d_test[i][j].road_z;
@@ -499,10 +527,9 @@ void generateRoadZValue(VehicleData target_vehicle, std::vector<adcm::map_2dList
 
 void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, VehicleData &vehicle)
 {
-    // Collect all points in an array
     Point2D points[] = {p0, p1, p2, p3};
 
-    // Find min and max values for x and y
+    // 4개 지점 좌표의 최소값 최댓값 계산
     double min_x = points[0].x, max_x = points[0].x;
     double min_y = points[0].y, max_y = points[0].y;
     for (const auto &p : points)
@@ -514,16 +541,14 @@ void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, Vehi
     }
 
     Point2D index;
-    // Ray-Casting algorithm
+    // 레이캐스팅 알고리즘
     for (index.x = min_x; index.x <= max_x; ++index.x)
     {
         for (index.y = min_y; index.y <= max_y; ++index.y)
         {
             int cross = 0;
-            // 해당 사변형은 4변을 가지므로 i
             for (int i = 0; i < 4; i++)
             {
-                // As the loop variable i iterates from 0 to 3, j will always represent the next vertex in the sequence
                 int j = (i + 1) % 4;
                 if ((points[i].y > index.y) != (points[j].y > index.y))
                 {
@@ -536,13 +561,11 @@ void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, Vehi
                         cross++;
                 }
             }
-            // 교차횟수 cross가 짝수이면 점은 외부,
-            // 교차횟수 cross가 홀수이면 점은 내부에 있음
+            // 교차횟수 cross가 짝수이면 점은 외부, 홀수면 점은 내부에 있음
             if (cross % 2 != 0)
             {
                 vehicle.map_2d_location.push_back(index);
-                // map_2d_test[index.x][index.y].vehicle_class = vehicle.vehicle_class;
-                //  TO DO: 현재는 물체가 있는 index 는 road_z 값 1로 설정 (아무것도 없으면 0)
+                // road_z 코드 -> road_index로 수정 예정
                 // mapData.map_2d[index.x][index.y].road_z = 1;
             }
         }
@@ -649,14 +672,14 @@ void find4VerticesVehicle(VehicleData &target_vehicle)
 
     if (target_vehicle.vehicle_class == EGO_VEHICLE)
     {
-        half_x = MAIN_VEHICLE_SIZE_X / 2;
-        half_y = MAIN_VEHICLE_SIZE_Y / 2;
+        half_x = main_vehicle_size.length / 2;
+        half_y = main_vehicle_size.width / 2;
     }
 
     else
     {
-        half_x = SUB_VEHICLE_SIZE_X / 2;
-        half_y = SUB_VEHICLE_SIZE_Y / 2;
+        half_x = sub_vehicle_size.front().length / 2;
+        half_y = sub_vehicle_size.front().width / 2;
     }
     // Top-left (LU)
     LU.x = target_vehicle.position_x + cos(theta) * (-half_x) - sin(theta) * (half_y);
@@ -679,8 +702,9 @@ void find4VerticesVehicle(VehicleData &target_vehicle)
     checkRange(RL);
     checkRange(LL);
 
+    // road_z -> road_index 변경
     // generateRoadZValue(target_vehicle, map_2d_test);
-    // TO DO
+
     generateOccupancyIndex(LU, RU, RL, LL, target_vehicle);
 }
 
@@ -727,7 +751,7 @@ double euclideanDistance(const ObstacleData &a, const ObstacleData &b)
                      std::pow(a.fused_position_y - b.fused_position_y, 2));
 }
 
-// 거리 행렬 생성 함수
+// 거리 행렬 생성
 std::vector<std::vector<double>> createDistanceMatrix(
     const std::vector<ObstacleData> &listA,
     const std::vector<ObstacleData> &listB)
@@ -741,6 +765,20 @@ std::vector<std::vector<double>> createDistanceMatrix(
         }
     }
     return distanceMatrix;
+}
+
+// 신뢰성 기반 융합 계산
+double calculateWeightedPosition(const std::vector<double> &positions, const std::vector<double> &variances)
+{
+    double weightedSum = 0.0;
+    double totalVarianceInverse = 0.0;
+    for (size_t i = 0; i < positions.size(); ++i)
+    {
+        double varianceInverse = 1.0 / variances[i];
+        weightedSum += positions[i] * varianceInverse;
+        totalVarianceInverse += varianceInverse;
+    }
+    return (1.0 / totalVarianceInverse) * weightedSum;
 }
 
 // Munkres 알고리즘으로 매칭
@@ -770,45 +808,7 @@ std::vector<int> solveAssignment(const std::vector<std::vector<double>> &costMat
     return assignment;
 }
 
-// 신뢰성 기반 융합 계산 함수
-double calculateWeightedPosition(const std::vector<double> &positions, const std::vector<double> &variances)
-{
-    double weightedSum = 0.0;
-    double totalVarianceInverse = 0.0;
-    for (size_t i = 0; i < positions.size(); ++i)
-    {
-        double varianceInverse = 1.0 / variances[i];
-        weightedSum += positions[i] * varianceInverse;
-        totalVarianceInverse += varianceInverse;
-    }
-    return (1.0 / totalVarianceInverse) * weightedSum;
-}
-
-// 장애물 리스트에서 특정 차량 데이터를 제외하는 함수
-void filterVehicleData(std::vector<ObstacleData> &obstacles)
-{
-    for (auto iter = obstacles.begin(); iter != obstacles.end();)
-    {
-        // if ((abs(iter->fused_cuboid_x - SUB_VEHICLE_SIZE_X / 10)) < 0.1 && (abs(iter->fused_cuboid_y - SUB_VEHICLE_SIZE_Y / 10)) < 0.1)
-        if (iter->obstacle_class == 51)
-        {
-            // adcm::Log::Info() << "보조차량 제거";
-            iter = obstacles.erase(iter);
-        }
-        // if ((abs(iter->fused_cuboid_x - MAIN_VEHICLE_SIZE_X / 10)) < 0.1 && (abs(iter->fused_cuboid_y - MAIN_VEHICLE_SIZE_Y / 10)) < 0.1)
-        else if (iter->obstacle_class == 50)
-        {
-            // adcm::Log::Info() << "특장차 제거";
-            iter = obstacles.erase(iter);
-        }
-        else
-            iter++;
-    }
-
-    return;
-}
-
-// 데이터 융합
+// 장애물 데이터 융합
 void processFusion(
     std::vector<ObstacleData> &presList,
     const std::vector<ObstacleData> &prevList,
@@ -850,6 +850,28 @@ void processFusion(
 
     // 새로운 리스트로 갱신
     presList = newList;
+}
+
+// 장애물 리스트에서 특장차, 보조 차량 데이터를 제외
+void filterVehicleData(std::vector<ObstacleData> &obstacles)
+{
+    for (auto iter = obstacles.begin(); iter != obstacles.end();)
+    {
+        if (iter->obstacle_class == 51)
+        {
+            // adcm::Log::Info() << "보조차량 제거";
+            iter = obstacles.erase(iter);
+        }
+        else if (iter->obstacle_class == 50)
+        {
+            // adcm::Log::Info() << "특장차 제거";
+            iter = obstacles.erase(iter);
+        }
+        else
+            iter++;
+    }
+
+    return;
 }
 
 // // 데이터 융합
@@ -915,29 +937,6 @@ void processFusion(
 
 //     presList = newList;
 // }
-
-// 새 데이터에 대한 ID 관리 및 부여
-void assignIDsForNewData(
-    std::vector<ObstacleData> &resultFusionList,
-    const std::vector<ObstacleData> &currentFusionList,
-    const std::vector<int> &assignment)
-{
-    // 기존 매칭된 인덱스 집합
-    std::set<int> matchedIndices(assignment.begin(), assignment.end());
-    for (size_t i = 0; i < currentFusionList.size(); ++i)
-    {
-        if (i >= assignment.size() || matchedIndices.find(i) == matchedIndices.end())
-        {
-            ObstacleData newObstacle = currentFusionList[i];
-            newObstacle.obstacle_id = id_manager.allocID();
-            resultFusionList.push_back(newObstacle);
-        }
-        else
-        {
-            resultFusionList.push_back(currentFusionList[i]);
-        }
-    }
-}
 
 // 장애물 리스트 융합 및 이전 데이터와 비교
 std::vector<ObstacleData> mergeAndCompareLists(
@@ -1066,10 +1065,7 @@ adcm::vehicleListStruct ConvertToVehicleListStruct(const VehicleData &vehicle, s
     for (const auto &point : vehicle.map_2d_location)
     {
         adcm::map2dIndex index_to_push = {point.x, point.y};
-        auto &map_cell = map[index_to_push.x][index_to_push.y];
-        map_cell.vehicle_class = vehicle_final.vehicle_class;
-        map_cell.road_z = 1;
-        // road_z 값은 여기에 반영
+        // road_index 추가 예정
         vehicle_final.map_2d_location.push_back(index_to_push);
     }
 
@@ -1103,7 +1099,7 @@ adcm::obstacleListStruct ConvertToObstacleListStruct(const ObstacleData &obstacl
     for (const auto &point : obstacle.map_2d_location)
     {
         adcm::map2dIndex index_to_push = {point.x, point.y};
-        map[index_to_push.x][index_to_push.y].obstacle_id = obstacle.obstacle_id;
+        // road_index 추가예정
         obstacle_map.map_2d_location.push_back(index_to_push);
     }
 
@@ -1225,26 +1221,23 @@ void ThreadReceiveHubData()
                     adcm::Log::Info() << "road_z empty";
                 // road_z는 차량 주변 10m x 10m, 차량 사이즈+주변 2m 제외
                 // road_z는 맵 기준 100x100 사이즈의 배열인데, 이를 왼쪽 위부터 1차원 배열로 변환해서 옴
+                // road_index에 반영 필요
 
                 switch (data->vehicle_class)
                 {
-                // <25.03.04> 큐 제거
                 case EGO_VEHICLE:
-                    // main_vehicle_queue.enqueue(fusionData);
                     main_vehicle_data = fusionData;
                     order.push(EGO_VEHICLE);
                     ego = true;
                     break;
 
                 case SUB_VEHICLE_1:
-                    // sub1_vehicle_queue.enqueue(fusionData);
                     sub1_vehicle_data = fusionData;
                     order.push(SUB_VEHICLE_1);
                     sub1 = true;
                     break;
 
                 case SUB_VEHICLE_2:
-                    // sub2_vehicle_queue.enqueue(fusionData);
                     sub2_vehicle_data = fusionData;
                     order.push(SUB_VEHICLE_2);
                     sub2 = true;
@@ -1257,9 +1250,6 @@ void ThreadReceiveHubData()
             }
             dataReady.notify_one();
             adcm::Log::Info() << ++receiveVer << "번째 허브 데이터 수신 완료";
-
-            // {
-            //     unique_lock<mutex> lock(mtx_send);
 
             // case 255: // 보조차1이 보낸 인지데이터
             //     data->vehicle_class = SUB_VEHICLE_1;
@@ -1300,7 +1290,7 @@ void ThreadReceiveWorkInfo()
 
             main_vehicle_size.length = data->main_vehicle.length;
             main_vehicle_size.width = data->main_vehicle.width;
-            if (main_vehicle_size.length != 0) // (250520) 메인차량이 있다면 workego = true
+            if (main_vehicle_size.length != 0) // 메인차량이 있다면 workego = true
                 workego = true;
 
             sub_vehicle_size.clear();
@@ -1308,7 +1298,7 @@ void ThreadReceiveWorkInfo()
             {
                 sub_vehicle_size.push_back({sub_vehicle.length, sub_vehicle.width});
             }
-            if (sub_vehicle_size.size() == 1) // (250520) 서브차량이 있다면 work상태 true
+            if (sub_vehicle_size.size() == 1) // 서브차량이 있다면 work상태 true
                 worksub1 = true;
             else if (sub_vehicle_size.size() == 2)
                 worksub2 = true;
@@ -1319,53 +1309,43 @@ void ThreadReceiveWorkInfo()
                 work_boundary.push_back({boundary.x, boundary.y});
             }
 
-            // 좌표계 변환 전 map 범위 둘러싸는 사각형 좌표
+            type = data->type;
 
-            min_a = work_boundary[0].x;
-            min_b = work_boundary[0].y;
-
-            max_a = work_boundary[0].x;
-            max_b = work_boundary[0].y;
-
-            for (int i = 1; i < work_boundary.size(); i++)
+            if (!type) // 시뮬레이션이라면, (126.5482, 35.9398)의 utm좌표가 맵의 (0, 0)이 된다.
             {
-                min_a = work_boundary[i].x < min_a ? work_boundary[i].x : min_a;
-                min_b = work_boundary[i].y < min_b ? work_boundary[i].y : min_b;
-                max_a = work_boundary[i].x > max_a ? work_boundary[i].x : max_a;
-                max_b = work_boundary[i].y > max_b ? work_boundary[i].y : max_b;
+                origin_x = 278835;
+                origin_y = 3980050;
+                map_x = 2000;
+                map_y = 1000;
+                adcm::Log::Info() << "[WorkInfo] 시뮬레이션 테스트";
+                adcm::Log::Info() << "맵 사이즈: (" << map_x << ", " << map_y << ")";
             }
-            adcm::Log::Info() << "map의 min 값: (" << min_a << ", " << min_b << "), max 값 : (" << max_a << ", " << max_b << ")";
-
-            for (int i = 0; i < work_boundary.size(); i++)
+            else // 실증이라면, boundary 좌표의 가장 작은 지점 min_x, min_y의 utm좌표가 맵의 (0, 0)이 된다.
             {
-                work_boundary[i].x -= min_a;
-                work_boundary[i].y -= min_b;
-            }
+                min_lon = work_boundary[0].lon;
+                min_lat = work_boundary[0].lat;
+                max_lon = work_boundary[0].lon;
+                max_lat = work_boundary[0].lat;
 
-            // 맵 범위 계산
-            if (!work_boundary.empty())
-            {
-                min_a = max_a = work_boundary.front().x;
-                min_b = max_b = work_boundary.front().y;
-            }
-
-            for (const auto &boundary : work_boundary)
-            {
-                min_a = std::min(min_a, boundary.x);
-                min_b = std::min(min_b, boundary.y);
-                max_a = std::max(max_a, boundary.x);
-                max_b = std::max(max_b, boundary.y);
-            }
-            adcm::Log::Info() << "map의 min 값: (" << min_a << ", " << min_b << "), max 값 : (" << max_a << ", " << max_b << ")";
-
-            for (auto &boundary : work_boundary)
-            {
-                boundary.x -= min_a;
-                boundary.y -= min_b;
-                adcm::Log::Info() << "변경한 boundary: (" << boundary.x << ", " << boundary.y << ")";
+                for (int i = 1; i < work_boundary.size(); i++)
+                {
+                    min_lon = work_boundary[i].lon < min_lon ? work_boundary[i].lon : min_lon;
+                    min_lat = work_boundary[i].lat < min_lat ? work_boundary[i].lat : min_lat;
+                    max_lon = work_boundary[i].lon > max_lon ? work_boundary[i].lon : max_lon;
+                    max_lat = work_boundary[i].lat > max_lat ? work_boundary[i].lat : max_lat;
+                }
+                adcm::Log::Info() << "[WorkInfo] 실증 테스트";
+                adcm::Log::Info() << "map의 min(lon, lat) 값: (" << min_lon << ", " << min_lat << "), max(lon, lat) 값 : (" << max_lon << ", " << max_lat << ")";
+                GPStoUTM(min_lon, min_lat, min_utm_x, min_utm_y);
+                GPStoUTM(max_lon, max_lat, max_utm_x, max_utm_y);
+                adcm::Log::Info() << "map의 minutm(x, y) 값: (" << min_utm_x << ", " << min_utm_y << "), maxutm(x, y) 값 : (" << max_utm_x << ", " << max_utm_y << ")";
+                map_x = (max_utm_x - min_utm_x) * 10;
+                map_y = (max_utm_y - min_utm_y) * 10;
+                adcm::Log::Info() << "맵 사이즈: (" << map_x << ", " << map_y << ")";
+                origin_x = min_utm_x;
+                origin_y = min_utm_y;
             }
 
-            // haveWorkInfo = true;
             sendEmptyMap = true;
             someipReady.notify_one();
             get_workinfo = true;
@@ -1410,10 +1390,10 @@ void ThreadKatech()
     map_2dStruct_init.vehicle_class = NO_VEHICLE; // 시뮬레이션 데이터 설정때문에 부득이 NO_VEHICLE로 바꿈
 
     // 빈 맵 생성
-    std::vector<adcm::map_2dListVector> map_2d_init(map_n, adcm::map_2dListVector(map_m, map_2dStruct_init));
+    std::vector<adcm::map_2dListVector> map_2d_init(map_x, adcm::map_2dListVector(map_y, map_2dStruct_init));
     std::vector<adcm::map_2dListVector> map_2d_test(1, adcm::map_2dListVector(1, map_2dStruct_init));
 
-    mapData.map_2d = map_2d_init;
+    mapData.map_2d = map_2d_test;
 
     std::vector<ObstacleData> obstacle_list;
 
@@ -1426,39 +1406,15 @@ void ThreadKatech()
         {
             unique_lock<mutex> lock(mtx_data);
             dataReady.wait(lock, []
-                           { return (get_workinfo && (!workego || ego) && (!worksub1 || sub1) && (!worksub2 || sub2)); });
+                           { return (get_workinfo && ((!workego || ego) || ((!worksub1 || sub1) && (!worksub2 || sub2)))); });
 
             // adcm::Log::Info() << "송신이 필요한 남은 허브 데이터 개수: " << main_vehicle_queue.size_approx() + sub1_vehicle_queue.size_approx() + sub2_vehicle_queue.size_approx();
-            std::int8_t map_x = max_a - min_a;
-            std::int8_t map_y = max_b - min_b;
             // auto startTime = std::chrono::high_resolution_clock::now();
             adcm::Log::Info() << "==============KATECH modified code start==========";
 
             adcm::Log::Info() << "KATECH: 이번 데이터 기준 차량: " << order.front();
-            //==============1. Data Queue에서 차량 및 장애물 데이터 꺼내면서 위치 변환=================
-            /*
-            switch (order.front())
-            {
-            case EGO_VEHICLE:
-                // processVehicleData(main_vehicle_queue, main_vehicle_data, main_vehicle, obstacle_list_main);
-                // obstacle_list = obstacle_list_main;
-                processVehicleData(main_vehicle_data, main_vehicle, obstacle_list_main);
-                ego = false;
-                break;
-            case SUB_VEHICLE_1:
-                // processVehicleData(sub1_vehicle_queue, sub1_vehicle_data, sub1_vehicle, obstacle_list_sub1);
-                // obstacle_list = obstacle_list_sub1;
-                processVehicleData(sub1_vehicle_data, sub1_vehicle, obstacle_list_sub1);
-                sub1 = false;
-                break;
-            case SUB_VEHICLE_2:
-                // processVehicleData(sub2_vehicle_queue, sub2_vehicle_data, sub2_vehicle, obstacle_list_sub2);
-                // obstacle_list = obstacle_list_sub2;
-                processVehicleData(sub2_vehicle_data, sub2_vehicle, obstacle_list_sub2);
-                sub2 = false;
-                break;
-            }
-            */
+            //==============1. 차량 및 장애물 데이터 위치 변환=================
+
             processVehicleData(main_vehicle_data, main_vehicle, obstacle_list_main);
             processVehicleData(sub1_vehicle_data, sub1_vehicle, obstacle_list_sub1);
             processVehicleData(sub2_vehicle_data, sub2_vehicle, obstacle_list_sub2);
@@ -1473,6 +1429,9 @@ void ThreadKatech()
                                              obstacle_list_sub2, main_vehicle, sub1_vehicle, sub2_vehicle);
 
         order.pop();
+
+        previous_obstacle_list = obstacle_list;
+
         /*
         for (auto obstacle : obstacle_list)
         {
@@ -1482,7 +1441,6 @@ void ThreadKatech()
         adcm::Log::Info() << "장애물 리스트 융합 및 ID 부여 완료";
         adcm::Log::Info() << "장애물 리스트 사이즈: " << obstacle_list.size();
         */
-        previous_obstacle_list = obstacle_list;
 
         // adcm::Log::Info() << "previous_obstacle_list: " << previous_obstacle_list.size();
 
@@ -1638,9 +1596,8 @@ void ThreadKatech()
         // map_2d에서 map_2d_location이 존재하는 부분만 수정
         // 맵데이터 수정하며 lock걸기
 
-        mapData.map_2d = map_2d_init;
-        UpdateMapData(mapData, obstacle_list, vehicles);
         mapData.map_2d = map_2d_test;
+        UpdateMapData(mapData, obstacle_list, vehicles);
 
         {
             lock_guard<mutex> map_lock(mtx_map_someip);
@@ -1656,10 +1613,10 @@ void ThreadKatech()
 
         adcm::Log::Info() << "mapdata 융합 완료";
 
-        // for (int i = 0; i < map_n; ++i)
+        // for (int i = 0; i < map_x; ++i)
         // {
         //     map_2dListVector.clear();
-        //     for (int j = 0; j < map_m; ++j)
+        //     for (int j = 0; j < map_y; ++j)
         //     {
         //         map_2dStruct.obstacle_id = map_2d_test[i][j].obstacle_id;
         //         map_2d_test[i][j].obstacle_id = NO_OBSTACLE;
@@ -1748,7 +1705,6 @@ void ThreadSend()
             // send_map = 0;
             // std::this_thread::sleep_for(std::chrono::milliseconds(200)); // 대기시간
         }
-
     }
 }
 
@@ -1777,7 +1733,6 @@ void ThreadNATS()
             std::chrono::duration<double, std::milli> duration = endTime - startTime;
             adcm::Log::Info() << "NATS 전송 완료, 소요 시간: " << duration.count() << " ms.";
         }
-
     }
 }
 
@@ -1843,8 +1798,8 @@ int main(int argc, char *argv[])
     adcm::Log::Info() << "DataFusion: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
     adcm::Log::Info() << "Ok, let's produce some DataFusion data...";
-    // adcm::Log::Info() << "SDK release_250314_interface v2.1 for sa8195";
-    adcm::Log::Info() << "SDK release_250321_interface v2.1 for orin";
+    adcm::Log::Info() << "SDK release_250602_interface v2.3 for sa8195";
+    // adcm::Log::Info() << "SDK release_250321_interface v2.1 for orin";
     adcm::Log::Info() << "DataFusion Build " << BUILD_TIMESTAMP;
 
     // 파일 경로 얻
