@@ -390,21 +390,6 @@ void ThreadMonitor()
 
 int main(int argc, char* argv[])
 {
-    // 자동 Build Time 생성
-    time_t timer;
-    struct tm *t;
-    timer = time(NULL);
-    t = localtime(&timer);
-
-    std::string year = std::to_string(t->tm_year - 100);
-    std::string mon = std::to_string(t->tm_mon + 1);
-    std::string day = std::to_string(t->tm_mday);
-    if (mon.length() == 1)
-        mon.insert(0, "0");
-    if (day.length() == 1)
-        day.insert(0, "0");
-    std::string b_day = year + mon + day;
-
     std::vector<std::thread> thread_list;
     UNUSED(argc);
     UNUSED(argv);
@@ -430,8 +415,9 @@ int main(int argc, char* argv[])
     adcm::Log::Info() << "RiskAssessment: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
     adcm::Log::Info() << "Ok, let's produce some RiskAssessment data...";
-    adcm::Log::Info() << "SDK release_250321_interface v2.1, AGX Orin version";
-    adcm::Log::Info() << "RiskAssessment Build " << b_day;
+    adcm::Log::Info() << "SDK release_250602_interface v2.3 for sa8195";
+    // adcm::Log::Info() << "SDK release_250321_interface v2.1, AGX Orin version";
+    adcm::Log::Info() << "RiskAssessment Build " << BUILD_TIMESTAMP;
 #ifdef NATS
     // Code to execute if NATS is defined
     adcm::Log::Info() << "NATS ON";

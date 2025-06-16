@@ -61,6 +61,11 @@ option(sa "Build with sa SDK" OFF)
 option(orin "Build with orin SDK" OFF)
 option(nats "Enable NATS integration" OFF)
 
+#Build Time
+string(TIMESTAMP BUILD_TIMESTAMP "%Y-%m-%d %H:%M:%S")
+
+add_definitions(-DBUILD_TIMESTAMP="${BUILD_TIMESTAMP}")
+
 if (nats)
     message(STATUS "NATS is enabled")
     add_definitions(-DNATS)
