@@ -376,21 +376,6 @@ bool checkAllVehicleRange(const std::vector<VehicleData *> &vehicles)
     return true;
 }
 
-/*
-void processVehicleData(moodycamel::ConcurrentQueue<FusionData> &vehicleQueue,
-                        FusionData &vehicleData,
-                        VehicleData &vehicle,
-                        std::vector<ObstacleData> &obstacleList)
-{
-    vehicleQueue.try_dequeue(vehicleData);
-    vehicle = vehicleData.vehicle;
-    obstacleList = vehicleData.obstacle_list;
-    filterVehicleData(obstacleList);
-    gpsToMapcoordinate(vehicle);
-    relativeToMapcoordinate(obstacleList, vehicle);
-}
-*/
-
 void processVehicleData(FusionData &vehicleData,
                         VehicleData &vehicle,
                         std::vector<ObstacleData> &obstacleList)
@@ -448,7 +433,7 @@ void gpsToMapcoordinate(VehicleData &vehicle)
         // 차량 각도는 유지
         vehicle.velocity_x = vehicle.velocity_long * M_TO_10CM_PRECISION;
         vehicle.velocity_y = vehicle.velocity_lat * M_TO_10CM_PRECISION;
-        vehicle.yaw = 90 - vehicle.yaw;
+        // vehicle.yaw = 90 - vehicle.yaw;
         // adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
         // adcm::Log::Info() << "timestamp: " << vehicle.timestamp << " 차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.yaw << ")";
     }
@@ -456,11 +441,10 @@ void gpsToMapcoordinate(VehicleData &vehicle)
 
 void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData vehicle)
 {
-    srand((unsigned int)time(NULL));
     double theta = vehicle.yaw * M_PI / 180.0;
     double velocity_ang = vehicle.velocity_ang;
 
-    adcm::Log::Info() << vehicle.vehicle_class << " 차량 위치, yaw: (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.yaw << ")";
+    adcm::Log::Info() << vehicle.vehicle_class << " 차량 위치, heading_angle: (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.yaw << ")";
     for (auto iter = obstacle_list.begin(); iter != obstacle_list.end(); iter++)
     {
         // adcm::Log::Info() << "장애물 relativeToGlobal 좌표변환 before (" << iter->fused_position_x << " , " << iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
@@ -473,9 +457,15 @@ void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleDa
         // adcm::Log::Info() << "장애물 relativeToMap 좌표변환 before (" << iter->fused_position_x << " , " << iter->fused_position_y << ", " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
         // adcm::Log::Info() << main_vehicle.yaw << "각 회전한 값 : (" << (obstacle_position_x)*cos(theta) - (obstacle_position_y)*sin(theta) << ", " << (obstacle_position_x)*sin(theta) + (obstacle_position_y)*cos(theta) << ")";
 
-        iter->fused_position_x = vehicle.position_x + ((obstacle_position_x)*cos(theta) + (obstacle_position_y)*sin(theta)) * M_TO_10CM_PRECISION;
-        iter->fused_position_y = vehicle.position_y + ((obstacle_position_x)*sin(theta) - (obstacle_position_y)*cos(theta)) * M_TO_10CM_PRECISION;
+        // 기존 시뮬레이션 차량 heading_angle 기준 (정북: 0도, 시계방향, 왼손 좌표계)
+        // iter->fused_position_x = vehicle.position_x + ((obstacle_position_x)*cos(theta) + (obstacle_position_y)*sin(theta)) * M_TO_10CM_PRECISION;
+        // iter->fused_position_y = vehicle.position_y + ((obstacle_position_x)*sin(theta) - (obstacle_position_y)*cos(theta)) * M_TO_10CM_PRECISION;
 
+        // 새로 정리한 차량 heading_angle 기준 (정북: 0도, 반시계방향, 오른손 좌표계)
+        iter->fused_position_x = vehicle.position_x + ((obstacle_position_x)*sin(theta) * (-1) + (obstacle_position_y)*cos(theta) * (-1)) * M_TO_10CM_PRECISION;
+        iter->fused_position_y = vehicle.position_y + ((obstacle_position_x)*cos(theta) + (obstacle_position_y)*sin(theta) * (-1)) * M_TO_10CM_PRECISION;
+
+        // 차량 좌표계 기준이므로 90+yaw 만큼 회전변환 필요 (추가예정)
         iter->fused_velocity_x = obstacle_velocity_x + vehicle.velocity_x;
         iter->fused_velocity_y = obstacle_velocity_x + vehicle.velocity_y;
 
@@ -483,47 +473,18 @@ void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleDa
 
         // 장애물 데이터 오버플로우 방지
         if (iter->fused_position_x < 0)
-        {
-            iter->fused_position_x = rand() % 3;
-        }
+            iter->fused_position_x = 0;
+        else if (iter->fused_position_x >= map_x)
+            iter->fused_position_x = map_x - 1;
 
         if (iter->fused_position_y < 0)
-        {
-            iter->fused_position_y = rand() % 3;
-        }
+            iter->fused_position_y = 0;
+        else if (iter->fused_position_y >= map_y)
+            iter->fused_position_y = map_y - 1;
 
         // adcm::Log::Info() << iter->obstacle_class << " 장애물 relativeToMap 좌표변환 after (" << iter->fused_position_x << " , " << iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
     }
 }
-
-/*
-void generateRoadZValue(VehicleData target_vehicle, std::vector<adcm::map_2dListVector> &map_2d_test)
-{
-// 현재 차량의 position_x position_y 중심으로 좌우전방 5m 를 스캔해서 road_z 값을 1로 지정
-#define SCANNING_RANGE 30
-    // adcm::Log::Info() << "vehicle class " << target_vehicle.vehicle_class << " generateRoadZValue";
-
-    int scanned_range_LL_x = floor(target_vehicle.position_x - SUB_VEHICLE_SIZE_X / 2) - SCANNING_RANGE;
-    int scanned_range_LL_y = floor(target_vehicle.position_y - SUB_VEHICLE_SIZE_Y / 2) - SCANNING_RANGE;
-
-    int scanned_range_RU_x = floor(target_vehicle.position_x + SUB_VEHICLE_SIZE_X / 2) + SCANNING_RANGE;
-    int scanned_range_RU_y = floor(target_vehicle.position_y + SUB_VEHICLE_SIZE_Y / 2) + SCANNING_RANGE;
-    // adcm::Log::Info() << "x는 " << scanned_range_LL_x << " ~ " << scanned_range_RU_x + 1 << "까지";
-    // adcm::Log::Info() << "y는 " << scanned_range_LL_y << " ~ " << scanned_range_RU_y + 1 << "까지";
-    for (int i = scanned_range_LL_x; i < (scanned_range_RU_x + 1); i++)
-    {
-        for (int j = scanned_range_LL_y; j < (scanned_range_RU_y + 1); j++)
-        {
-            if (i >= 0 && j >= 0 && i < map_x && j < map_y)
-            {
-                map_2d_test[i][j].road_z = 1;
-                // adcm::Log::Info() << "main vehicle generateRoadZValue[" << i << "]["<< j << "]:" << map_2d_test[i][j].road_z;
-            }
-        }
-    }
-    // adcm::Log::Info() << "generateRoadZValue finish";
-}
-*/
 
 void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, VehicleData &vehicle)
 {
@@ -620,48 +581,6 @@ void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std:
         }
     }
 }
-
-/*
-void generateOccupancyIndex_ori(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std::vector<ObstacleData>::iterator iter)
-{
-    long arr_x[] = {p0.x, p1.x, p2.x, p3.x};
-    long arr_y[] = {p0.y, p1.y, p2.y, p3.y};
-    // find max x&y and min x&y of the rectangle
-    int n = sizeof(arr_y) / sizeof(arr_y[0]);
-    // Implemented inbuilt function to sort array
-    std::sort(arr_x, arr_x + n);
-    std::sort(arr_y, arr_y + n);
-    long min_x = arr_x[0];
-    long max_x = arr_x[n - 1];
-    long min_y = arr_y[0];
-    long max_y = arr_y[n - 1];
-
-    Point2D p[] = {p0, p1, p2, p3};
-    Point2D index;
-
-    for (index.x = min_x; index.x < max_x; index.x++)
-    {
-        for (index.y = min_y; index.y < max_y; index.y++)
-        {
-            int cross = 0;
-            for (int i = 0; i < 4; i++)
-            {
-                int j = (i + 1) % 4;
-                if ((p[i].y > index.y) != (p[j].y > index.y))
-                {
-                    double meetX = (p[j].x - p[i].x) * (index.y - p[i].y) / (p[j].y - p[i].y) + p[i].x;
-                    if (index.x < meetX)
-                        cross++;
-                }
-            }
-            if (cross % 2 > 0)
-            {
-                iter->map_2d_location.push_back(index);
-            }
-        }
-    }
-}
-*/
 
 void find4VerticesVehicle(VehicleData &target_vehicle)
 {
@@ -823,7 +742,7 @@ void processFusion(
     {
         int j = assignment[i];
         // 매칭된 장애물 newList에 추가
-        if (j != -1)
+        if (j >= 0)
         {
             ObstacleData obstacle_temp;
             // presList[j].obstacle_id = prevList[i].obstacle_id;
@@ -838,7 +757,7 @@ void processFusion(
     {
         int j = assignment[i];
         // prevList에서 매칭되지 않은 항목을 newList에 추가
-        if (j == -1)
+        if (j < 0)
         {
             newList.push_back(prevList[i]);
             // adcm::Log::Info() << "obstacle " << prevList[i].obstacle_class << ": (" << prevList[i].fused_position_x << ", " << prevList[i].fused_position_y << ")";
@@ -1165,8 +1084,6 @@ void fillVehicleData(VehicleData &vehicle_fill, const std::shared_ptr<adcm::hub_
     vehicle_fill.position_long = data->position_long;
     vehicle_fill.position_height = data->position_height;
     vehicle_fill.yaw = data->yaw;
-    vehicle_fill.roll = data->roll;
-    vehicle_fill.pitch = data->pitch;
     vehicle_fill.velocity_long = data->velocity_long;
     vehicle_fill.velocity_lat = data->velocity_lat;
     vehicle_fill.velocity_ang = data->velocity_ang;
@@ -1421,7 +1338,7 @@ void ThreadKatech()
         {
             unique_lock<mutex> lock(mtx_data);
             dataReady.wait(lock, []
-                           { return (get_workinfo && (!workego || ego) && ((!worksub1 || sub1) && (!worksub2 || sub2))); });
+                           { return (get_workinfo && (!workego || ego) || ((!worksub1 || sub1) && (!worksub2 || sub2))); });
 
             // adcm::Log::Info() << "송신이 필요한 남은 허브 데이터 개수: " << main_vehicle_queue.size_approx() + sub1_vehicle_queue.size_approx() + sub2_vehicle_queue.size_approx();
             // auto startTime = std::chrono::high_resolution_clock::now();
