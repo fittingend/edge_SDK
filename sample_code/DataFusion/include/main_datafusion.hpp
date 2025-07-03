@@ -244,6 +244,9 @@ void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered);
 void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, VehicleData &vehicle);
 void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std::vector<ObstacleData>::iterator iter);
 
+// 삼각형 내부 포함 판단 함수 (레이캐스팅 대체)
+bool isPointInTriangle(const Point2D& pt, const Point2D& v1, const Point2D& v2, const Point2D& v3);
+
 // 차량 데이터 저장
 void fillVehicleData(VehicleData &vehicle_fill, const std::shared_ptr<adcm::hub_data_Objects> &data);
 
