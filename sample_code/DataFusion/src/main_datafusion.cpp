@@ -467,7 +467,7 @@ void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleDa
 
         // 차량 좌표계 기준이므로 90+yaw 만큼 회전변환 필요 (추가예정)
         iter->fused_velocity_x = obstacle_velocity_x + vehicle.velocity_x;
-        iter->fused_velocity_y = obstacle_velocity_x + vehicle.velocity_y;
+        iter->fused_velocity_y = obstacle_velocity_y + vehicle.velocity_y;
 
         iter->fused_heading_angle = vehicle.yaw + iter->fused_heading_angle;
 
@@ -1419,7 +1419,7 @@ void ThreadKatech()
         {
             unique_lock<mutex> lock(mtx_data);
             dataReady.wait(lock, []
-                           { return (get_workinfo && (!workego || ego) || ((!worksub1 || sub1) && (!worksub2 || sub2))); });
+                           { return (get_workinfo && ((!workego || ego) || ((!worksub1 || sub1) && (!worksub2 || sub2)))); });
 
             // adcm::Log::Info() << "송신이 필요한 남은 허브 데이터 개수: " << main_vehicle_queue.size_approx() + sub1_vehicle_queue.size_approx() + sub2_vehicle_queue.size_approx();
             // auto startTime = std::chrono::high_resolution_clock::now();
