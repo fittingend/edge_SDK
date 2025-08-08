@@ -53,6 +53,8 @@ double origin_y = 0;
 // 실증 상황 사각형 맵의 끝지점 x, y값
 double min_utm_x, min_utm_y, max_utm_x, max_utm_y;
 
+bool useNats = false;
+
 IDManager id_manager; // 장애물 ID 부여 및 반환
 bool ego = false;
 bool sub1 = false;
@@ -138,9 +140,7 @@ struct VehicleData
     double position_x; // 맵상 x좌표
     double position_y; // 맵상 y좌표
     double position_z;
-    double yaw;
-    double roll;
-    double pitch;
+    double heading_angle;
     double velocity_long;
     double velocity_lat;
     double velocity_x; // 맵상 x방향 속도
@@ -245,7 +245,7 @@ void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, Vehi
 void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std::vector<ObstacleData>::iterator iter);
 
 // 삼각형 내부 포함 판단 함수 (레이캐스팅 대체)
-bool isPointInTriangle(const Point2D& pt, const Point2D& v1, const Point2D& v2, const Point2D& v3);
+bool isPointInTriangle(const Point2D &pt, const Point2D &v1, const Point2D &v2, const Point2D &v3);
 
 // 차량 데이터 저장
 void fillVehicleData(VehicleData &vehicle_fill, const std::shared_ptr<adcm::hub_data_Objects> &data);
