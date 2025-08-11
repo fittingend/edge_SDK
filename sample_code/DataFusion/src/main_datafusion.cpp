@@ -192,9 +192,7 @@ std::string convertMapDataToJsonString(const adcm::map_data_Objects &mapData)
             << "            \"position_x\": " << item.position_x << ",\n"
             << "            \"position_y\": " << item.position_y << ",\n"
             << "            \"position_z\": " << item.position_z << ",\n"
-            << "            \"yaw\": " << item.yaw << ",\n"
-            << "            \"roll\": " << item.roll << ",\n"
-            << "            \"pitch\": " << item.pitch << ",\n"
+            << "            \"heading_angle\": " << item.heading_angle << ",\n"
             << "            \"velocity_long\": " << item.velocity_long << ",\n"
             << "            \"velocity_lat\": " << item.velocity_lat << ",\n"
             << "            \"velocity_x\": " << item.velocity_x << ",\n"
@@ -367,10 +365,13 @@ bool checkAllVehicleRange(const std::vector<VehicleData *> &vehicles)
 {
     for (const auto *vehicle : vehicles)
     {
-        adcm::Log::Info() << vehicle->vehicle_class << "번 차량 위치: [" << vehicle->position_x << ", " << vehicle->position_y << "]";
-        if (vehicle && !checkRange(*vehicle))
+        if (vehicle->vehicle_class != 0)
         {
-            return false;
+            adcm::Log::Info() << vehicle->vehicle_class << "번 차량 위치: [" << vehicle->position_x << ", " << vehicle->position_y << "]";
+            if (vehicle && !checkRange(*vehicle))
+            {
+                return false;
+            }
         }
     }
     return true;
@@ -402,7 +403,7 @@ void gpsToMapcoordinate(VehicleData &vehicle)
         double velocity_ang = vehicle.velocity_ang;
         double position_x = vehicle.position_long;
         double position_y = vehicle.position_lat;
-        double mapVehicle_theta = (vehicle.yaw + MAP_ANGLE) * M_PI / 180.0; // 시뮬레이터 상에서 차량이 바라보는 각도
+        double mapVehicle_theta = (vehicle.heading_angle + MAP_ANGLE) * M_PI / 180.0; // 시뮬레이터 상에서 차량이 바라보는 각도
         // 차량 utm 좌표로 변환
         double distance_x, distance_y; // 차량의 utm x,y 좌표
         GPStoUTM(position_x, position_y, distance_x, distance_y);
@@ -417,9 +418,9 @@ void gpsToMapcoordinate(VehicleData &vehicle)
         vehicle.velocity_y = velocity_x * sin(angle_radians) + velocity_y * cos(angle_radians);
         // vehicle.velocity_x = (velocity_ang * (-sin(theta) * (position_x - alpha) + (cos(theta) * (position_y - beta)))) + (velocity_x * cos(theta)) + (velocity_y * sin(theta));
         // vehicle.velocity_y = (velocity_ang * (-cos(theta) * (position_x - alpha) - (sin(theta) * (position_y - beta)))) + (velocity_x * -sin(theta)) + (velocity_y * cos(theta));
-        vehicle.yaw = -(vehicle.yaw + MAP_ANGLE - 90); // 맵에 맞춰 차량 각도 회전
+        vehicle.heading_angle = -(vehicle.heading_angle + MAP_ANGLE - 90); // 맵에 맞춰 차량 각도 회전
         // adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
-        // adcm::Log::Info() << "timestamp: " << vehicle.timestamp << " 차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.yaw << ")";
+        // adcm::Log::Info() << "timestamp: " << vehicle.timestamp << " 차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.heading_angle << ")";
     }
 
     else // 실증
@@ -433,18 +434,18 @@ void gpsToMapcoordinate(VehicleData &vehicle)
         // 차량 각도는 유지
         vehicle.velocity_x = vehicle.velocity_long * M_TO_10CM_PRECISION;
         vehicle.velocity_y = vehicle.velocity_lat * M_TO_10CM_PRECISION;
-        // vehicle.yaw = 90 - vehicle.yaw;
+        // vehicle.heading_angle = 90 - vehicle.heading_angle;
         // adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
-        // adcm::Log::Info() << "timestamp: " << vehicle.timestamp << " 차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.yaw << ")";
+        // adcm::Log::Info() << "timestamp: " << vehicle.timestamp << " 차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.heading_angle << ")";
     }
 }
 
 void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData vehicle)
 {
-    double theta = vehicle.yaw * M_PI / 180.0;
+    double theta = vehicle.heading_angle * M_PI / 180.0;
     double velocity_ang = vehicle.velocity_ang;
 
-    adcm::Log::Info() << vehicle.vehicle_class << " 차량 위치, heading_angle: (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.yaw << ")";
+    adcm::Log::Info() << vehicle.vehicle_class << " 차량 위치, heading_angle: (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.heading_angle << ")";
     for (auto iter = obstacle_list.begin(); iter != obstacle_list.end(); iter++)
     {
         // adcm::Log::Info() << "장애물 relativeToGlobal 좌표변환 before (" << iter->fused_position_x << " , " << iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
@@ -455,7 +456,7 @@ void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleDa
         double obstacle_velocity_y = iter->fused_velocity_y;
 
         // adcm::Log::Info() << "장애물 relativeToMap 좌표변환 before (" << iter->fused_position_x << " , " << iter->fused_position_y << ", " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
-        // adcm::Log::Info() << main_vehicle.yaw << "각 회전한 값 : (" << (obstacle_position_x)*cos(theta) - (obstacle_position_y)*sin(theta) << ", " << (obstacle_position_x)*sin(theta) + (obstacle_position_y)*cos(theta) << ")";
+        // adcm::Log::Info() << main_vehicle.heading_angle << "각 회전한 값 : (" << (obstacle_position_x)*cos(theta) - (obstacle_position_y)*sin(theta) << ", " << (obstacle_position_x)*sin(theta) + (obstacle_position_y)*cos(theta) << ")";
 
         // 기존 시뮬레이션 차량 heading_angle 기준 (정북: 0도, 시계방향, 왼손 좌표계)
         // iter->fused_position_x = vehicle.position_x + ((obstacle_position_x)*cos(theta) + (obstacle_position_y)*sin(theta)) * M_TO_10CM_PRECISION;
@@ -465,11 +466,11 @@ void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleDa
         iter->fused_position_x = vehicle.position_x + ((obstacle_position_x)*sin(theta) * (-1) + (obstacle_position_y)*cos(theta) * (-1)) * M_TO_10CM_PRECISION;
         iter->fused_position_y = vehicle.position_y + ((obstacle_position_x)*cos(theta) + (obstacle_position_y)*sin(theta) * (-1)) * M_TO_10CM_PRECISION;
 
-        // 차량 좌표계 기준이므로 90+yaw 만큼 회전변환 필요 (추가예정)
+        // 차량 좌표계 기준이므로 90+heading_angle 만큼 회전변환 필요 (추가예정)
         iter->fused_velocity_x = obstacle_velocity_x + vehicle.velocity_x;
-        iter->fused_velocity_y = obstacle_velocity_x + vehicle.velocity_y;
+        iter->fused_velocity_y = obstacle_velocity_y + vehicle.velocity_y;
 
-        iter->fused_heading_angle = vehicle.yaw + iter->fused_heading_angle;
+        iter->fused_heading_angle = vehicle.heading_angle + iter->fused_heading_angle;
 
         // 장애물 데이터 오버플로우 방지
         if (iter->fused_position_x < 0)
@@ -486,7 +487,7 @@ void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleDa
     }
 }
 // 레이캐스팅 대체 삼각형 내부포함 판단
-bool isPointInTriangle(const Point2D& pt, const Point2D& v1, const Point2D& v2, const Point2D& v3)
+bool isPointInTriangle(const Point2D &pt, const Point2D &v1, const Point2D &v2, const Point2D &v3)
 {
     // 벡터 방식으로 barycentric 판별
     double dX = pt.x - v3.x;
@@ -668,7 +669,7 @@ void find4VerticesVehicle(VehicleData &target_vehicle)
     Point2D LU, RU, RL, LL;
     double half_x;
     double half_y;
-    double theta = target_vehicle.yaw * M_PI / 180;
+    double theta = target_vehicle.heading_angle * M_PI / 180;
 
     if (target_vehicle.vehicle_class == EGO_VEHICLE)
     {
@@ -1089,9 +1090,7 @@ adcm::vehicleListStruct ConvertToVehicleListStruct(const VehicleData &vehicle, s
     vehicle_final.position_x = vehicle.position_x;
     vehicle_final.position_y = vehicle.position_y;
     vehicle_final.position_z = vehicle.position_z;
-    vehicle_final.yaw = vehicle.yaw;
-    vehicle_final.roll = vehicle.roll;
-    vehicle_final.pitch = vehicle.pitch;
+    vehicle_final.heading_angle = vehicle.heading_angle;
     vehicle_final.velocity_long = vehicle.velocity_long;
     vehicle_final.velocity_lat = vehicle.velocity_lat;
     vehicle_final.velocity_x = vehicle.velocity_x;
@@ -1141,7 +1140,7 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
 
     for (const auto vehicle : vehicles)
     {
-        if (vehicle->timestamp != 0)
+        if (vehicle->vehicle_class != 0)
         {
             mapData.vehicle_list.push_back(ConvertToVehicleListStruct(*vehicle, mapData.map_2d));
         }
@@ -1164,7 +1163,7 @@ void fillVehicleData(VehicleData &vehicle_fill, const std::shared_ptr<adcm::hub_
     vehicle_fill.position_lat = data->position_lat;
     vehicle_fill.position_long = data->position_long;
     vehicle_fill.position_height = data->position_height;
-    vehicle_fill.yaw = data->yaw;
+    vehicle_fill.heading_angle = data->heading_angle;
     vehicle_fill.velocity_long = data->velocity_long;
     vehicle_fill.velocity_lat = data->velocity_lat;
     vehicle_fill.velocity_ang = data->velocity_ang;
@@ -1419,7 +1418,7 @@ void ThreadKatech()
         {
             unique_lock<mutex> lock(mtx_data);
             dataReady.wait(lock, []
-                           { return (get_workinfo && (!workego || ego) || ((!worksub1 || sub1) && (!worksub2 || sub2))); });
+                           { return (get_workinfo && ((!workego || ego) || ((!worksub1 || sub1) && (!worksub2 || sub2)))); });
 
             // adcm::Log::Info() << "송신이 필요한 남은 허브 데이터 개수: " << main_vehicle_queue.size_approx() + sub1_vehicle_queue.size_approx() + sub2_vehicle_queue.size_approx();
             // auto startTime = std::chrono::high_resolution_clock::now();
@@ -1428,11 +1427,11 @@ void ThreadKatech()
             adcm::Log::Info() << "KATECH: 이번 데이터 기준 차량: " << order.front();
             //==============1. 차량 및 장애물 데이터 위치 변환=================
 
-            if (workego)
+            if (workego && ego)
                 processVehicleData(main_vehicle_data, main_vehicle, obstacle_list_main);
-            if (worksub1)
+            if (worksub1 && sub1)
                 processVehicleData(sub1_vehicle_data, sub1_vehicle, obstacle_list_sub1);
-            if (worksub2)
+            if (worksub2 && sub2)
                 processVehicleData(sub2_vehicle_data, sub2_vehicle, obstacle_list_sub2);
             ego = false;
             sub1 = false;
@@ -1600,7 +1599,7 @@ void ThreadKatech()
 
         for (const auto &vehicle : vehicles)
         {
-            if (vehicle->timestamp != 0)
+            if (vehicle->vehicle_class != 0)
                 find4VerticesVehicle(*vehicle);
         }
 
@@ -1621,11 +1620,14 @@ void ThreadKatech()
         }
         someipReady.notify_one();
 
+        if (useNats)
         {
-            lock_guard<mutex> map_lock(mtx_map_nats);
-            map_nats_queue.push(mapData);
+            {
+                lock_guard<mutex> map_lock(mtx_map_nats);
+                map_nats_queue.push(mapData);
+            }
+            natsReady.notify_one();
         }
-        natsReady.notify_one();
 
         adcm::Log::Info() << "mapdata 융합 완료";
 
@@ -1710,14 +1712,15 @@ void ThreadSend()
             mapData_provider.send(mapData);
             auto endTime = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> duration = endTime - startTime;
-            // adcm::Log::Info() << "로컬 mapdata 전송에 걸린 시간: " << duration.count() << " ms.";
-            // adcm::Log::Info() << "로컬 mapdata 전송 완료, NATS 전송 시작";
-            // mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
-            // NatsSend(mapData);
-            // endTime = std::chrono::high_resolution_clock::now();
-            // duration = endTime - startTime;
-            // adcm::Log::Info() << "mapdata + NATS 전송에 걸린 시간: " << duration.count() << " ms.";
-            adcm::Log::Info() << mapVer << "번째 로컬 mapdata 전송 완료, 소요 시간: " << duration.count() << " ms.";
+            double elapsed_ms = duration.count();
+
+            adcm::Log::Info() << mapVer << "번째 로컬 mapdata 전송 완료, 소요 시간: " << elapsed_ms << " ms.";
+
+            if (elapsed_ms < 300.0)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<int>(300.0 - elapsed_ms)));
+                adcm::Log::Info() << static_cast<int>(300.0 - elapsed_ms) << "ms 만큼 전송 대기";
+            }
             // send_map = 0;
             // std::this_thread::sleep_for(std::chrono::milliseconds(200)); // 대기시간
         }
@@ -1814,7 +1817,7 @@ int main(int argc, char *argv[])
     adcm::Log::Info() << "DataFusion: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
     adcm::Log::Info() << "Ok, let's produce some DataFusion data...";
-    adcm::Log::Info() << "SDK release_250602_interface v2.3 for sa8195";
+    adcm::Log::Info() << "SDK release_250707_interface v2.4 for sa8195";
     // adcm::Log::Info() << "SDK release_250321_interface v2.1 for orin";
     adcm::Log::Info() << "DataFusion Build " << BUILD_TIMESTAMP;
 
@@ -1847,21 +1850,21 @@ int main(int argc, char *argv[])
         nats_server_url = config.serverAddress + ":" + to_string(config.serverPort);
     }
     adcm::Log::Info() << "NATS_SERVER_URL: " << nats_server_url;
+    if (config.useNats == true)
+        useNats = true;
 
-#ifdef NATS
-    // Code to execute if NATS is defined
-    adcm::Log::Info() << "NATS ON";
-#else
-    // Code to execute if NATS is not defined
-    adcm::Log::Info() << "NATS OFF";
-#endif
+    if (useNats)
+        adcm::Log::Info() << "NATS ON";
+    else
+        adcm::Log::Info() << "NATS OFF";
     thread_list.push_back(std::thread(ThreadReceiveHubData));
     thread_list.push_back(std::thread(ThreadReceiveWorkInfo));
     thread_list.push_back(std::thread(ThreadMonitor));
     thread_list.push_back(std::thread(ThreadKatech));
     thread_list.push_back(std::thread(ThreadReceiveEdgeInfo));
     thread_list.push_back(std::thread(ThreadSend));
-    thread_list.push_back(std::thread(ThreadNATS));
+    if (useNats)
+        thread_list.push_back(std::thread(ThreadNATS));
 
     adcm::Log::Info() << "Thread join";
     for (int i = 0; i < static_cast<int>(thread_list.size()); i++)
