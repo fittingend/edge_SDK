@@ -70,10 +70,28 @@
 // ==========================전역변수=================================
 // Shared data
 std::vector<adcm::map_2dListVector> map_2d;
-doubleVector path_x, path_y;
+std::vector<double> path_x, path_y;
 obstacleListVector obstacle_list;
 adcm::vehicleListStruct ego_vehicle, sub_vehicle_1, sub_vehicle_2, sub_vehicle_3, sub_vehicle_4;
 adcm::risk_assessment_Objects riskAssessment;
+
+std::uint8_t type = 0; // 시뮬레이션 = 0, 실증 = 1
+
+// 차량 크기(work_information data)
+//VehicleSizeData main_vehicle_size;
+//std::vector<VehicleSizeData> sub_vehicle_size;
+std::vector<BoundaryData> work_boundary;
+double min_lon, min_lat, max_lon, max_lat;
+
+// 실증 상황 사각형 맵의 끝지점 x, y값
+double min_utm_x, min_utm_y, max_utm_x, max_utm_y;
+
+// 맵 x, y 방향 사이즈
+std::uint16_t map_x = 2000;
+std::uint16_t map_y = 1000;
+// 맵(0,0)지점의 utm좌표
+double origin_x = 0;
+double origin_y = 0;
 
 // Mutexes
 std::mutex mtx_map;   // map_2d, obstacle_list, vehicle structs
@@ -126,6 +144,8 @@ void ThreadReceiveMapData()
                 map_2d = data->map_2d;
                 obstacle_list = data->obstacle_list; 
                 auto vehicle_list = data->vehicle_list;
+                auto road_list = data->road_list;
+
                 adcm::Log::Info() << "[DEBUG] map_2d assign 완료";
 
                 if(!obstacle_list.empty())
@@ -170,6 +190,28 @@ void ThreadReceiveMapData()
                 else
                 {
                     adcm::Log::Info() << "vehicle_list Vector empty!!! ";
+                }
+
+                if(!road_list.empty()) {
+                    adcm::Log::Verbose() << "=== road_list ===";
+                    for(auto itr = road_list.begin(); itr != road_list.end(); ++itr) {
+                        adcm::Log::Verbose() << "road_index : " << itr->road_index;
+                        adcm::Log::Verbose() << "Timestamp : " << itr->Timestamp;
+                        
+                        auto map_2d_location = itr->map_2d_location;
+
+                        if(!map_2d_location.empty()) {
+                            adcm::Log::Verbose() << "=== map_2d_location ===";
+                            for(auto itr = map_2d_location.begin(); itr != map_2d_location.end(); ++itr) {
+                                adcm::Log::Verbose() << "x index : " << itr->x;
+                                adcm::Log::Verbose() << "y index : " << itr->y;
+                            }
+                        } else {
+                            adcm::Log::Verbose() << "road_list map_2d_location Vector empty!!! ";
+                        }
+                    }
+                } else {
+                    adcm::Log::Verbose() << "road_list Vector empty!!! ";
                 }
 
                 {
@@ -221,8 +263,8 @@ void ThreadReceiveBuildPath()
                     if (pathItem.vehicle_class == VehicleClass::EGO_VEHICLE)
                     {   
                         std::lock_guard<std::mutex> lock(mtx_path);
-                        path_x = doubleVector(route.size());
-                        path_y = doubleVector(route.size());
+                        path_x = std::vector<double>(route.size());
+                        path_y = std::vector<double>(route.size());
                         //새로운 경로를 받으면 예전 변환값이 담긴 path_x 와 path_y 초기화
                         INFO("특장차의 경로 좌표변환 진행");
                         gpsToMapcoordinate(route, path_x, path_y);
@@ -247,6 +289,95 @@ void ThreadReceiveBuildPath()
         }
     }
 }
+
+void ThreadReceiveWorkInformation()
+{
+    adcm::Log::Info() << "RiskAssessment ThreadReceiveWorkInformation";
+    adcm::WorkInformation_Subscriber workInformation_subscriber;
+    workInformation_subscriber.init("RiskAssessment/RiskAssessment/RPort_work_information");
+
+    while (continueExecution) {
+        gMainthread_Loopcount++;
+        VERBOSE("[RiskAssessment] ThreadReceiveWorkInformation loop");
+        bool workInformation_rxEvent = workInformation_subscriber.waitEvent(100); // wait event
+
+        if(workInformation_rxEvent) {
+            adcm::Log::Verbose() << "[EVENT] RiskAssessment Hub Data received";
+
+            while(!workInformation_subscriber.isEventQueueEmpty()) {
+                auto data = workInformation_subscriber.getEvent();
+                gReceivedEvent_count_work_information++;
+
+                auto main_vehicle = data->main_vehicle;
+                auto sub_vehicle = data->sub_vehicle;
+                auto working_area_boundary = data->working_area_boundary;
+                type = data->type;
+                
+                adcm::Log::Verbose() << "main_vehicle.length : "<< main_vehicle.length;
+                adcm::Log::Verbose() << "main_vehicle.width : "<< main_vehicle.width;
+
+                if(!sub_vehicle.empty()) {
+                    adcm::Log::Verbose() << "=== sub_vehicle ===";
+                    for(auto itr = sub_vehicle.begin(); itr != sub_vehicle.end(); ++itr) {
+                        adcm::Log::Verbose() << "sub_vehicle.length : "<< itr->length;
+                        adcm::Log::Verbose() << "sub_vehicle.width : "<< itr->width;
+                    }
+                } else {
+                    adcm::Log::Verbose() << "sub_vehicle Vector empty!!! ";
+                }
+
+                if(!working_area_boundary.empty()) {
+                    adcm::Log::Verbose() << "=== working_area_boundary ===";
+                    work_boundary.clear();
+                    for (const auto &boundary : working_area_boundary)
+                    {
+                        work_boundary.push_back({boundary.x, boundary.y});
+                    }
+                } else {
+                    adcm::Log::Verbose() << "working_area_boundary Vector empty!!! ";
+                }
+
+                adcm::Log::Verbose() << " type : " << type;
+
+                if (!type) // 시뮬레이션이라면, (126.5482, 35.9398)의 utm좌표가 맵의 (0, 0)이 된다.
+                {
+                    origin_x = 278835;
+                    origin_y = 3980050;
+                    map_x = 2000;
+                    map_y = 1000;
+                    adcm::Log::Info() << "[WorkInfo] 시뮬레이션 테스트";
+                    adcm::Log::Info() << "맵 사이즈: (" << map_x << ", " << map_y << ")";
+                }
+                else // 실증이라면, boundary 좌표의 가장 작은 지점 min_x, min_y의 utm좌표가 맵의 (0, 0)이 된다.
+                {
+                    min_lon = work_boundary[0].lon;
+                    min_lat = work_boundary[0].lat;
+                    max_lon = work_boundary[0].lon;
+                    max_lat = work_boundary[0].lat;
+
+                    for (int i = 1; i < work_boundary.size(); i++)
+                    {
+                        min_lon = work_boundary[i].lon < min_lon ? work_boundary[i].lon : min_lon;
+                        min_lat = work_boundary[i].lat < min_lat ? work_boundary[i].lat : min_lat;
+                        max_lon = work_boundary[i].lon > max_lon ? work_boundary[i].lon : max_lon;
+                        max_lat = work_boundary[i].lat > max_lat ? work_boundary[i].lat : max_lat;
+                    }
+                    adcm::Log::Info() << "[WorkInfo] 실증 테스트";
+                    adcm::Log::Info() << "map의 min(lon, lat) 값: (" << min_lon << ", " << min_lat << "), max(lon, lat) 값 : (" << max_lon << ", " << max_lat << ")";
+                    GPStoUTM(min_lon, min_lat, min_utm_x, min_utm_y);
+                    GPStoUTM(max_lon, max_lat, max_utm_x, max_utm_y);
+                    adcm::Log::Info() << "map의 minutm(x, y) 값: (" << min_utm_x << ", " << min_utm_y << "), maxutm(x, y) 값 : (" << max_utm_x << ", " << max_utm_y << ")";
+                    map_x = (max_utm_x - min_utm_x) * 10;
+                    map_y = (max_utm_y - min_utm_y) * 10;
+                    adcm::Log::Info() << "맵 사이즈: (" << map_x << ", " << map_y << ")";
+                    origin_x = min_utm_x;
+                    origin_y = min_utm_y;
+                }
+            }
+        }
+    }
+}
+
 /**
  * @brief 위험 판단 수행 쓰레드
  *
@@ -383,6 +514,12 @@ void ThreadMonitor()
             } else {
                 adcm::Log::Info() << "build_path event timeout!!!";
             }
+            if(gReceivedEvent_count_work_information != 0) {
+            adcm::Log::Info() << "work_information Received count = " << gReceivedEvent_count_work_information;
+            gReceivedEvent_count_work_information = 0;
+            } else {
+            adcm::Log::Info() << "work_information event timeout!!!";
+            }
         }
     }
 }
@@ -415,7 +552,7 @@ int main(int argc, char* argv[])
     adcm::Log::Info() << "RiskAssessment: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
     adcm::Log::Info() << "Ok, let's produce some RiskAssessment data...";
-    adcm::Log::Info() << "SDK release_250602_interface v2.3 for sa8195";
+    adcm::Log::Info() << "SDK release_250707_interface v2.3 for sa8195";
     // adcm::Log::Info() << "SDK release_250321_interface v2.1, AGX Orin version";
     adcm::Log::Info() << "RiskAssessment Build " << BUILD_TIMESTAMP;
 #ifdef NATS
@@ -427,6 +564,7 @@ int main(int argc, char* argv[])
 #endif
     thread_list.push_back(std::thread(ThreadReceiveMapData));
     thread_list.push_back(std::thread(ThreadReceiveBuildPath));
+	thread_list.push_back(std::thread(ThreadReceiveWorkInformation));
     thread_list.push_back(std::thread(ThreadMonitor));
     thread_list.push_back(std::thread(ThreadRASS));
     thread_list.push_back(std::thread(ThreadSend));

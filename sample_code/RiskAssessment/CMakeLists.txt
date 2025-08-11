@@ -215,6 +215,7 @@ set(APPLICATION_src
     ${COMMON_DIR}/logger/src/logger.cpp
     ${COMMON_DIR}/service/src/risk_assessment_provider.cpp
     ${COMMON_DIR}/service/src/build_path_subscriber.cpp
+    ${COMMON_DIR}/service/src/work_information_subscriber.cpp
     ${COMMON_DIR}/service/src/map_data_subscriber.cpp
 )
 

@@ -14,8 +14,8 @@ static uint64_t init_veh_timestamp_max, new_veh_timestamp_min;
 //=====시나리오 #1. 주행중 전역경로 근방 이동가능한 정지 장애물이 존재하는 위험 환경=====
 void evaluateScenario1(const obstacleListVector& obstacle_list, 
                         const adcm::vehicleListStruct& ego_vehicle, 
-                        const doubleVector& path_x,
-                        const doubleVector& path_y,
+                        const std::vector<double>& path_x,
+                        const std::vector<double>& path_y,
                         adcm::risk_assessment_Objects& riskAssessment)
 {
     adcm::Log::Info() << "=============KATECH: scenario 1 START==============";
@@ -87,8 +87,8 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
 //=====시나리오 #2. 주행중 사각영역 존재 환경 판단=====
 void evaluateScenario2(const obstacleListVector& obstacle_list, 
                        const adcm::vehicleListStruct& ego_vehicle, 
-                       const doubleVector& path_x,
-                       const doubleVector& path_y,
+                       const std::vector<double>& path_x,
+                       const std::vector<double>& path_y,
                        adcm::risk_assessment_Objects& riskAssessment)
 {
     adcm::Log::Info() << "=============KATECH: scenario 2 START==============";
@@ -272,8 +272,8 @@ void evaluateScenario4(const obstacleListVector& obstacle_list,
  */
 void evaluateScenario5(const obstacleListVector& obstacle_list, 
                        const adcm::vehicleListStruct& ego_vehicle, 
-                       const doubleVector& path_x, 
-                       const doubleVector& path_y,
+                       const std::vector<double>& path_x, 
+                       const std::vector<double>& path_y,
                        adcm::risk_assessment_Objects& riskAssessment)
 {
     using namespace adcm;
@@ -420,8 +420,8 @@ void resetScenario5State() {
  */
 void evaluateScenario6(const obstacleListVector& obstacle_list, 
                        const adcm::vehicleListStruct& ego_vehicle, 
-                       const doubleVector& path_x, 
-                       const doubleVector& path_y,
+                       const std::vector<double>& path_x, 
+                       const std::vector<double>& path_y,
                        adcm::risk_assessment_Objects& riskAssessment)
 {
     using namespace adcm;
@@ -544,8 +544,8 @@ void resetScenario6State() {
     new_veh_timestamp_min = std::numeric_limits<double>::max();
 }
 
-void evaluateScenario7(const doubleVector& path_x, 
-                       const doubleVector& path_y, 
+void evaluateScenario7(const std::vector<double>& path_x, 
+                       const std::vector<double>& path_y, 
                        const std::vector<adcm::map_2dListVector>& map_2d, 
                        adcm::risk_assessment_Objects& riskAssessment)
 {
@@ -554,8 +554,8 @@ void evaluateScenario7(const doubleVector& path_x,
     adcm::Log::Info() << "=============KATECH: scenario 7 DONE==============";
 }
 
-void evaluateScenario8(const doubleVector& path_x, 
-                       const doubleVector& path_y, 
+void evaluateScenario8(const std::vector<double>& path_x, 
+                       const std::vector<double>& path_y, 
                        const std::vector<adcm::map_2dListVector>& map_2d, 
                        adcm::risk_assessment_Objects& riskAssessment)
 {

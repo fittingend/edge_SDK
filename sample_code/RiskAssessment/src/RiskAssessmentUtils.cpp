@@ -1,39 +1,48 @@
 #include "main_riskassessment.hpp"
 
-void GPStoUTM(double lat, double lon, double &utmX, double &utmY)
+void GPStoUTM(double lon, double lat, double &utmX, double &utmY)
 {
-    INFO("[RiskAssessment] GPStoUTM");
-    // WGS84 Parameters
-    const double WGS84_A = 6378137.0;    // Major semiaxis [m]
-    const double WGS84_E = 0.0818191908; // First Eccentricity
-    // Constants
+    // 상수 정의
+    const double WGS84_A = 6378137.0;
+    const double WGS84_E = 0.0818191908;
     const double k0 = 0.9996;
-    const double eSquared = WGS84_E * WGS84_E;
-    const double ePrimeSquared = eSquared / (1 - eSquared);
-    const double RADIANS_PER_DEGREE = M_PI / 180.0;
+    const double eSq = WGS84_E * WGS84_E;
+    const double ePrimeSq = eSq / (1 - eSq);
+    const double DEG_TO_RAD = M_PI / 180.0;
+
+    // UTM Zone 설정 (Zone 52 고정)
     int zone = 52;
-    // Calculate the Central Meridian of the Zone
-    double lonOrigin = (zone - 1) * 6 - 180 + 3;
+    double lonOrigin = (zone - 1) * 6 - 180 + 3; // 중앙 자오선
+    double lonOriginRad = lonOrigin * DEG_TO_RAD;
 
-    // Convert lat/lon to radians
-    double latRad = lat * RADIANS_PER_DEGREE;
-    double lonRad = lon * RADIANS_PER_DEGREE;
-    double lonOriginRad = lonOrigin * RADIANS_PER_DEGREE;
+    // 위도/경도 라디안 변환
+    double latRad = lat * DEG_TO_RAD;
+    double lonRad = lon * DEG_TO_RAD;
 
-    // Calculate UTM coordinates
-    double N = WGS84_A / sqrt(1 - eSquared * sin(latRad) * sin(latRad));
-    double T = tan(latRad) * tan(latRad);
-    double C = ePrimeSquared * cos(latRad) * cos(latRad);
-    double A = cos(latRad) * (lonRad - lonOriginRad);
+    // 삼각 함수 계산
+    double sinLat = sin(latRad);
+    double cosLat = cos(latRad);
+    double tanLat = tan(latRad);
 
-    double M = WGS84_A * ((1 - eSquared / 4 - 3 * pow(eSquared, 2) / 64 - 5 * pow(eSquared, 3) / 256) * latRad - (3 * eSquared / 8 + 3 * pow(eSquared, 2) / 32 + 45 * pow(eSquared, 3) / 1024) * sin(2 * latRad) + (15 * pow(eSquared, 2) / 256 + 45 * pow(eSquared, 3) / 1024) * sin(4 * latRad) - (35 * pow(eSquared, 3) / 3072) * sin(6 * latRad));
-    utmX = (k0 * N * (A + (1 - T + C) * A * A * A / 6 + (5 - 18 * T + T * T + 72 * C - 58 * ePrimeSquared) * A * A * A * A * A / 120) + 500000.0);
-    utmY = (k0 * (M + N * tan(latRad) * (A * A / 2 + (5 - T + 9 * C + 4 * C * C) * A * A * A * A / 24 + (61 - 58 * T + T * T + 600 * C - 330 * ePrimeSquared) * A * A * A * A * A * A / 720)));
+    // 보조 항 계산
+    double N = WGS84_A / sqrt(1 - eSq * pow(sinLat, 2));
+    double T = pow(tanLat, 2);
+    double C = ePrimeSq * pow(cosLat, 2);
+    double A = cosLat * (lonRad - lonOriginRad);
 
+    // 자오선 거리 (Meridional Arc Length)
+    double M =
+        WGS84_A * ((1 - eSq / 4 - 3 * pow(eSq, 2) / 64 - 5 * pow(eSq, 3) / 256) * latRad - (3 * eSq / 8 + 3 * pow(eSq, 2) / 32 + 45 * pow(eSq, 3) / 1024) * sin(2 * latRad) + (15 * pow(eSq, 2) / 256 + 45 * pow(eSq, 3) / 1024) * sin(4 * latRad) - (35 * pow(eSq, 3) / 3072) * sin(6 * latRad));
+
+    // UTM X 계산
+    utmX = k0 * N * (A + (1 - T + C) * pow(A, 3) / 6 + (5 - 18 * T + pow(T, 2) + 72 * C - 58 * ePrimeSq) * pow(A, 5) / 120) + 500000.0;
+
+    // UTM Y 계산
+    utmY = k0 * (M + N * tanLat * (pow(A, 2) / 2 + (5 - T + 9 * C + 4 * pow(C, 2)) * pow(A, 4) / 24 + (61 - 58 * T + pow(T, 2) + 600 * C - 330 * ePrimeSq) * pow(A, 6) / 720));
+
+    // 남반구 보정
     if (lat < 0)
-    {
-        utmY += 10000000.0; // 10000000 meter offset for southern hemisphere
-    }
+        utmY += 10000000.0;
 }
 
 bool isRouteValid(routeVector& route)
@@ -55,47 +64,36 @@ void checkRange(Point2D &point)
         point.x = 0;
     if (point.y < 0)
         point.y = 0;
-    if (point.x > MAP_N)
-        point.x = MAP_N - 1;
-    if (point.y > MAP_M)
-        point.y = MAP_M - 1;
+    if (point.x > map_x)
+        point.x = map_x - 1;
+    if (point.y > map_y)
+        point.y = map_y - 1;
 }
 
 void gpsToMapcoordinate(const routeVector& route, 
-                        doubleVector& path_x, 
-                        doubleVector& path_y)
+                        std::vector<double>& path_x, 
+                        std::vector<double>& path_y)
 {
     INFO("[RiskAssessment] gpsToMapcoordinate");
-
-    // wps84기반 gps(global)좌표계를 작업환경 XY 기반의 Map 좌표계로 변환
-    // 시뮬레이터 map 기준 원점(0,0) global좌표
-    constexpr double mapOrigin_x = 453.088714;
-    constexpr double mapOrigin_y = 507.550078;
-    // 시뮬레이터 기준점 utm좌표
-    constexpr double origin_x = 278296.968;
-    constexpr double origin_y = 3980466.846;
-    const double angle_radians = -MAP_ANGLE * M_PI / 180.0;
-
     for (std::size_t i = 0; i < route.size(); ++i)
     {
         const auto& point = route[i];
         double utm_x, utm_y;
-        GPStoUTM(point.latitude, point.longitude, utm_x, utm_y);
-
-        utm_x -= origin_x;
-        utm_y -= origin_y;
+        GPStoUTM(point.longitude, point.latitude, utm_x, utm_y);
 
         Point2D mapPoint;
-        mapPoint.x = (utm_x * cos(angle_radians) - utm_y * sin(angle_radians) - mapOrigin_x) * M_TO_10CM_PRECISION;
-        mapPoint.y = (utm_x * sin(angle_radians) + utm_y * cos(angle_radians) - mapOrigin_y) * M_TO_10CM_PRECISION;
+        //TO DO: work info 받아서 origin_x = min_utm_x 으로 업데이트 필요
+        mapPoint.x = (utm_x - origin_x)* M_TO_10CM_PRECISION;
+        mapPoint.y = (utm_y - origin_y)* M_TO_10CM_PRECISION;
 
-        checkRange(mapPoint);
+        //checkRange(mapPoint);
+        //checkRange 함수 수정 이후 반영 예정 
 
         path_x[i] = mapPoint.x;
         path_y[i] = mapPoint.y;
         
         adcm::Log::Info() << "gpsToMapcoordinate 변환: (" 
-                        << point.latitude << ", " << point.longitude 
+                        << point.longitude << ", " << point.latitude 
                         << ") → (" << mapPoint.x << ", " << mapPoint.y << ")";
     }
 }
@@ -187,8 +185,8 @@ bool getTTC(const adcm::obstacleListStruct& obstacle, const adcm::vehicleListStr
  * @return false         경로 데이터 오류 또는 유효한 거리 계산 불가 시
  */
 bool calculateMinDistanceToPath(const adcm::obstacleListStruct& obstacle,
-                                const doubleVector& path_x, 
-                                const doubleVector& path_y,
+                                const std::vector<double>& path_x, 
+                                const std::vector<double>& path_y,
                                 double& out_distance)
 {
     if (path_x.size() < 2 || path_y.size() < 2 || path_x.size() != path_y.size()) {
@@ -336,8 +334,8 @@ while (j < vec_new.size())
 }
 
 void detectUnscannedPath(const std::vector<adcm::map_2dListVector>& map_2d,
-                         const doubleVector& path_x,
-                         const doubleVector& path_y,
+                         const std::vector<double>& path_x,
+                         const std::vector<double>& path_y,
                          adcm::risk_assessment_Objects& riskAssessment)
 {
     bool breakFlag; // 지정된 전역경로 (x1,y1) 과 (x2, y2) 사이 하나라도
