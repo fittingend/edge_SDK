@@ -1712,14 +1712,15 @@ void ThreadSend()
             mapData_provider.send(mapData);
             auto endTime = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> duration = endTime - startTime;
-            // adcm::Log::Info() << "로컬 mapdata 전송에 걸린 시간: " << duration.count() << " ms.";
-            // adcm::Log::Info() << "로컬 mapdata 전송 완료, NATS 전송 시작";
-            // mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
-            // NatsSend(mapData);
-            // endTime = std::chrono::high_resolution_clock::now();
-            // duration = endTime - startTime;
-            // adcm::Log::Info() << "mapdata + NATS 전송에 걸린 시간: " << duration.count() << " ms.";
-            adcm::Log::Info() << mapVer << "번째 로컬 mapdata 전송 완료, 소요 시간: " << duration.count() << " ms.";
+            double elapsed_ms = duration.count();
+
+            adcm::Log::Info() << mapVer << "번째 로컬 mapdata 전송 완료, 소요 시간: " << elapsed_ms << " ms.";
+
+            if (elapsed_ms < 300.0)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<int>(300.0 - elapsed_ms)));
+                adcm::Log::Info() << static_cast<int>(300.0 - elapsed_ms) << "ms 만큼 전송 대기";
+            }
             // send_map = 0;
             // std::this_thread::sleep_for(std::chrono::milliseconds(200)); // 대기시간
         }
@@ -1816,7 +1817,7 @@ int main(int argc, char *argv[])
     adcm::Log::Info() << "DataFusion: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
     adcm::Log::Info() << "Ok, let's produce some DataFusion data...";
-    adcm::Log::Info() << "SDK release_250602_interface v2.3 for sa8195";
+    adcm::Log::Info() << "SDK release_250707_interface v2.4 for sa8195";
     // adcm::Log::Info() << "SDK release_250321_interface v2.1 for orin";
     adcm::Log::Info() << "DataFusion Build " << BUILD_TIMESTAMP;
 
