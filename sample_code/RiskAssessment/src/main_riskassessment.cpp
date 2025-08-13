@@ -78,8 +78,8 @@ adcm::risk_assessment_Objects riskAssessment;
 std::uint8_t type = 0; // 시뮬레이션 = 0, 실증 = 1
 
 // 차량 크기(work_information data)
-//VehicleSizeData main_vehicle_size;
-//std::vector<VehicleSizeData> sub_vehicle_size;
+// VehicleSizeData main_vehicle_size;
+// std::vector<VehicleSizeData> sub_vehicle_size;
 std::vector<BoundaryData> work_boundary;
 double min_lon, min_lat, max_lon, max_lat;
 
@@ -94,14 +94,14 @@ double origin_x = 0;
 double origin_y = 0;
 
 // Mutexes
-std::mutex mtx_map;   // map_2d, obstacle_list, vehicle structs
-std::mutex mtx_path;  // path_x, path_y
-std::mutex mtx_rass;  // riskAssessment
-std::mutex mtx_cv;    // isMapAvailable, isPathAvailable flags
+std::mutex mtx_map;  // map_2d, obstacle_list, vehicle structs
+std::mutex mtx_path; // path_x, path_y
+std::mutex mtx_rass; // riskAssessment
+std::mutex mtx_cv;   // isMapAvailable, isPathAvailable flags
 
 // Condition variables
-std::condition_variable cv_mapData;  // ThreadRASS waits on this
-std::condition_variable cv_rass;     // ThreadSend waits on this
+std::condition_variable cv_mapData; // ThreadRASS waits on this
+std::condition_variable cv_rass;    // ThreadSend waits on this
 
 // Shared flags
 bool isMapAvailable = false;
@@ -120,48 +120,55 @@ void ThreadReceiveMapData()
     mapData_subscriber.init("RiskAssessment/RiskAssessment/RPort_map_data");
     INFO("Thread ThreadReceiveMapData start...");
 
-    while (continueExecution) {
+    while (continueExecution)
+    {
         gMainthread_Loopcount++;
         bool mapData_rxEvent = mapData_subscriber.waitEvent(10000); // wait event
 
-        if(mapData_rxEvent) {
+        if (mapData_rxEvent)
+        {
             adcm::Log::Info() << "[EVENT] RiskAssessment Map Data received";
 
-            while(!mapData_subscriber.isEventQueueEmpty()) {
+            while (!mapData_subscriber.isEventQueueEmpty())
+            {
                 std::lock_guard<std::mutex> lock(mtx_map);
                 auto data = mapData_subscriber.getEvent();
                 gReceivedEvent_count_map_data++;
 
-                if (!data) {
+                if (!data)
+                {
                     adcm::Log::Info() << "[ERROR] getEvent returned null!";
                     continue;
                 }
 
-                adcm::Log::Info() << "[DEBUG] data->map_2d.size() = " << (data->map_2d.size())*(data->map_2d[0].size());
+                adcm::Log::Info() << "[DEBUG] data->map_2d.size() = " << (data->map_2d.size()) * (data->map_2d[0].size());
 
                 // 안전성 체크 후 assign
-                //map_2d.clear();  // <- 이건 메모리 누적 방지용으로는 OK
+                // map_2d.clear();  // <- 이건 메모리 누적 방지용으로는 OK
                 map_2d = data->map_2d;
-                obstacle_list = data->obstacle_list; 
+                obstacle_list = data->obstacle_list;
                 auto vehicle_list = data->vehicle_list;
                 auto road_list = data->road_list;
 
                 adcm::Log::Info() << "[DEBUG] map_2d assign 완료";
 
-                if(!obstacle_list.empty())
+                if (!obstacle_list.empty())
                 {
                     adcm::Log::Info() << "size of obstacle list received: " << obstacle_list.size();
-                    // for(auto itr = obstacle_list.begin(); itr != obstacle_list.end(); ++itr) 
+                    // for(auto itr = obstacle_list.begin(); itr != obstacle_list.end(); ++itr)
                     // {
                     //     adcm::Log::Info() << "obstacle_id : " << itr->obstacle_id;
                     //     adcm::Log::Info() << "obstacle_class : " << itr->obstacle_class;
                     //     adcm::Log::Info() << "timestamp : " << itr->timestamp;
                     // }
-                } else {
+                }
+                else
+                {
                     adcm::Log::Info() << "obstacle_list Vector empty!!! ";
                 }
 
-                if(!(vehicle_list.empty())) {
+                if (!(vehicle_list.empty()))
+                {
                     adcm::Log::Info() << "size of vehicle list received: " << vehicle_list.size();
                     for (auto iter = vehicle_list.begin(); iter != vehicle_list.end(); iter++)
                     {
@@ -192,25 +199,33 @@ void ThreadReceiveMapData()
                     adcm::Log::Info() << "vehicle_list Vector empty!!! ";
                 }
 
-                if(!road_list.empty()) {
+                if (!road_list.empty())
+                {
                     adcm::Log::Verbose() << "=== road_list ===";
-                    for(auto itr = road_list.begin(); itr != road_list.end(); ++itr) {
+                    for (auto itr = road_list.begin(); itr != road_list.end(); ++itr)
+                    {
                         adcm::Log::Verbose() << "road_index : " << itr->road_index;
                         adcm::Log::Verbose() << "Timestamp : " << itr->Timestamp;
-                        
+
                         auto map_2d_location = itr->map_2d_location;
 
-                        if(!map_2d_location.empty()) {
+                        if (!map_2d_location.empty())
+                        {
                             adcm::Log::Verbose() << "=== map_2d_location ===";
-                            for(auto itr = map_2d_location.begin(); itr != map_2d_location.end(); ++itr) {
+                            for (auto itr = map_2d_location.begin(); itr != map_2d_location.end(); ++itr)
+                            {
                                 adcm::Log::Verbose() << "x index : " << itr->x;
                                 adcm::Log::Verbose() << "y index : " << itr->y;
                             }
-                        } else {
+                        }
+                        else
+                        {
                             adcm::Log::Verbose() << "road_list map_2d_location Vector empty!!! ";
                         }
                     }
-                } else {
+                }
+                else
+                {
                     adcm::Log::Verbose() << "road_list Vector empty!!! ";
                 }
 
@@ -218,11 +233,9 @@ void ThreadReceiveMapData()
                     std::lock_guard<std::mutex> lock(mtx_cv);
                     isMapAvailable = true;
                     adcm::Log::Info() << "Map Available";
-
                 }
-                cv_mapData.notify_one();  // 다른 스레드에게 알림
+                cv_mapData.notify_one(); // 다른 스레드에게 알림
                 adcm::Log::Info() << "ThreadRass 에게 알림";
-            
             }
         }
     }
@@ -242,47 +255,50 @@ void ThreadReceiveBuildPath()
     buildPath_subscriber.init("RiskAssessment/RiskAssessment/RPort_build_path");
     INFO("Thread ThreadReceiveBuildPath start...");
 
-    while (continueExecution) {
+    while (continueExecution)
+    {
         gMainthread_Loopcount++;
         VERBOSE("[RiskAssessment] Application loop");
         bool buildPath_rxEvent = buildPath_subscriber.waitEvent(1000); // wait event
 
-        if(buildPath_rxEvent) {
+        if (buildPath_rxEvent)
+        {
             adcm::Log::Info() << "[EVENT] RiskAssessment Build Path received";
 
-            while(!buildPath_subscriber.isEventQueueEmpty()) {
+            while (!buildPath_subscriber.isEventQueueEmpty())
+            {
                 auto data = buildPath_subscriber.getEvent();
                 gReceivedEvent_count_build_path++;
-                if (!data) {
+                if (!data)
+                {
                     adcm::Log::Info() << "[ERROR] getEvent returned null!";
                     continue;
                 }
-                const auto& Path = data->Path;
-                for (const auto& pathItem : Path) {
-                    const auto& route = pathItem.route;
+                const auto &Path = data->Path;
+                for (const auto &pathItem : Path)
+                {
+                    const auto &route = pathItem.route;
                     if (pathItem.vehicle_class == VehicleClass::EGO_VEHICLE)
-                    {   
+                    {
                         std::lock_guard<std::mutex> lock(mtx_path);
                         path_x = std::vector<double>(route.size());
                         path_y = std::vector<double>(route.size());
-                        //새로운 경로를 받으면 예전 변환값이 담긴 path_x 와 path_y 초기화
-                        INFO("특장차의 경로 좌표변환 진행");
+                        // 새로운 경로를 받으면 예전 변환값이 담긴 path_x 와 path_y 초기화
+                        adcm::Log::Info() << "특장차의 경로 좌표변환 진행";
                         gpsToMapcoordinate(route, path_x, path_y);
-                        
+
                         {
                             std::lock_guard<std::mutex> lock(mtx_cv);
-                            isPathAvailable = true;  // 최초 1회 true면 ThreadRASS 조건 만족
-                            INFO("Path Available");
-
+                            isPathAvailable = true; // 최초 1회 true면 ThreadRASS 조건 만족
+                            adcm::Log::Info() << "Path Available";
                         }
-
                     }
-                    for (const auto& point : route)
+                    for (const auto &point : route)
                     {
-                        adcm::Log::Info() << "vehicle_class : "<< pathItem.vehicle_class;
-                        adcm::Log::Info() << "route.latitude : "<< point.latitude;
-                        adcm::Log::Info() << "route.longitude : "<< point.longitude;
-                        adcm::Log::Info() << "route.delta_t : "<< point.delta_t;
+                        adcm::Log::Info() << "vehicle_class : " << pathItem.vehicle_class;
+                        adcm::Log::Info() << "route.latitude : " << point.latitude;
+                        adcm::Log::Info() << "route.longitude : " << point.longitude;
+                        adcm::Log::Info() << "route.delta_t : " << point.delta_t;
                     }
                 }
             }
@@ -312,7 +328,7 @@ void ThreadReceiveWorkInformation()
                 auto sub_vehicle = data->sub_vehicle;
                 auto working_area_boundary = data->working_area_boundary;
                 type = data->type;
-                
+
                 adcm::Log::Verbose() << "main_vehicle.length : "<< main_vehicle.length;
                 adcm::Log::Verbose() << "main_vehicle.width : "<< main_vehicle.width;
 
@@ -341,12 +357,12 @@ void ThreadReceiveWorkInformation()
 
                 if (!type) // 시뮬레이션이라면, (126.5482, 35.9398)의 utm좌표가 맵의 (0, 0)이 된다.
                 {
-                    origin_x = 278835;
-                    origin_y = 3980050;
-                    map_x = 2000;
-                    map_y = 1000;
-                    adcm::Log::Info() << "[WorkInfo] 시뮬레이션 테스트";
-                    adcm::Log::Info() << "맵 사이즈: (" << map_x << ", " << map_y << ")";
+    origin_x = 278835;
+    origin_y = 3980050;
+    map_x = 2000;
+    map_y = 1000;
+    adcm::Log::Info() << "[WorkInfo] 시뮬레이션 테스트";
+    adcm::Log::Info() << "맵 사이즈: (" << map_x << ", " << map_y << ")";
                 }
                 else // 실증이라면, boundary 좌표의 가장 작은 지점 min_x, min_y의 utm좌표가 맵의 (0, 0)이 된다.
                 {
@@ -389,12 +405,13 @@ void ThreadRASS()
 {
     adcm::Log::Info() << "Thread ThreadRASS start...";
 
-    while (continueExecution) {
+    while (continueExecution)
+    {
         std::unique_lock<std::mutex> lock(mtx_cv);
-        cv_mapData.wait(lock, [] {
-            return !continueExecution || (isMapAvailable && isPathAvailable);
-        });
-        if (!continueExecution) break;
+        cv_mapData.wait(lock, []
+                        { return !continueExecution || (isMapAvailable && isPathAvailable); });
+        if (!continueExecution)
+            break;
         lock.unlock();
 
         {
@@ -420,7 +437,7 @@ void ThreadRASS()
         if (!riskAssessment.riskAssessmentList.empty())
         {
             // notify ThreadSend
-            cv_rass.notify_one();  // 전송 쓰레드 깨움
+            cv_rass.notify_one(); // 전송 쓰레드 깨움
         }
         isMapAvailable = false;
     }
@@ -440,15 +457,15 @@ void ThreadSend()
     adcm::RiskAssessment_Provider riskAssessment_provider;
     riskAssessment_provider.init("RiskAssessment/RiskAssessment/PPort_risk_assessment");
     // mutex, condition value 사용
-  while (continueExecution)
+    while (continueExecution)
     {
         // [1] 조건변수 대기: 위험판단 데이터 생성 알림 대기
         std::unique_lock<std::mutex> lock_rass_cv(mtx_rass);
-        cv_rass.wait(lock_rass_cv, [] {
-            return !riskAssessment.riskAssessmentList.empty() || !continueExecution;
-        });
+        cv_rass.wait(lock_rass_cv, []
+                     { return !riskAssessment.riskAssessmentList.empty() || !continueExecution; });
 
-        if (!continueExecution) break;
+        if (!continueExecution)
+            break;
 
         auto t_start_total = std::chrono::high_resolution_clock::now();
         auto now = std::chrono::system_clock::now();
@@ -466,7 +483,7 @@ void ThreadSend()
         auto send_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end_send - t_start_send).count();
         adcm::Log::Info() << "→ 위험판단 전송 소요 시간: " << send_duration_ms << " ms";
 
-    #ifdef NATS
+#ifdef NATS
         auto t_start_nats = std::chrono::high_resolution_clock::now();
         adcm::Log::Info() << "→ NATS 전송 시작";
         NatsSend(riskAssessment);
@@ -475,7 +492,7 @@ void ThreadSend()
 
         auto nats_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end_nats - t_start_nats).count();
         adcm::Log::Info() << "→ NATS 전송 소요 시간: " << nats_duration_ms << " ms";
-    #endif
+#endif
 
         auto t_end_total = std::chrono::high_resolution_clock::now();
         auto total_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end_total - t_start_total).count();
@@ -483,55 +500,64 @@ void ThreadSend()
 
         // [4] 전송 완료 후 위험 판단 데이터 초기화
         riskAssessment.riskAssessmentList.clear();
-        //std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        // std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
 }
 
-
 void ThreadMonitor()
 {
-    while(continueExecution) {
+    while (continueExecution)
+    {
         std::this_thread::sleep_for(std::chrono::milliseconds(20000));
 
-        if(gMainthread_Loopcount == 0) {
+        if (gMainthread_Loopcount == 0)
+        {
             adcm::Log::Error() << "Main thread Timeout!!!";
-
-        } else {
+        }
+        else
+        {
             gMainthread_Loopcount = 0;
 
-            if(gReceivedEvent_count_map_data != 0) {
+            if (gReceivedEvent_count_map_data != 0)
+            {
                 adcm::Log::Info() << "map_data Received count = " << gReceivedEvent_count_map_data;
                 gReceivedEvent_count_map_data = 0;
-
-            } else {
+            }
+            else
+            {
                 adcm::Log::Info() << "map_data event timeout!!!";
             }
 
-            if(gReceivedEvent_count_build_path != 0) {
+            if (gReceivedEvent_count_build_path != 0)
+            {
                 adcm::Log::Info() << "build_path Received count = " << gReceivedEvent_count_build_path;
                 gReceivedEvent_count_build_path = 0;
-
-            } else {
+            }
+            else
+            {
                 adcm::Log::Info() << "build_path event timeout!!!";
             }
-            if(gReceivedEvent_count_work_information != 0) {
-            adcm::Log::Info() << "work_information Received count = " << gReceivedEvent_count_work_information;
-            gReceivedEvent_count_work_information = 0;
-            } else {
-            adcm::Log::Info() << "work_information event timeout!!!";
+            if (gReceivedEvent_count_work_information != 0)
+            {
+                adcm::Log::Info() << "work_information Received count = " << gReceivedEvent_count_work_information;
+                gReceivedEvent_count_work_information = 0;
+            }
+            else
+            {
+                adcm::Log::Info() << "work_information event timeout!!!";
             }
         }
     }
 }
 
-
-int main(int argc, char* argv[])
+int main(int argc, char *argv[])
 {
     std::vector<std::thread> thread_list;
     UNUSED(argc);
     UNUSED(argv);
 
-    if(!ara::core::Initialize()) {
+    if (!ara::core::Initialize())
+    {
         // No interaction with ARA is possible here since initialization failed
         return EXIT_FAILURE;
     }
@@ -539,7 +565,8 @@ int main(int argc, char* argv[])
     ara::exec::ExecutionClient exec_client;
     exec_client.ReportExecutionState(ara::exec::ExecutionState::kRunning);
 
-    if(!RegisterSigTermHandler()) {
+    if (!RegisterSigTermHandler())
+    {
         adcm::Log::Error() << "Unable to register signal handler";
     }
 
@@ -564,11 +591,10 @@ int main(int argc, char* argv[])
 #endif
     thread_list.push_back(std::thread(ThreadReceiveMapData));
     thread_list.push_back(std::thread(ThreadReceiveBuildPath));
-	thread_list.push_back(std::thread(ThreadReceiveWorkInformation));
+    thread_list.push_back(std::thread(ThreadReceiveWorkInformation));
     thread_list.push_back(std::thread(ThreadMonitor));
     thread_list.push_back(std::thread(ThreadRASS));
     thread_list.push_back(std::thread(ThreadSend));
-
 
     adcm::Log::Info() << "Thread join";
     for (int i = 0; i < static_cast<int>(thread_list.size()); i++)
