@@ -4,7 +4,7 @@
 #include <iostream>
 #include <string>
 
-#define OBSTACLE_MAX 1000000
+#define OBSTACLE_MAX 65000
 
 class IDManager
 {

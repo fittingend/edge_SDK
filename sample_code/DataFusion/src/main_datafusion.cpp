@@ -827,7 +827,7 @@ void processFusion(
         if (j >= 0)
         {
             ObstacleData obstacle_temp;
-            // presList[j].obstacle_id = prevList[i].obstacle_id;
+            presList[j].obstacle_id = prevList[i].obstacle_id;
             // adcm::Log::Info() << "obstacle " << presList[j].obstacle_class << ": (" << presList[j].fused_position_x << ", " << presList[j].fused_position_y << ")";
             newList.push_back(presList[j]);
         }
@@ -854,6 +854,7 @@ void processFusion(
         {
             // presList에서 매칭되지 않은 항목을 newList에 추가
             presList[i].obstacle_id = id_manager.allocID();
+            adcm::Log::Info() << "새로운 장애물 " << presList[i].obstacle_class << " 아이디 부여: " << id_manager.getNum();
             newList.push_back(presList[i]);
             // adcm::Log::Info() << "obstacle " << presList[i].obstacle_class << ": (" << presList[i].fused_position_x << ", " << presList[i].fused_position_y << ")";
         }
@@ -1037,7 +1038,11 @@ std::vector<ObstacleData> mergeAndCompareLists(
         if (previousFusionList.empty())
         {
             for (auto &obstacle : mergedList)
-                obstacle.obstacle_id = id_manager.allocID();
+            {
+                auto newId = id_manager.allocID();
+                obstacle.obstacle_id = newId;
+                adcm::Log::Info() << "새로운 장애물 " << obstacle.obstacle_class << " ID 할당: " << newId;
+            }
             adcm::Log::Info() << "새로운 장애물 리스트 생성: " << id_manager.getNum();
             return mergedList;
         }
@@ -1056,7 +1061,7 @@ std::vector<ObstacleData> mergeAndCompareLists(
             processFusion(mergedList, previousFusionList, assignment);
             adcm::Log::Info() << "융합: 이전 데이터와 융합 완료";
             for (auto merge : mergedList)
-                adcm::Log::Info() << merge.obstacle_class << ": [" << merge.fused_position_x << ", " << merge.fused_position_y << "]";
+                adcm::Log::Info() << merge.obstacle_id << ": [" << merge.fused_position_x << ", " << merge.fused_position_y << "]";
             // for (auto merge : mergedList)
             // {
             //     adcm::Log::Info() << "융합리스트 장애물id: " << merge.obstacle_id;
