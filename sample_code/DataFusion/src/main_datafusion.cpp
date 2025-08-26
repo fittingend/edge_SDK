@@ -1041,7 +1041,7 @@ std::vector<ObstacleData> mergeAndCompareLists(
             {
                 auto newId = id_manager.allocID();
                 obstacle.obstacle_id = newId;
-                adcm::Log::Info() << "새로운 장애물 " << obstacle.obstacle_class << " ID 할당: " << newId;
+                adcm::Log::Info() << "새로운 장애물 " << obstacle.obstacle_class << " ID 할당: " << newId << " : [" << obstacle.fused_position_x << ", " << obstacle.fused_position_y << "]";
             }
             adcm::Log::Info() << "새로운 장애물 리스트 생성: " << id_manager.getNum();
             return mergedList;
@@ -1051,6 +1051,8 @@ std::vector<ObstacleData> mergeAndCompareLists(
         {
             adcm::Log::Info() << "previousFusionList size: " << previousFusionList.size();
             adcm::Log::Info() << "mergedList size: " << mergedList.size();
+            for (auto merge : mergedList)
+            adcm::Log::Info() << merge.obstacle_id << "(" << merge.obstacle_class << ")" << ": [" << merge.fused_position_x << ", " << merge.fused_position_y << "]";
             // adcm::Log::Info() << "융합: 이전 데이터와 융합하여 ID부여 시도";
             auto distMatrix = createDistanceMatrix(previousFusionList, mergedList);
             // adcm::Log::Info() << "융합: 거리배열 생성";
@@ -1061,7 +1063,7 @@ std::vector<ObstacleData> mergeAndCompareLists(
             processFusion(mergedList, previousFusionList, assignment);
             adcm::Log::Info() << "융합: 이전 데이터와 융합 완료";
             for (auto merge : mergedList)
-                adcm::Log::Info() << merge.obstacle_id << ": [" << merge.fused_position_x << ", " << merge.fused_position_y << "]";
+                adcm::Log::Info() << merge.obstacle_id << "(" << merge.obstacle_class << ")" << ": [" << merge.fused_position_x << ", " << merge.fused_position_y << "]";
             // for (auto merge : mergedList)
             // {
             //     adcm::Log::Info() << "융합리스트 장애물id: " << merge.obstacle_id;
