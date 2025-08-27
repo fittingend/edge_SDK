@@ -55,7 +55,6 @@
 
 #define NATS
 #ifdef NATS
-#include "./NATS_IMPLEMENTATION/NatsConnManager.h"
 
 bool firstTime = true;
 natsStatus s = NATS_OK;
@@ -390,54 +389,54 @@ void processVehicleData(FusionData &vehicleData,
 
 void gpsToMapcoordinate(VehicleData &vehicle)
 {
-    if (!type) // 시뮬레이션
-    {
-        // wps84기반 gps(global)좌표계를 작업환경 XY 기반의 Map 좌표계로 변환
-        // 시뮬레이터 map 기준 원점(0,0) global좌표
-        double mapOrigin_x = 453.088714;
-        double mapOrigin_y = 507.550078;
-        // 시뮬레이터 기준점 utm좌표
-        double ref_x = 278296.968;
-        double ref_y = 3980466.846;
-        double angle_radians = -MAP_ANGLE * M_PI / 180.0;
-        double velocity_ang = vehicle.velocity_ang;
-        double position_x = vehicle.position_long;
-        double position_y = vehicle.position_lat;
-        double mapVehicle_theta = (vehicle.heading_angle + MAP_ANGLE) * M_PI / 180.0; // 시뮬레이터 상에서 차량이 바라보는 각도
-        // 차량 utm 좌표로 변환
-        double distance_x, distance_y; // 차량의 utm x,y 좌표
-        GPStoUTM(position_x, position_y, distance_x, distance_y);
-        distance_x -= ref_x;
-        distance_y -= ref_y;
-        vehicle.position_x = (distance_x * cos(angle_radians) - distance_y * sin(angle_radians) - mapOrigin_x) * M_TO_10CM_PRECISION;
-        vehicle.position_y = (distance_x * sin(angle_radians) + distance_y * cos(angle_radians) - mapOrigin_y) * M_TO_10CM_PRECISION;
-        // 속도 (각속도 보정 임시 제외)
-        double velocity_x = vehicle.velocity_long;
-        double velocity_y = vehicle.velocity_lat;
-        vehicle.velocity_x = velocity_x * cos(angle_radians) - velocity_y * sin(angle_radians);
-        vehicle.velocity_y = velocity_x * sin(angle_radians) + velocity_y * cos(angle_radians);
-        // vehicle.velocity_x = (velocity_ang * (-sin(theta) * (position_x - alpha) + (cos(theta) * (position_y - beta)))) + (velocity_x * cos(theta)) + (velocity_y * sin(theta));
-        // vehicle.velocity_y = (velocity_ang * (-cos(theta) * (position_x - alpha) - (sin(theta) * (position_y - beta)))) + (velocity_x * -sin(theta)) + (velocity_y * cos(theta));
-        vehicle.heading_angle = -(vehicle.heading_angle + MAP_ANGLE - 90); // 맵에 맞춰 차량 각도 회전
-        // adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
-        // adcm::Log::Info() << "timestamp: " << vehicle.timestamp << " 차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.heading_angle << ")";
-    }
+    // if (!type) // 시뮬레이션
+    // {
+    //     // wps84기반 gps(global)좌표계를 작업환경 XY 기반의 Map 좌표계로 변환
+    //     // 시뮬레이터 map 기준 원점(0,0) global좌표
+    //     double mapOrigin_x = 453.088714;
+    //     double mapOrigin_y = 507.550078;
+    //     // 시뮬레이터 기준점 utm좌표
+    //     double ref_x = 278296.968;
+    //     double ref_y = 3980466.846;
+    //     double angle_radians = -MAP_ANGLE * M_PI / 180.0;
+    //     double velocity_ang = vehicle.velocity_ang;
+    //     double position_x = vehicle.position_long;
+    //     double position_y = vehicle.position_lat;
+    //     double mapVehicle_theta = (vehicle.heading_angle + MAP_ANGLE) * M_PI / 180.0; // 시뮬레이터 상에서 차량이 바라보는 각도
+    //     // 차량 utm 좌표로 변환
+    //     double distance_x, distance_y; // 차량의 utm x,y 좌표
+    //     GPStoUTM(position_x, position_y, distance_x, distance_y);
+    //     distance_x -= ref_x;
+    //     distance_y -= ref_y;
+    //     vehicle.position_x = (distance_x * cos(angle_radians) - distance_y * sin(angle_radians) - mapOrigin_x) * M_TO_10CM_PRECISION;
+    //     vehicle.position_y = (distance_x * sin(angle_radians) + distance_y * cos(angle_radians) - mapOrigin_y) * M_TO_10CM_PRECISION;
+    //     // 속도 (각속도 보정 임시 제외)
+    //     double velocity_x = vehicle.velocity_long;
+    //     double velocity_y = vehicle.velocity_lat;
+    //     vehicle.velocity_x = velocity_x * cos(angle_radians) - velocity_y * sin(angle_radians);
+    //     vehicle.velocity_y = velocity_x * sin(angle_radians) + velocity_y * cos(angle_radians);
+    //     // vehicle.velocity_x = (velocity_ang * (-sin(theta) * (position_x - alpha) + (cos(theta) * (position_y - beta)))) + (velocity_x * cos(theta)) + (velocity_y * sin(theta));
+    //     // vehicle.velocity_y = (velocity_ang * (-cos(theta) * (position_x - alpha) - (sin(theta) * (position_y - beta)))) + (velocity_x * -sin(theta)) + (velocity_y * cos(theta));
+    //     vehicle.heading_angle = -(vehicle.heading_angle + MAP_ANGLE - 90); // 맵에 맞춰 차량 각도 회전
+    //     // adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
+    //     // adcm::Log::Info() << "timestamp: " << vehicle.timestamp << " 차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.heading_angle << ")";
+    // }
 
-    else // 실증
-    {
-        double position_x = vehicle.position_long;
-        double position_y = vehicle.position_lat;
-        double veh_utm_x, veh_utm_y; // 차량 utm 좌표
-        GPStoUTM(position_x, position_y, veh_utm_x, veh_utm_y);
-        vehicle.position_x = (veh_utm_x - origin_x) * M_TO_10CM_PRECISION;
-        vehicle.position_y = (veh_utm_y - origin_y) * M_TO_10CM_PRECISION;
-        // 차량 각도는 유지
-        vehicle.velocity_x = vehicle.velocity_long * M_TO_10CM_PRECISION;
-        vehicle.velocity_y = vehicle.velocity_lat * M_TO_10CM_PRECISION;
-        // vehicle.heading_angle = 90 - vehicle.heading_angle;
-        // adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
-        // adcm::Log::Info() << "timestamp: " << vehicle.timestamp << " 차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.heading_angle << ")";
-    }
+    // else // 실증
+    // {
+    double position_x = vehicle.position_long;
+    double position_y = vehicle.position_lat;
+    double veh_utm_x, veh_utm_y; // 차량 utm 좌표
+    GPStoUTM(position_x, position_y, veh_utm_x, veh_utm_y);
+    vehicle.position_x = (veh_utm_x - origin_x) * M_TO_10CM_PRECISION;
+    vehicle.position_y = (veh_utm_y - origin_y) * M_TO_10CM_PRECISION;
+    // 차량 각도는 유지
+    vehicle.velocity_x = vehicle.velocity_long;
+    vehicle.velocity_y = vehicle.velocity_lat;
+    // vehicle.heading_angle = 90 - vehicle.heading_angle;
+    // adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
+    // adcm::Log::Info() << "timestamp: " << vehicle.timestamp << " 차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.heading_angle << ")";
+    // }
 }
 
 void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData vehicle)
@@ -467,8 +466,8 @@ void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleDa
         iter->fused_position_y = vehicle.position_y + ((obstacle_position_x)*cos(theta) + (obstacle_position_y)*sin(theta) * (-1)) * M_TO_10CM_PRECISION;
 
         // 차량 좌표계 기준이므로 90+heading_angle 만큼 회전변환 필요 (추가예정)
-        iter->fused_velocity_x = obstacle_velocity_x + vehicle.velocity_x;
-        iter->fused_velocity_y = obstacle_velocity_y + vehicle.velocity_y;
+        iter->fused_velocity_x = vehicle.velocity_x + ((obstacle_velocity_x)*sin(theta) * (-1) + (obstacle_velocity_y)*cos(theta) * (-1));
+        iter->fused_velocity_y = vehicle.velocity_y + ((obstacle_velocity_x)*cos(theta) + (obstacle_velocity_y)*sin(theta) * (-1));
 
         iter->fused_heading_angle = vehicle.heading_angle + iter->fused_heading_angle;
 
@@ -1052,7 +1051,12 @@ std::vector<ObstacleData> mergeAndCompareLists(
             adcm::Log::Info() << "previousFusionList size: " << previousFusionList.size();
             adcm::Log::Info() << "mergedList size: " << mergedList.size();
             for (auto merge : mergedList)
-            adcm::Log::Info() << merge.obstacle_id << "(" << merge.obstacle_class << ")" << ": [" << merge.fused_position_x << ", " << merge.fused_position_y << "]";
+            {
+                adcm::Log::Info() << merge.obstacle_id << "(" << merge.obstacle_class << ")"
+                                  << ": [" << merge.fused_position_x << ", " << merge.fused_position_y << ", "
+                                  << merge.fused_velocity_x << ", " << merge.fused_velocity_y << "]";
+            }
+
             // adcm::Log::Info() << "융합: 이전 데이터와 융합하여 ID부여 시도";
             auto distMatrix = createDistanceMatrix(previousFusionList, mergedList);
             // adcm::Log::Info() << "융합: 거리배열 생성";
@@ -1063,7 +1067,11 @@ std::vector<ObstacleData> mergeAndCompareLists(
             processFusion(mergedList, previousFusionList, assignment);
             adcm::Log::Info() << "융합: 이전 데이터와 융합 완료";
             for (auto merge : mergedList)
-                adcm::Log::Info() << merge.obstacle_id << "(" << merge.obstacle_class << ")" << ": [" << merge.fused_position_x << ", " << merge.fused_position_y << "]";
+            {
+                adcm::Log::Info() << merge.obstacle_id << "(" << merge.obstacle_class << ")"
+                                  << ": [" << merge.fused_position_x << ", " << merge.fused_position_y << ", "
+                                  << merge.fused_velocity_x << ", " << merge.fused_velocity_y << "]";
+            }
             // for (auto merge : mergedList)
             // {
             //     adcm::Log::Info() << "융합리스트 장애물id: " << merge.obstacle_id;
@@ -1076,6 +1084,47 @@ std::vector<ObstacleData> mergeAndCompareLists(
     }
 }
 
+void updateStopCount(std::vector<ObstacleData> &mergedList,
+                     const std::vector<ObstacleData> &previousFusionList,
+                     double threshold)
+{
+    for (auto &obs : mergedList)
+    {
+        // 1. 현재 프레임 속도 기준 정지 여부 판단
+        bool stoppedNow = (std::abs(obs.fused_velocity_x) < threshold &&
+                           std::abs(obs.fused_velocity_y) < threshold);
+
+        // 2. 이전 프레임 정보 찾기 (ID 기준)
+        auto prevIt = std::find_if(previousFusionList.begin(), previousFusionList.end(),
+                                   [&](const ObstacleData &p)
+                                   { return p.obstacle_id == obs.obstacle_id; });
+
+        if (stoppedNow)
+        {
+            if (prevIt != previousFusionList.end())
+            {
+                if (prevIt->stop_count < 255) // stop_count가 255 이상으로 올라가지 않도록 제한
+                {
+                    obs.stop_count = prevIt->stop_count + 1; // 이전 카운트 +1
+                }
+                else
+                    obs.stop_count = 255; // 최대값 유지
+            }
+            
+            else
+            {
+                obs.stop_count = 1; // 새 장애물, 정지 1프레임
+            }
+            adcm::Log::Info() << "장애물 ID " << obs.obstacle_id << " 정지 카운트: " << obs.stop_count;
+        }
+        
+        else
+        {
+            obs.stop_count = 0; // 움직이면 카운트 리셋
+            adcm::Log::Info() << "장애물 ID " << obs.obstacle_id << " 정지 카운트 초기화(움직임): " << obs.stop_count;
+        }
+    }
+}
 // VehicleData -> vehicleListStruct(맵데이터 호환)
 adcm::vehicleListStruct ConvertToVehicleListStruct(const VehicleData &vehicle, std::vector<adcm::map_2dListVector> &map)
 {
@@ -1330,45 +1379,45 @@ void ThreadReceiveWorkInfo()
 
             type = data->type;
 
-            if (!type) // 시뮬레이션이라면, (126.5482, 35.9398)의 utm좌표가 맵의 (0, 0)이 된다.
-            {
-                origin_x = 278835;
-                origin_y = 3980050;
-                map_x = 2000;
-                map_y = 1000;
-                adcm::Log::Info() << "[WorkInfo] 시뮬레이션 테스트";
-                adcm::Log::Info() << "맵 사이즈: (" << map_x << ", " << map_y << ")";
-            }
-            else // 실증이라면, boundary 좌표의 가장 작은 지점 min_x, min_y의 utm좌표가 맵의 (0, 0)이 된다.
-            {
-                min_lon = work_boundary[0].lon;
-                min_lat = work_boundary[0].lat;
-                max_lon = work_boundary[0].lon;
-                max_lat = work_boundary[0].lat;
+            // if (!type) // 시뮬레이션이라면, (126.5482, 35.9398)의 utm좌표가 맵의 (0, 0)이 된다.
+            // {
+            //     origin_x = 278835;
+            //     origin_y = 3980050;
+            //     map_x = 2000;
+            //     map_y = 1000;
+            //     adcm::Log::Info() << "[WorkInfo] 시뮬레이션 테스트";
+            //     adcm::Log::Info() << "맵 사이즈: (" << map_x << ", " << map_y << ")";
+            // }
+            // else // 실증이라면, boundary 좌표의 가장 작은 지점 min_x, min_y의 utm좌표가 맵의 (0, 0)이 된다.
+            // {
+            min_lon = work_boundary[0].lon;
+            min_lat = work_boundary[0].lat;
+            max_lon = work_boundary[0].lon;
+            max_lat = work_boundary[0].lat;
 
-                for (int i = 1; i < work_boundary.size(); i++)
-                {
-                    min_lon = work_boundary[i].lon < min_lon ? work_boundary[i].lon : min_lon;
-                    min_lat = work_boundary[i].lat < min_lat ? work_boundary[i].lat : min_lat;
-                    max_lon = work_boundary[i].lon > max_lon ? work_boundary[i].lon : max_lon;
-                    max_lat = work_boundary[i].lat > max_lat ? work_boundary[i].lat : max_lat;
-                }
-                adcm::Log::Info() << "[WorkInfo] 실증 테스트";
-                adcm::Log::Info() << "map의 min(lon, lat) 값: (" << min_lon << ", " << min_lat << "), max(lon, lat) 값 : (" << max_lon << ", " << max_lat << ")";
-                GPStoUTM(min_lon, min_lat, min_utm_x, min_utm_y);
-                GPStoUTM(max_lon, max_lat, max_utm_x, max_utm_y);
-                adcm::Log::Info() << "map의 minutm(x, y) 값: (" << min_utm_x << ", " << min_utm_y << "), maxutm(x, y) 값 : (" << max_utm_x << ", " << max_utm_y << ")";
-                map_x = (max_utm_x - min_utm_x) * 10;
-                map_y = (max_utm_y - min_utm_y) * 10;
-                adcm::Log::Info() << "맵 사이즈: (" << map_x << ", " << map_y << ")";
-                origin_x = min_utm_x;
-                origin_y = min_utm_y;
+            for (int i = 1; i < work_boundary.size(); i++)
+            {
+                min_lon = work_boundary[i].lon < min_lon ? work_boundary[i].lon : min_lon;
+                min_lat = work_boundary[i].lat < min_lat ? work_boundary[i].lat : min_lat;
+                max_lon = work_boundary[i].lon > max_lon ? work_boundary[i].lon : max_lon;
+                max_lat = work_boundary[i].lat > max_lat ? work_boundary[i].lat : max_lat;
             }
-
-            sendEmptyMap = true;
-            someipReady.notify_one();
-            get_workinfo = true;
+            adcm::Log::Info() << "[WorkInfo] 실증 테스트";
+            adcm::Log::Info() << "map의 min(lon, lat) 값: (" << min_lon << ", " << min_lat << "), max(lon, lat) 값 : (" << max_lon << ", " << max_lat << ")";
+            GPStoUTM(min_lon, min_lat, min_utm_x, min_utm_y);
+            GPStoUTM(max_lon, max_lat, max_utm_x, max_utm_y);
+            adcm::Log::Info() << "map의 minutm(x, y) 값: (" << min_utm_x << ", " << min_utm_y << "), maxutm(x, y) 값 : (" << max_utm_x << ", " << max_utm_y << ")";
+            map_x = (max_utm_x - min_utm_x) * 10;
+            map_y = (max_utm_y - min_utm_y) * 10;
+            adcm::Log::Info() << "맵 사이즈: (" << map_x << ", " << map_y << ")";
+            origin_x = min_utm_x;
+            origin_y = min_utm_y;
         }
+
+        sendEmptyMap = true;
+        someipReady.notify_one();
+        get_workinfo = true;
+        // }
     }
 }
 
@@ -1449,6 +1498,9 @@ void ThreadKatech()
         // ==============2. 장애물 데이터 융합 / 3. 특장차 및 보조차량 제거 / 4. 장애물 ID 부여 =================
         obstacle_list = mergeAndCompareLists(previous_obstacle_list, obstacle_list_main, obstacle_list_sub1,
                                              obstacle_list_sub2, main_vehicle, sub1_vehicle, sub2_vehicle);
+
+        updateStopCount(obstacle_list, previous_obstacle_list, 0.1);
+        adcm::Log::Info() << "stop count 변동 완료";
 
         order.pop();
 
@@ -1556,9 +1608,9 @@ void ThreadKatech()
         // 차량이 맵 범위 내에 있는지 체크
         bool result = checkAllVehicleRange(vehicles);
 
-        /*
         if (result)
         { // execute only if all true!
+            /*
             //==============5. 0.1 m/s 미만인 경우 장애물 정지 상태 판정 및 stop_count 값 assign =================
             // 수정 예정//
             for (auto iter = obstacle_list.begin(); iter != obstacle_list.end(); iter++)
@@ -1597,84 +1649,45 @@ void ThreadKatech()
                 }
             }
             */
+            //==============6. 장애물과 차량의 occupancy 계산해 map_2d_location 값 업데이트 ========
 
-        // adcm::Log::Info() << "stop count 변동 완료";
-        //==============6. 장애물과 차량의 occupancy 계산해 map_2d_location 값 업데이트 ========
+            if (!obstacle_list.empty())
+                find4VerticesObstacle(obstacle_list);
 
-        if (!obstacle_list.empty())
-            find4VerticesObstacle(obstacle_list);
-
-        for (const auto &vehicle : vehicles)
-        {
-            if (vehicle->vehicle_class != 0)
-                find4VerticesVehicle(*vehicle);
-        }
-
-        //==============7. 현재까지의 데이터를 adcm mapData 형식으로 재구성해서 업데이트 ================
-        //================ adcm mapData 내 obstacle list 업데이트 ===============================
-
-        // adcm::Log::Info() << "mapdata 장애물 반영 예정 개수: " << obstacle_list.size();
-
-        // map_2d에서 map_2d_location이 존재하는 부분만 수정
-        // 맵데이터 수정하며 lock걸기
-
-        mapData.map_2d = map_2d_test;
-        UpdateMapData(mapData, obstacle_list, vehicles);
-
-        {
-            lock_guard<mutex> map_lock(mtx_map_someip);
-            map_someip_queue.push(mapData);
-        }
-        someipReady.notify_one();
-
-        if (useNats)
-        {
+            for (const auto &vehicle : vehicles)
             {
-                lock_guard<mutex> map_lock(mtx_map_nats);
-                map_nats_queue.push(mapData);
+                if (vehicle->vehicle_class != 0)
+                    find4VerticesVehicle(*vehicle);
             }
-            natsReady.notify_one();
+
+            //==============7. 현재까지의 데이터를 adcm mapData 형식으로 재구성해서 업데이트 ================
+            //================ adcm mapData 내 obstacle list 업데이트 ===============================
+
+            // adcm::Log::Info() << "mapdata 장애물 반영 예정 개수: " << obstacle_list.size();
+
+            // map_2d에서 map_2d_location이 존재하는 부분만 수정
+            // 맵데이터 수정하며 lock걸기
+
+            mapData.map_2d = map_2d_test;
+            UpdateMapData(mapData, obstacle_list, vehicles);
+
+            {
+                lock_guard<mutex> map_lock(mtx_map_someip);
+                map_someip_queue.push(mapData);
+            }
+            someipReady.notify_one();
+
+            if (useNats)
+            {
+                {
+                    lock_guard<mutex> map_lock(mtx_map_nats);
+                    map_nats_queue.push(mapData);
+                }
+                natsReady.notify_one();
+            }
+
+            adcm::Log::Info() << "mapdata 융합 완료";
         }
-
-        adcm::Log::Info() << "mapdata 융합 완료";
-
-        // for (int i = 0; i < map_x; ++i)
-        // {
-        //     map_2dListVector.clear();
-        //     for (int j = 0; j < map_y; ++j)
-        //     {
-        //         map_2dStruct.obstacle_id = map_2d_test[i][j].obstacle_id;
-        //         map_2d_test[i][j].obstacle_id = NO_OBSTACLE;
-
-        //         // obstacle_id 초기화
-
-        //         map_2dStruct.vehicle_class = map_2d_test[i][j].vehicle_class;
-        //         map_2d_test[i][j].vehicle_class = NO_VEHICLE;
-
-        //         // vehicle_class 초기화
-        //         map_2dStruct.road_z = map_2d_test[i][j].road_z;
-        //         // road_z 정보는 계속 가져간다
-        //         map_2dListVector.push_back(map_2dStruct);
-        //     }
-        //     mapData.map_2d.push_back(map_2dListVector);
-        // }
-
-        // mapData.map_2d.push_back(map_2dListVector);
-
-        // adcm::Log::Info() << "DATA FUSION DONE";
-        // adcm::Log::Info() << "map_2d pushed to mapData";
-
-        // mapData_provider.send(mapData);
-        // auto endTime = std::chrono::high_resolution_clock::now();
-        // std::chrono::duration<double, std::milli> duration = endTime - startTime;
-        // adcm::Log::Info() << "mapdata 전송에 걸린 시간: " << duration.count() << " ms.";
-        // mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
-        // NatsSend(mapData);
-        // endTime = std::chrono::high_resolution_clock::now();
-        // duration = endTime - startTime;
-        // adcm::Log::Info() << "mapdata + NATS 전송에 걸린 시간: " << duration.count() << " ms.";
-        // mapData.map_2d = map_2d_init;                                // 맵 초기화
-        // std::this_thread::sleep_for(std::chrono::milliseconds(100)); // 대기시간
     }
 }
 
