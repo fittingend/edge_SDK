@@ -232,7 +232,7 @@ void evaluateScenario4(const obstacleListVector& obstacle_list,
     // i) 20m ~ 40m 동적 장애물만 obstacle_temp에 저장
     for (const auto& obs : obstacle_list) {
         double distance = calculateDistance(obs, ego_vehicle);
-        if ((distance > MIN_DISTANCE && distance < MAX_DISTANCE) && (obs.obstacle_class >= 1 && obs.obstacle_class >= 29)) 
+        if ((distance > MIN_DISTANCE && distance < MAX_DISTANCE) && (obs.obstacle_class >= 1 && obs.obstacle_class <= 29)) 
         {
             obstacle_temp.push_back(obs);
         }
@@ -348,7 +348,7 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
     constexpr double EGO_MIN_DM          = 300.0;    // 40 m
     constexpr double EGO_MAX_DM          = 700.0;    // 50 m
     constexpr double DIST_TO_PATH_MAX_DM = 200.0;    // 10 m
-    constexpr double MAX_PAIR_DIST_DM    = 200.0;    // 20 m
+    constexpr double MAX_PAIR_DIST_DM    = 100.0;    // 20 m
     constexpr double WINDOW_MS           = 10000.0;  // 10 s
     constexpr double FRAME_GRACE_MS      = 120.0;    // 동시 프레임 관용치
     constexpr double EPS                 = 1e-6;
@@ -499,7 +499,7 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
     adcm::riskAssessmentStruct s5a{ .obstacle_id=best_a.obstacle_id, .hazard_class=SCENARIO_5, .confidence=conf };
     adcm::riskAssessmentStruct s5b{ .obstacle_id=best_b.obstacle_id, .hazard_class=SCENARIO_5, .confidence=conf };
 
-    Log::Info() << "[시나리오5] *** TRIGGER ***"
+    Log::Info() << "위험판단 시나리오 #5에 해당하는"
                 << " | 페어 IDs=(" << s5a.obstacle_id << "," << s5b.obstacle_id << ")"
                 << " | 거리=" << pair_m << " m"
                 << " | confidence=" << conf;
