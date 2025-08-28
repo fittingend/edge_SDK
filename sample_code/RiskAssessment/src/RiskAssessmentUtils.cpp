@@ -70,31 +70,116 @@ void checkRange(Point2D &point)
         point.y = map_y - 1;
 }
 
+const char* to_string(ObstacleClass cls) 
+{
+    switch (cls) {
+        case ObstacleClass::NONE:          return "없음";
+
+        // 건설기계류
+        case ObstacleClass::EXCAVATOR:     return "굴착기";
+        case ObstacleClass::FORKLIFT:      return "지게차";
+        case ObstacleClass::CONCRETE_MIXER:return "콘크리트 믹서트럭";
+        case ObstacleClass::CRANE:         return "기중기";
+        case ObstacleClass::CONCRETE_PUMP: return "콘크리트 펌프";
+        case ObstacleClass::DUMP_TRUCK:    return "덤프트럭";
+
+        // 차량류
+        case ObstacleClass::SEDAN:         return "승용차";
+        case ObstacleClass::SUV:           return "SUV";
+        case ObstacleClass::TRUCK:         return "트럭";
+        case ObstacleClass::OTHER_VEH:     return "기타차량";
+        case ObstacleClass::MOTORCYCLE:    return "오토바이";
+        case ObstacleClass::BICYCLE:       return "자전거";
+
+        // 사람
+        case ObstacleClass::PEDESTRIAN:    return "일반인";
+        case ObstacleClass::SAFETY_ROBOT:  return "안전유도로봇";
+
+        // 건축자재
+        case ObstacleClass::PIPE:          return "비계파이프";
+        case ObstacleClass::CEMENT:        return "시멘트";
+        case ObstacleClass::BRICK:         return "벽돌";
+
+        // 안전용품
+        case ObstacleClass::DRUM:          return "드럼통";
+        case ObstacleClass::SHIELD:        return "가림막";
+        case ObstacleClass::LARGE_CONE:    return "대형 라바콘";
+        case ObstacleClass::SIGNBOARD:     return "입간판";
+
+        default: return "알 수 없음";
+    }
+}
+
+void printObstacleList(obstacleListVector obstacle_list)
+{
+    adcm::Log::Info() << "현재 장애물 리스트 프린트";
+    if (obstacle_list.empty()) {
+        adcm::Log::Info() << "장애물이 없습니다.";
+        return;
+    }
+
+    for (const auto& obs : obstacle_list) 
+    {
+        adcm::Log::Info()
+            << "ID=" << obs.obstacle_id
+            << ", Class=" << to_string(static_cast<ObstacleClass>(obs.obstacle_class))
+            << ", Pos=(" << obs.fused_position_x << ", " << obs.fused_position_y << ")";
+    }
+}
+
 void gpsToMapcoordinate(const routeVector& route, 
                         std::vector<double>& path_x, 
                         std::vector<double>& path_y)
 {
     INFO("[RiskAssessment] gpsToMapcoordinate");
-    for (std::size_t i = 0; i < route.size(); ++i)
+    if (!type)
+    {   
+        INFO("[RiskAssessment] simulation");
+        // wps84기반 gps(global)좌표계를 작업환경 XY 기반의 Map 좌표계로 변환
+        // 시뮬레이터 map 기준 원점(0,0) global좌표
+        double mapOrigin_x = 453.088714;
+        double mapOrigin_y = 507.550078;
+        // 시뮬레이터 기준점 utm좌표
+        double ref_x = 278296.968;
+        double ref_y = 3980466.846;
+        double angle_radians = -MAP_ANGLE * M_PI / 180.0;
+
+        for (std::size_t i = 0; i < route.size(); ++i)
+        {
+            const auto& point = route[i];
+            double utm_x, utm_y;
+            Point2D mapPoint;
+
+            GPStoUTM(point.longitude, point.latitude, utm_x, utm_y);
+            utm_x -= ref_x;
+            utm_y -= ref_y;
+            mapPoint.x = (utm_x * cos(angle_radians) - utm_y * sin(angle_radians) - mapOrigin_x) * M_TO_10CM_PRECISION;
+            mapPoint.y = (utm_x * sin(angle_radians) + utm_y * cos(angle_radians) - mapOrigin_y) * M_TO_10CM_PRECISION;
+
+            checkRange(mapPoint);
+            //checkRange 함수 수정 이후 반영 예정 
+            path_x[i] = mapPoint.x;
+            path_y[i] = mapPoint.y;
+            
+            adcm::Log::Info() << "gpsToMapcoordinate 변환: (" 
+                            << point.longitude << ", " << point.latitude 
+                            << ") → (" << mapPoint.x << ", " << mapPoint.y << ")";
+        }
+    }
+    
+    else // 실증
     {
-        const auto& point = route[i];
-        double utm_x, utm_y;
-        GPStoUTM(point.longitude, point.latitude, utm_x, utm_y);
+        INFO("[RiskAssessment] on-site");
+        for (std::size_t i = 0; i < route.size(); ++i)
+        {
+            const auto& point = route[i];
+            double utm_x, utm_y;
+            Point2D mapPoint;
 
-        Point2D mapPoint;
-        //TO DO: work info 받아서 origin_x = min_utm_x 으로 업데이트 필요
-        mapPoint.x = (utm_x - origin_x)* M_TO_10CM_PRECISION;
-        mapPoint.y = (utm_y - origin_y)* M_TO_10CM_PRECISION;
-
-        //checkRange(mapPoint);
-        //checkRange 함수 수정 이후 반영 예정 
-
-        path_x[i] = mapPoint.x;
-        path_y[i] = mapPoint.y;
-        
-        adcm::Log::Info() << "gpsToMapcoordinate 변환: (" 
-                        << point.longitude << ", " << point.latitude 
-                        << ") → (" << mapPoint.x << ", " << mapPoint.y << ")";
+            GPStoUTM(point.longitude, point.latitude, utm_x, utm_y);
+            mapPoint.x = (utm_x - origin_x) * M_TO_10CM_PRECISION;
+            mapPoint.y = (utm_y - origin_y) * M_TO_10CM_PRECISION;
+        }
     }
 }
 
@@ -123,13 +208,13 @@ double getMagnitude(Point2D point)
 
 /**
  * @brief 장애물과 특장차(Ego Vehicle) 간의 TTC(Time To Collision)를 계산하는 함수
- *
+ *e 반환
  * 이 함수는 차량과 장애물의 상대 위치 및 상대 속도를 기반으로,
  * 선형 이동 가정 하에 두 객체가 충돌할 때까지 걸리는 예상 시간을 계산합니다.
  *
  * - 상대 속도가 거의 없을 경우(TTC 계산 불가) false 반환
  * - TTC가 0 이하일 경우(충돌 없음) false 반환
- * - 유효한 TTC가 계산되면 해당 값을 ttc에 저장하고 true 반환
+ * - 유효한 TTC가 계산되면 해당 값을 ttc에 저장하고 tru
  *
  * @param obstacle   장애물 정보 (위치 및 속도 포함)
  * @param vehicle    자차 정보 (위치 및 속도 포함)
@@ -146,9 +231,18 @@ bool getTTC(const adcm::obstacleListStruct& obstacle, const adcm::vehicleListStr
     double relative_velocity_x = obstacle.fused_velocity_x - vehicle.velocity_x;
     double relative_velocity_y = obstacle.fused_velocity_y - vehicle.velocity_y;
 
+    adcm::Log::Info() << "① [TTC 계산 시작] 장애물ID=" << obstacle.obstacle_id
+                      << ", 클래스=" << to_string(static_cast<ObstacleClass>(obstacle.obstacle_class))
+                      << " | 상대위치=(" << relative_position_x << ", " << relative_position_y
+                      << "), 상대속도=(" << relative_velocity_x << ", " << relative_velocity_y << ")";
+
     // Prevent division by zero when relative_velocity_y is zero
     if (std::abs(relative_velocity_y) < EPSILON || std::abs(relative_velocity_x) < EPSILON)
     {
+        adcm::Log::Info() << "② [TTC 계산 불가] 장애물ID=" << obstacle.obstacle_id
+                          << ", 클래스=" << to_string(static_cast<ObstacleClass>(obstacle.obstacle_class))
+                          << " | 상대속도가 0에 가까움 (rel_vel_x=" << relative_velocity_x
+                          << ", rel_vel_y=" << relative_velocity_y << ")";
         return false; // No meaningful TTC can be calculated
     }
 
@@ -161,9 +255,15 @@ bool getTTC(const adcm::obstacleListStruct& obstacle, const adcm::vehicleListStr
     // Only assign TTC if it's positive (future collision)
     if (calculated_ttc > 0) {
         ttc = calculated_ttc;
+        adcm::Log::Info() << "⑤ [TTC 유효] 장애물ID=" << obstacle.obstacle_id
+                          << ", 클래스=" << to_string(static_cast<ObstacleClass>(obstacle.obstacle_class))
+                          << " | 최종 TTC=" << ttc;
         return true;
     }
-    
+
+     adcm::Log::Info() << "⑥ [TTC 무효] 장애물ID=" << obstacle.obstacle_id
+                      << ", 클래스=" << to_string(static_cast<ObstacleClass>(obstacle.obstacle_class))
+                      << " | TTC가 0 이하 → 미래 충돌 아님";
     return false;
 }
 /**
@@ -293,43 +393,78 @@ bool calculateMinDistanceLinear(const adcm::obstacleListStruct& obstacle, const 
  * @return true       신규 객체가 하나 이상 존재할 경우
  * @return false      신규 객체가 없을 경우
  */
-bool extractNewObstacles(obstacleListVector vec_old, 
-                        obstacleListVector vec_new, 
-                        obstacleListVector& vec_output)
+bool extractNewObstacles(const obstacleListVector& vec_old,
+                         const obstacleListVector& vec_new,
+                         obstacleListVector& vec_output)
 {
-    // 1. obstacle_id 기준 정렬
-    std::sort(vec_old.begin(), vec_old.end(), 
-              [](const auto& a, const auto& b) { return a.obstacle_id < b.obstacle_id; });
+     vec_output.clear();
 
-    std::sort(vec_new.begin(), vec_new.end(), 
-              [](const auto& a, const auto& b) { return a.obstacle_id < b.obstacle_id; });
+    std::unordered_set<decltype(adcm::obstacleListStruct{}.obstacle_id)> old_ids;
+    old_ids.reserve(vec_old.size() * 2);
 
-    // 2. 투 포인터 방식으로 신규 객체 추출
-    size_t i = 0, j = 0;
-    while (i < vec_old.size() && j < vec_new.size())
-    {
-        if (vec_new[j].obstacle_id < vec_old[i].obstacle_id)
-        {
-            vec_output.push_back(vec_new[j]);
-            j++;
-        }
-        else if (vec_old[i].obstacle_id < vec_new[j].obstacle_id)
-        {
-            i++;
-        }
-        else
-        {
-            i++;
-            j++;
+    for (const auto& o : vec_old) old_ids.insert(o.obstacle_id);
+
+    adcm::Log::Info() << "[extractNewObstacles] 기존 개수=" << vec_old.size()
+                      << ", 신규 후보 개수=" << vec_new.size();
+
+    std::unordered_set<decltype(adcm::obstacleListStruct{}.obstacle_id)> pushed;
+    pushed.reserve(vec_new.size());
+
+    for (const auto& n : vec_new) {
+        if (old_ids.find(n.obstacle_id) == old_ids.end()) {
+            if (pushed.insert(n.obstacle_id).second) {
+                adcm::Log::Info() << "[extractNewObstacles] 신규 발견 → ID=" << n.obstacle_id
+                                  << ", Class=" << to_string(static_cast<ObstacleClass>(n.obstacle_class));
+                vec_output.push_back(n);
+            }
+        } else {
+            adcm::Log::Info() << "[extractNewObstacles] 기존과 동일 → ID=" << n.obstacle_id;
         }
     }
 
-while (j < vec_new.size())
-    {
-        vec_output.push_back(vec_new[j++]);
-    }
-    
+    adcm::Log::Info() << "[extractNewObstacles] 최종 신규 개수=" << vec_output.size();
     return !vec_output.empty();
+//     // 1. obstacle_id 기준 정렬
+//     std::sort(vec_old.begin(), vec_old.end(), 
+//               [](const auto& a, const auto& b) { return a.obstacle_id < b.obstacle_id; });
+
+//     std::sort(vec_new.begin(), vec_new.end(), 
+//               [](const auto& a, const auto& b) { return a.obstacle_id < b.obstacle_id; });
+              
+//     adcm::Log::Info() << "[extractNewObstacles] 기존 객체 개수=" << vec_old.size()
+//                     << ", 신규 객체 개수=" << vec_new.size();
+
+//     // 2. 투 포인터 방식으로 신규 객체 추출
+//     size_t i = 0, j = 0;
+//     while (i < vec_old.size() && j < vec_new.size())
+//     {
+//         if (vec_new[j].obstacle_id < vec_old[i].obstacle_id)
+//         {
+//             adcm::Log::Info() << "[extractNewObstacles] 신규 장애물 발견 → ID=" << vec_new[j].obstacle_id
+//                               << ", Class=" << to_string(static_cast<ObstacleClass>(vec_new[j].obstacle_class));
+//             vec_output.push_back(vec_new[j]);
+//             j++;
+//         }
+//         else if (vec_old[i].obstacle_id < vec_new[j].obstacle_id)
+//         {
+//             i++;
+//         }
+//         else
+//         {
+//             // 동일한 ID → 신규 아님
+//             adcm::Log::Info() << "[extractNewObstacles] 기존 장애물과 동일 → ID=" << vec_new[j].obstacle_id;
+//             i++;
+//             j++;
+//         }
+//     }
+
+// while (j < vec_new.size())
+//     {
+//         vec_output.push_back(vec_new[j++]);
+//     }
+    
+//     adcm::Log::Info() << "[extractNewObstacles] 최종 신규 장애물 개수=" << vec_output.size();
+//     return !vec_output.empty();
 
 }
 
