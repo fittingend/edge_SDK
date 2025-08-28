@@ -235,7 +235,7 @@ void ThreadReceiveMapData()
                     adcm::Log::Info() << "Map Available";
                 }
                 cv_mapData.notify_one(); // 다른 스레드에게 알림
-                adcm::Log::Info() << "ThreadRass 에게 알림";
+                //adcm::Log::Info() << "ThreadRass 에게 알림";
             }
         }
     }
@@ -293,13 +293,13 @@ void ThreadReceiveBuildPath()
                             adcm::Log::Info() << "Path Available";
                         }
                     }
-                    for (const auto &point : route)
-                    {
-                        adcm::Log::Info() << "vehicle_class : " << pathItem.vehicle_class;
-                        adcm::Log::Info() << "route.latitude : " << point.latitude;
-                        adcm::Log::Info() << "route.longitude : " << point.longitude;
-                        adcm::Log::Info() << "route.delta_t : " << point.delta_t;
-                    }
+                    // for (const auto &point : route)
+                    // {
+                    //     adcm::Log::Info() << "vehicle_class : " << pathItem.vehicle_class;
+                    //     adcm::Log::Info() << "route.latitude : " << point.latitude;
+                    //     adcm::Log::Info() << "route.longitude : " << point.longitude;
+                    //     adcm::Log::Info() << "route.delta_t : " << point.delta_t;
+                    // }
                 }
             }
         }
@@ -357,12 +357,12 @@ void ThreadReceiveWorkInformation()
 
                 if (!type) // 시뮬레이션이라면, (126.5482, 35.9398)의 utm좌표가 맵의 (0, 0)이 된다.
                 {
-    origin_x = 278835;
-    origin_y = 3980050;
-    map_x = 2000;
-    map_y = 1000;
-    adcm::Log::Info() << "[WorkInfo] 시뮬레이션 테스트";
-    adcm::Log::Info() << "맵 사이즈: (" << map_x << ", " << map_y << ")";
+                    origin_x = 278835;
+                    origin_y = 3980050;
+                    map_x = 2000;
+                    map_y = 1000;
+                    adcm::Log::Info() << "[WorkInfo] 시뮬레이션 테스트";
+                    adcm::Log::Info() << "맵 사이즈: (" << map_x << ", " << map_y << ")";
                 }
                 else // 실증이라면, boundary 좌표의 가장 작은 지점 min_x, min_y의 utm좌표가 맵의 (0, 0)이 된다.
                 {
@@ -421,15 +421,16 @@ void ThreadRASS()
 
             adcm::Log::Info() << "[PROCESS] Start processing received map data";
             riskAssessment.riskAssessmentList.clear();
-
+            
+            printObstacleList(obstacle_list);
             evaluateScenario1(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
             evaluateScenario2(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
             evaluateScenario3(obstacle_list, ego_vehicle, riskAssessment);
             evaluateScenario4(obstacle_list, ego_vehicle, riskAssessment);
             evaluateScenario5(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
             evaluateScenario6(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
-            evaluateScenario7(path_x, path_y, map_2d, riskAssessment);
-            evaluateScenario8(path_x, path_y, map_2d, riskAssessment);
+            //evaluateScenario7(path_x, path_y, map_2d, riskAssessment);
+            //evaluateScenario8(path_x, path_y, map_2d, riskAssessment);
         }
 
         adcm::Log::Info() << "build riskAssessment data - size " << riskAssessment.riskAssessmentList.size();

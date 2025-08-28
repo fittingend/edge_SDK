@@ -14,7 +14,8 @@
 #include <cmath>
 #include <vector>
 #include <algorithm>
-
+#include <limits>
+#include <utility>
 
 // ==== ARA & Logger 관련 헤더 ====
 #include <ara/com/e2exf/status_handler.h>
@@ -34,24 +35,53 @@
 //#define INVALID_RETURN_VALUE 99999 
 #define M_TO_10CM_PRECISION 10 
 #define WHEEL_DIAMETER_M 0.71
+#define MAP_ANGLE -86
+
 // 맵 x, y 방향 사이즈
 extern std::uint16_t map_x;
 extern std::uint16_t map_y;
 // 맵(0,0)지점의 utm좌표
 extern double origin_x;
 extern double origin_y;
-
+extern std::uint8_t type;
 // ==== 타입 정의 ====
 struct Point2D {
     double x, y;
 };
 
-enum ObstacleClass {
-    NO_OBSTACLE,
-    VEHICLE_LARGE,
-    VEHICLE_SMALL,
-    PEDESTRIAN,
-    STRUCTURE
+enum class ObstacleClass : uint8_t {
+    NONE = 0,   // 없음
+
+    // 건설기계류 (1 ~ 9)
+    EXCAVATOR       = 1,  // 굴착기
+    FORKLIFT        = 2,  // 지게차
+    CONCRETE_MIXER  = 3,  // 콘크리트 믹서트럭
+    CRANE           = 4,  // 기중기
+    CONCRETE_PUMP   = 5,  // 콘크리트 펌프
+    DUMP_TRUCK      = 6,  // 덤프트럭
+
+    // 차량류 (10 ~ 19)
+    SEDAN       = 10,  // 승용차
+    SUV         = 11,  // SUV
+    TRUCK       = 12,  // 트럭
+    OTHER_VEH   = 13,  // 기타차량
+    MOTORCYCLE  = 14,  // 오토바이
+    BICYCLE     = 15,  // 자전거
+
+    // 사람 (20 ~ 29)
+    PEDESTRIAN  = 20,  // 일반인
+    SAFETY_ROBOT = 21, // 안전유도로봇
+
+    // 건축자재 (30 ~ 39)
+    PIPE        = 30,  // 비계파이프
+    CEMENT      = 31,  // 시멘트
+    BRICK       = 32,  // 벽돌
+
+    // 안전용품 (40 ~ 49)
+    DRUM        = 40,  // 드럼통
+    SHIELD      = 41,  // 가림막
+    LARGE_CONE  = 42,  // 대형 라바콘
+    SIGNBOARD   = 43   // 입간판
 };
 
 enum VehicleClass : uint8_t {
@@ -140,9 +170,9 @@ T clampValue(const T& value, const T& low, const T& high) {
 }
 // ==== utils 함수 선언 ====
 
-bool extractNewObstacles(obstacleListVector vec_old, 
-                        obstacleListVector vec_new, 
-                        obstacleListVector& vec_output);
+bool extractNewObstacles(const obstacleListVector& vec_old,
+                         const obstacleListVector& vec_new,
+                         obstacleListVector& vec_output);
 void GPStoUTM(double lat, double lon, double &utmX, double &utmY);
 bool isRouteValid(routeVector& route);
 void checkRange(Point2D &point);
@@ -168,7 +198,9 @@ void calculateShiftedLines(int &x_start, int &x_end, int &y_start, int &y_end, i
                            double &original_m, double &original_c, double &up_c, double &down_c,
                            bool &isVertical, double &x_up, double &x_down);
 
-
+void printObstacleList(obstacleListVector obstacle_list);
+// 문자열 변환 함수 선언
+const char* to_string(ObstacleClass cls);
 // ==== 위험판단 시나리오 선언
 
 void evaluateScenario1(const obstacleListVector& obstacle_list, 
