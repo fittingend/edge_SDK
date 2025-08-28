@@ -1110,14 +1110,14 @@ void updateStopCount(std::vector<ObstacleData> &mergedList,
                 else
                     obs.stop_count = 255; // 최대값 유지
             }
-            
+
             else
             {
                 obs.stop_count = 1; // 새 장애물, 정지 1프레임
             }
             adcm::Log::Info() << "장애물 ID " << obs.obstacle_id << " 정지 카운트: " << obs.stop_count;
         }
-        
+
         else
         {
             obs.stop_count = 0; // 움직이면 카운트 리셋
@@ -1194,21 +1194,80 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
     for (const auto &obstacle : obstacle_list)
         mapData.obstacle_list.push_back(ConvertToObstacleListStruct(obstacle, mapData.map_2d));
 
-    for (const auto vehicle : vehicles)
+    for (const auto &vehicle : vehicles)
     {
         if (vehicle->vehicle_class != 0)
         {
             mapData.vehicle_list.push_back(ConvertToVehicleListStruct(*vehicle, mapData.map_2d));
+            if (vehicle->road_z.size() > 1) // 시뮬레이션에선 road_z size가 1이므로 예외 처리
+            {
+                std::vector<adcm::roadListStruct> road_list = ConvertRoadZToRoadList(*vehicle);
+                mapData.road_list.insert(mapData.road_list.end(), road_list.begin(), road_list.end());
+            }
+            else
+                adcm::Log::Info() << vehicle->vehicle_class << " 차량 road_z 데이터 없음, road_list 반영 X";
         }
     }
 
     adcm::Log::Info() << "mapData 장애물 반영 완료 개수: " << mapData.obstacle_list.size();
     adcm::Log::Info() << "mapData 차량 반영 완료 개수: " << mapData.vehicle_list.size();
-    // adcm::Log::Info() << "map_2d_location_size: " << map_2d_size;
-    // adcm::Log::Info() << "map_2d size: " << mapData.map_2d.size() * mapData.map_2d[0].size() * sizeof(::adcm::map_2dListStruct);
+    adcm::Log::Info() << "mapData road_list 반영 완료: " << mapData.road_list.size();
+
+    for (const auto &road : mapData.road_list)
+    {
+        adcm::Log::Info() << "road_index: " << static_cast<int>(road.road_index)
+                          << ", count: " << road.map_2d_location.size();
+    }
+
     map_2d_size = 0;
 
     return;
+}
+
+// road_z를 맵 좌표로 변환해 roadListStruct로 만드는 함수
+std::vector<adcm::roadListStruct> ConvertRoadZToRoadList(const VehicleData &vehicle)
+{
+    // road_index별로 좌표를 그룹화하여 roadListStruct 24개 생성
+    std::vector<adcm::roadListStruct> result(24); // 0~22, 255
+    for (int i = 0; i < 23; ++i)
+    {
+        result[i].road_index = i;
+        result[i].Timestamp = vehicle.timestamp;
+    }
+    result[23].road_index = 255;
+    result[23].Timestamp = vehicle.timestamp;
+
+    double car_x = vehicle.position_x;
+    double car_y = vehicle.position_y;
+    double theta = vehicle.heading_angle * M_PI / 180.0;
+    double cell_size = 0.1; // 10cm
+    double start_x = 3.0;   // 차량 앞 3m 제외
+    double box_width = 4.0;
+    size_t num_rows = 70;
+    size_t num_cols = 40;
+    for (size_t i = 0; i < vehicle.road_z.size(); ++i)
+    {
+        uint8_t rz = vehicle.road_z[i];
+        int idx_struct = (rz <= 22) ? rz : 23; // 0~22는 그대로, 그 외(255 등)는 23번에
+        size_t row = i / num_cols;
+        size_t col = i % num_cols;
+        double local_x = start_x + row * cell_size;
+        double local_y = -box_width / 2 + col * cell_size;
+        double rotated_x = local_x * sin(theta) * (-1) + local_y * cos(theta) * (-1);
+        double rotated_y = local_x * cos(theta) + local_y * sin(theta) * (-1);
+        double map_x = car_x + rotated_x;
+        double map_y = car_y + rotated_y;
+        adcm::map2dIndex idx = {map_x, map_y};
+        result[idx_struct].map_2d_location.push_back(idx);
+    }
+    // road_index별로 좌표가 있는 struct만 반환
+    std::vector<adcm::roadListStruct> filtered;
+    for (const auto &r : result)
+    {
+        if (!r.map_2d_location.empty())
+            filtered.push_back(r);
+    }
+    return filtered;
 }
 
 // 차량 데이터 저장
@@ -1286,8 +1345,6 @@ void ThreadReceiveHubData()
                 }
                 else
                     adcm::Log::Info() << "road_z empty";
-                // road_z는 차량 주변 10m x 10m, 차량 사이즈+주변 2m 제외
-                // road_z는 맵 기준 100x100 사이즈의 배열인데, 이를 왼쪽 위부터 1차원 배열로 변환해서 옴
                 // road_index에 반영 필요
 
                 switch (data->vehicle_class)

@@ -293,6 +293,9 @@ void updateStopCount(std::vector<ObstacleData> &mergedList,
 // 차량 리스트, 장애물 리스트 맵데이터에 반영
 void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleData> &obstacle_list, const std::vector<VehicleData> &vehicles);
 
+// road_z를 맵 좌표로 변환해 roadListStruct로 만드는 함수
+std::vector<adcm::roadListStruct> ConvertRoadZToRoadList(const VehicleData& vehicle);
+
 // VehicleData -> vehicleListStruct(맵데이터 호환)
 adcm::vehicleListStruct ConvertToVehicleListStruct(const VehicleData &vehicle, std::vector<adcm::map_2dListVector> &map);
 
