@@ -197,7 +197,7 @@ set(APPLICATION_src
     src/main_datafusion.cpp
     src/id_manager.cpp
     src/config.cpp
-    src/NATS_IMPLEMENTATION/NatsConnManager.cpp
+    src/NatsConnManager.cpp
     ${${PROCESS_ARTIFACTS_MAKE_TARGET}_SOURCES}
     ${COMMON_DIR}/logger/src/logger.cpp
     ${COMMON_DIR}/service/src/map_data_provider.cpp
