@@ -132,44 +132,44 @@ void gpsToMapcoordinate(const routeVector& route,
                         std::vector<double>& path_y)
 {
     INFO("[RiskAssessment] gpsToMapcoordinate");
-    if (!type)
-    {   
-        INFO("[RiskAssessment] simulation");
-        // wps84기반 gps(global)좌표계를 작업환경 XY 기반의 Map 좌표계로 변환
-        // 시뮬레이터 map 기준 원점(0,0) global좌표
-        double mapOrigin_x = 453.088714;
-        double mapOrigin_y = 507.550078;
-        // 시뮬레이터 기준점 utm좌표
-        double ref_x = 278296.968;
-        double ref_y = 3980466.846;
-        double angle_radians = -MAP_ANGLE * M_PI / 180.0;
+    // if (!type)
+    // {   
+    //     INFO("[RiskAssessment] simulation");
+    //     // wps84기반 gps(global)좌표계를 작업환경 XY 기반의 Map 좌표계로 변환
+    //     // 시뮬레이터 map 기준 원점(0,0) global좌표
+    //     double mapOrigin_x = 453.088714;
+    //     double mapOrigin_y = 507.550078;
+    //     // 시뮬레이터 기준점 utm좌표
+    //     double ref_x = 278296.968;
+    //     double ref_y = 3980466.846;
+    //     double angle_radians = -MAP_ANGLE * M_PI / 180.0;
 
-        for (std::size_t i = 0; i < route.size(); ++i)
-        {
-            const auto& point = route[i];
-            double utm_x, utm_y;
-            Point2D mapPoint;
+    //     for (std::size_t i = 0; i < route.size(); ++i)
+    //     {
+    //         const auto& point = route[i];
+    //         double utm_x, utm_y;
+    //         Point2D mapPoint;
 
-            GPStoUTM(point.longitude, point.latitude, utm_x, utm_y);
-            utm_x -= ref_x;
-            utm_y -= ref_y;
-            mapPoint.x = (utm_x * cos(angle_radians) - utm_y * sin(angle_radians) - mapOrigin_x) * M_TO_10CM_PRECISION;
-            mapPoint.y = (utm_x * sin(angle_radians) + utm_y * cos(angle_radians) - mapOrigin_y) * M_TO_10CM_PRECISION;
+    //         GPStoUTM(point.longitude, point.latitude, utm_x, utm_y);
+    //         utm_x -= ref_x;
+    //         utm_y -= ref_y;
+    //         mapPoint.x = (utm_x * cos(angle_radians) - utm_y * sin(angle_radians) - mapOrigin_x) * M_TO_10CM_PRECISION;
+    //         mapPoint.y = (utm_x * sin(angle_radians) + utm_y * cos(angle_radians) - mapOrigin_y) * M_TO_10CM_PRECISION;
 
-            checkRange(mapPoint);
-            //checkRange 함수 수정 이후 반영 예정 
-            path_x[i] = mapPoint.x;
-            path_y[i] = mapPoint.y;
+    //         checkRange(mapPoint);
+    //         //checkRange 함수 수정 이후 반영 예정 
+    //         path_x[i] = mapPoint.x;
+    //         path_y[i] = mapPoint.y;
             
-            adcm::Log::Info() << "gpsToMapcoordinate 변환: (" 
-                            << point.longitude << ", " << point.latitude 
-                            << ") → (" << mapPoint.x << ", " << mapPoint.y << ")";
-        }
-    }
+    //         adcm::Log::Info() << "gpsToMapcoordinate 변환: (" 
+    //                         << point.longitude << ", " << point.latitude 
+    //                         << ") → (" << mapPoint.x << ", " << mapPoint.y << ")";
+    //     }
+    // }
     
-    else // 실증
-    {
-        INFO("[RiskAssessment] on-site");
+    // else // 실증
+    // {
+        INFO("[RiskAssessment] route 의 좌표변환");
         for (std::size_t i = 0; i < route.size(); ++i)
         {
             const auto& point = route[i];
@@ -179,8 +179,16 @@ void gpsToMapcoordinate(const routeVector& route,
             GPStoUTM(point.longitude, point.latitude, utm_x, utm_y);
             mapPoint.x = (utm_x - origin_x) * M_TO_10CM_PRECISION;
             mapPoint.y = (utm_y - origin_y) * M_TO_10CM_PRECISION;
+            checkRange(mapPoint);
+
+            path_x[i] = mapPoint.x;
+            path_y[i] = mapPoint.y;
+
+            adcm::Log::Info() << "gpsToMapcoordinate 변환: (" 
+                            << point.longitude << ", " << point.latitude 
+                            << ") → (" << mapPoint.x << ", " << mapPoint.y << ")";
         }
-    }
+    //}
 }
 
 double calculateDistance(const adcm::obstacleListStruct& obstacle1, 
@@ -224,47 +232,31 @@ double getMagnitude(Point2D point)
  */
 bool getTTC(const adcm::obstacleListStruct& obstacle, const adcm::vehicleListStruct& vehicle, double& ttc)
 {
-    constexpr double EPSILON = 1e-6;
-    // Calculate relative position and velocity of the obstacle with respect to the vehicle
-    double relative_position_x = obstacle.fused_position_x - vehicle.position_x;
-    double relative_position_y = obstacle.fused_position_y - vehicle.position_y;
-    double relative_velocity_x = obstacle.fused_velocity_x - vehicle.velocity_x;
-    double relative_velocity_y = obstacle.fused_velocity_y - vehicle.velocity_y;
+    constexpr double pos_unit_to_m = 0.1;
+    constexpr double EPS_V = 1e-3; // m/s 임계(상대속도 매우 작음)
 
-    adcm::Log::Info() << "① [TTC 계산 시작] 장애물ID=" << obstacle.obstacle_id
-                      << ", 클래스=" << to_string(static_cast<ObstacleClass>(obstacle.obstacle_class))
-                      << " | 상대위치=(" << relative_position_x << ", " << relative_position_y
-                      << "), 상대속도=(" << relative_velocity_x << ", " << relative_velocity_y << ")";
+    // 상대 위치(미터로 스케일) & 상대 속도(m/s)
+    const double rx = (obstacle.fused_position_x - vehicle.position_x) * pos_unit_to_m;
+    const double ry = (obstacle.fused_position_y - vehicle.position_y) * pos_unit_to_m;
+    const double vx =  obstacle.fused_velocity_x - vehicle.velocity_x; // m/s
+    const double vy =  obstacle.fused_velocity_y - vehicle.velocity_y; // m/s
 
-    // Prevent division by zero when relative_velocity_y is zero
-    if (std::abs(relative_velocity_y) < EPSILON || std::abs(relative_velocity_x) < EPSILON)
-    {
-        adcm::Log::Info() << "② [TTC 계산 불가] 장애물ID=" << obstacle.obstacle_id
-                          << ", 클래스=" << to_string(static_cast<ObstacleClass>(obstacle.obstacle_class))
-                          << " | 상대속도가 0에 가까움 (rel_vel_x=" << relative_velocity_x
-                          << ", rel_vel_y=" << relative_velocity_y << ")";
-        return false; // No meaningful TTC can be calculated
+    const double v2 = vx*vx + vy*vy;
+    if (v2 < EPS_V*EPS_V) {
+        // 상대속도 ≈ 0 → TTC 의미 없음
+        return false;
     }
 
-    // Calculate determinant (cross product) for relative motion
-    double c = (relative_velocity_x * relative_position_y) - (relative_velocity_y * relative_position_x);
+    // 접근 여부 확인: r·v < 0 (접근), >=0 이면 멀어지는 중
+    const double dot = rx*vx + ry*vy;
+    if (dot >= 0.0) return false;
 
-    // Calculate TTC using relative motion
-    double calculated_ttc = ((c / (2 * relative_velocity_y)) - relative_position_x) / relative_velocity_x;
+    // 표준식: 최근접 시각 (time-to-closest-approach)
+    const double t = -dot / v2;  // 단위: 초(s)
+    if (t <= 0.0) return false;
 
-    // Only assign TTC if it's positive (future collision)
-    if (calculated_ttc > 0) {
-        ttc = calculated_ttc;
-        adcm::Log::Info() << "⑤ [TTC 유효] 장애물ID=" << obstacle.obstacle_id
-                          << ", 클래스=" << to_string(static_cast<ObstacleClass>(obstacle.obstacle_class))
-                          << " | 최종 TTC=" << ttc;
-        return true;
-    }
-
-     adcm::Log::Info() << "⑥ [TTC 무효] 장애물ID=" << obstacle.obstacle_id
-                      << ", 클래스=" << to_string(static_cast<ObstacleClass>(obstacle.obstacle_class))
-                      << " | TTC가 0 이하 → 미래 충돌 아님";
-    return false;
+    ttc = t; // 초 단위
+    return true;
 }
 /**
  * @brief 장애물과 주어진 전역 경로(Path) 사이의 최소 거리를 계산하는 함수
@@ -351,34 +343,54 @@ bool calculateMinDistanceToPath(const adcm::obstacleListStruct& obstacle,
  * @return double   예측된 최소 거리 (단위: m 또는 cm, 시스템 기준에 따름)
  *                  유효한 값이 없을 경우 INVALID_RETURN_VALUE 반환
  */
-bool calculateMinDistanceLinear(const adcm::obstacleListStruct& obstacle, const adcm::vehicleListStruct& vehicle, double& min_distance)
+// 선형(속도 일정) 가정 하에서 해석식으로 최소거리 계산
+// - positions: dm(0.1 m) 가정, speeds: m/s
+// - 반환: min_distance (dm). 좌표가 m이면 pos_unit_to_m=1.0로 호출.
+// - horizon_s: 예측 시간창(초)
+bool calculateMinDistanceLinear(const adcm::obstacleListStruct& obstacle,
+                                const adcm::vehicleListStruct& vehicle,
+                                double& min_distance)
 {
-    // 최소 거리를 매우 큰 값으로 초기화
-    min_distance = std::numeric_limits<double>::max();
-    bool is_valid = false;
+    constexpr double horizon_s = 5.0;
+    constexpr double pos_unit_to_m = 0.1;
+    constexpr double EPS_V = 1e-3;  // m/s, 상대속도 거의 0
+    if (horizon_s <= 0.0) return false;
 
-    // Loop to calculate positions at intervals and find the minimum distance
-    for (double k = 0.0; k <= 5.0; k += 0.5)
-    {
-        // Compute positions at time `k`
-        double vehicle_future_x = vehicle.position_x + vehicle.velocity_x * k;
-        double vehicle_future_y = vehicle.position_y + vehicle.velocity_y * k;
-        double obstacle_future_x = obstacle.fused_position_x + obstacle.fused_velocity_x * k;
-        double obstacle_future_y = obstacle.fused_position_y + obstacle.fused_velocity_y * k;
+    // 1) 좌표를 미터로 변환
+    const double ox = obstacle.fused_position_x * pos_unit_to_m;
+    const double oy = obstacle.fused_position_y * pos_unit_to_m;
+    const double vx = vehicle.position_x        * pos_unit_to_m;
+    const double vy = vehicle.position_y        * pos_unit_to_m;
 
-        // Calculate the distance between future positions
-        double temp_distance = sqrt(pow(obstacle_future_x - vehicle_future_x, 2) +
-                                    pow(obstacle_future_y - vehicle_future_y, 2));
+    // 2) 상대 위치/속도 (미터, m/s)
+    const double rx = ox - vx;
+    const double ry = oy - vy;
+    const double vxr = obstacle.fused_velocity_x - vehicle.velocity_x; // m/s
+    const double vyr = obstacle.fused_velocity_y - vehicle.velocity_y; // m/s
 
-        // Update minimum distance if a smaller value is found
-        if (temp_distance < min_distance)
-        {
-            min_distance = temp_distance;
-            is_valid = true;
-        }
+    const double v2 = vxr*vxr + vyr*vyr;
+
+    // 3) 상대속도 거의 0 → 거리 변화 거의 없음: t=0에서의 거리 반환
+    if (v2 < EPS_V*EPS_V) {
+        const double d0_m = std::hypot(rx, ry);
+        // 반환은 입력 좌표 단위(dm)에 맞춰 환산
+        min_distance = d0_m / pos_unit_to_m;
+        return true;
     }
 
-    return is_valid;
+    // 4) 최근접 시각 t* 계산 및 [0, horizon_s]로 clamp
+    const double dot = rx*vxr + ry*vyr;          // r·v
+    double t_star = -dot / v2;                   // s
+    if (t_star < 0.0)        t_star = 0.0;
+    else if (t_star > horizon_s) t_star = horizon_s;
+
+    // 5) t*에서의 최소거리(m) → 반환 단위(dm)로 변환
+    const double rx_t = rx + vxr * t_star;
+    const double ry_t = ry + vyr * t_star;
+    const double dmin_m = std::hypot(rx_t, ry_t);
+
+    min_distance = dmin_m / pos_unit_to_m;       // dm 로 환산 (pos_unit_to_m=0.1)
+    return true;
 }
 
 /**

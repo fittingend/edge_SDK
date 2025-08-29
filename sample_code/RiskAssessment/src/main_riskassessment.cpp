@@ -355,17 +355,17 @@ void ThreadReceiveWorkInformation()
 
                 adcm::Log::Verbose() << " type : " << type;
 
-                if (!type) // 시뮬레이션이라면, (126.5482, 35.9398)의 utm좌표가 맵의 (0, 0)이 된다.
-                {
-                    origin_x = 278835;
-                    origin_y = 3980050;
-                    map_x = 2000;
-                    map_y = 1000;
-                    adcm::Log::Info() << "[WorkInfo] 시뮬레이션 테스트";
-                    adcm::Log::Info() << "맵 사이즈: (" << map_x << ", " << map_y << ")";
-                }
-                else // 실증이라면, boundary 좌표의 가장 작은 지점 min_x, min_y의 utm좌표가 맵의 (0, 0)이 된다.
-                {
+                // if (!type) // 시뮬레이션이라면, (126.5482, 35.9398)의 utm좌표가 맵의 (0, 0)이 된다.
+                // {
+                //     origin_x = 278835;
+                //     origin_y = 3980050;
+                //     map_x = 2000;
+                //     map_y = 1000;
+                //     adcm::Log::Info() << "[WorkInfo] 시뮬레이션 테스트";
+                //     adcm::Log::Info() << "맵 사이즈: (" << map_x << ", " << map_y << ")";
+                // }
+                // else // 실증이라면, boundary 좌표의 가장 작은 지점 min_x, min_y의 utm좌표가 맵의 (0, 0)이 된다.
+                // {
                     min_lon = work_boundary[0].lon;
                     min_lat = work_boundary[0].lat;
                     max_lon = work_boundary[0].lon;
@@ -388,7 +388,7 @@ void ThreadReceiveWorkInformation()
                     adcm::Log::Info() << "맵 사이즈: (" << map_x << ", " << map_y << ")";
                     origin_x = min_utm_x;
                     origin_y = min_utm_y;
-                }
+                //}
             }
         }
     }
