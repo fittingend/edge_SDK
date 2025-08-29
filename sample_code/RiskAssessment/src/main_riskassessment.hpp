@@ -31,7 +31,7 @@
 #include "work_information_subscriber.h"
 
 // ==== 상수 정의 ====
-#define STOP_VALUE 10                // 1초간 정지 시 정지 장애물로 판단
+#define STOP_VALUE 30                // STOP_VALUE 1이 약 300ms 30 이상이면 10초정도 정지 시 정지 장애물로 판단
 //#define INVALID_RETURN_VALUE 99999 
 #define M_TO_10CM_PRECISION 10 
 #define WHEEL_DIAMETER_M 0.71
