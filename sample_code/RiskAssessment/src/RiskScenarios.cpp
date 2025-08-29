@@ -1,10 +1,5 @@
 #include "main_riskassessment.hpp"
 
-//=====시나리오 #5. 전역변수=====
-static obstacleListVector ped_fix, ped_previous, ped_new_accumulated;
-static int newPedFound;
-static uint64_t init_ped_timestamp_max, new_ped_timestamp_min; 
-
 //=====시나리오 #6. 전역변수 =====
 static obstacleListVector veh_fix, veh_previous, veh_new_accumulated; 
 static int newVehFound; 
@@ -528,130 +523,205 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
  * 이때 ego 차량과 가장 가까운 차량을 대상으로 confidence 값을 계산하여 평가 목록에 추가.
  * confidence 값은 min_distance = 0이면 1.0 (가장 위험)이며 min_distance = 300이면 0.0 (경계선), min_distance > 300이면 0으로 클램핑
  */
-void evaluateScenario6(const obstacleListVector& obstacle_list, 
-                       const adcm::vehicleListStruct& ego_vehicle, 
-                       const std::vector<double>& path_x, 
+namespace {
+    using namespace adcm;
+    static std::vector<std::pair<std::uint64_t, double>> s6_first_seen_vec;
+    static std::vector<std::pair<std::uint64_t, double>> s6_anchor_windows;
+
+    inline void s6_reset_state() {
+        s6_first_seen_vec.clear();
+        s6_anchor_windows.clear();
+        Log::Info() << "[시나리오6] 상태 리셋";
+    }
+
+    inline double s6_getFirstSeen(std::uint64_t id) {
+        for (auto &p : s6_first_seen_vec)
+            if (p.first == id) return p.second;
+        return -1.0;
+    }
+    inline void s6_recordFirstSeen(std::uint64_t id, double ts) {
+        for (auto &p : s6_first_seen_vec)
+            if (p.first == id) { p.second = std::min(p.second, ts); return; }
+        s6_first_seen_vec.emplace_back(id, ts);
+    }
+    inline double s6_getAnchorStart(std::uint64_t id) {
+        for (auto &p : s6_anchor_windows)
+            if (p.first == id) return p.second;
+        return -1.0;
+    }
+    inline void s6_addAnchor(std::uint64_t id, double start_ts) {
+        if (s6_getAnchorStart(id) < 0.0) {
+            s6_anchor_windows.emplace_back(id, start_ts);
+            Log::Info() << "  · [앵커 생성] 차량ID=" << id << " | start=" << start_ts;
+        }
+    }
+    inline void s6_pruneAnchors(double now, double window_ms) {
+        size_t kept=0;
+        for (size_t i=0;i<s6_anchor_windows.size();++i) {
+            if (now - s6_anchor_windows[i].second <= window_ms) {
+                if (i!=kept) s6_anchor_windows[kept]=s6_anchor_windows[i];
+                kept++;
+            } else {
+                Log::Info() << "  · [만료] 앵커 차량ID="<< s6_anchor_windows[i].first;
+            }
+        }
+        s6_anchor_windows.resize(kept);
+    }
+    inline const adcm::obstacleListStruct* s6_findInCand(const obstacleListVector &cand, std::uint64_t id) {
+        for (auto &o : cand) if (o.obstacle_id==id) return &o;
+        return nullptr;
+    }
+}
+void evaluateScenario6(const obstacleListVector& obstacle_list,
+                       const adcm::vehicleListStruct& ego_vehicle,
+                       const std::vector<double>& path_x,
                        const std::vector<double>& path_y,
                        adcm::risk_assessment_Objects& riskAssessment)
 {
     using namespace adcm;
-    Log::Info() << "=============KATECH: scenario 6 START==============";
+    Log::Info() << "==================== [시나리오6 시작] ====================";
 
-    constexpr double MIN_DISTANCE = 500.0;
-    constexpr double MAX_DISTANCE = 600.0;
-    constexpr double DISTANCE_TO_PATH = 150.0;
-    constexpr double MAX_DISTANCE_BTW_OBS = 300.0;
-    constexpr double TIMESTAMP_THRESHOLD = 1000.0;
+    constexpr double EGO_MIN_DM          = 400.0;   // 50 m
+    constexpr double EGO_MAX_DM          = 600.0;   // 60 m
+    constexpr double DIST_TO_PATH_MAX_DM = 150.0;   // 15 m
+    constexpr double MAX_PAIR_DIST_DM    = 300.0;   // 30 m
+    constexpr double WINDOW_MS           = 10000.0; // 10초
+    constexpr double FRAME_GRACE_MS      = 120.0;
+    constexpr double EPS                 = 1e-6;
 
-    obstacleListVector veh_current, veh_new;
-    for (const auto& obs : obstacle_list) {
-        if (obs.obstacle_class < 1 || obs.obstacle_class > 19) continue;
-
-        double dist = calculateDistance(obs, ego_vehicle);
-        if (dist < MIN_DISTANCE || dist > MAX_DISTANCE) continue;
-
-        double path_dist;
-        if (calculateMinDistanceToPath(obs, path_x, path_y, path_dist) && path_dist <= DISTANCE_TO_PATH)
-            veh_current.push_back(obs);
-    }
-
-    if (veh_previous.empty()) {
-        veh_previous = veh_current;
-        Log::Info() << "=============KATECH: scenario 6 DONE (ego 차량 주변 (50m~60m) && 주행경로 15m 이내 차 없음)==============";
+    if (obstacle_list.empty()) {
+        Log::Info() << "[시나리오6] 입력 없음 → 종료";
         return;
     }
 
-    if (extractNewObstacles(veh_previous, veh_current, veh_new)) {
-        newVehFound++;
+    // 프레임 timestamp 범위
+    double frame_ts_min = std::numeric_limits<double>::max();
+    double frame_ts_max = std::numeric_limits<double>::lowest();
+    for (auto &o : obstacle_list) {
+        double ts = static_cast<double>(o.timestamp);
+        frame_ts_min = std::min(frame_ts_min, ts);
+        frame_ts_max = std::max(frame_ts_max, ts);
+    }
+    Log::Info() << "[시나리오6] 프레임 N=" << obstacle_list.size()
+                << " ts=[" << frame_ts_min << "," << frame_ts_max << "]";
 
-        if (newVehFound == 1) {
-            Log::Info() << "New vehicle first detected! 시나리오 6 계속";
-            veh_fix = veh_previous;
-            veh_new_accumulated = veh_new;
+    // (1) 후보 추출: 차량류 & 50~60m & 경로 15m
+    obstacleListVector cand;
+    for (auto &obs : obstacle_list) {
+        if (obs.obstacle_class < 1 || obs.obstacle_class > 19) continue;
 
-            init_veh_timestamp_max = 0.0;
-            for (const auto& obs : veh_fix)
-                init_veh_timestamp_max = std::max(init_veh_timestamp_max, obs.timestamp);
+        double d_ego_dm = calculateDistance(obs, ego_vehicle);
+        if (d_ego_dm < EGO_MIN_DM || d_ego_dm > EGO_MAX_DM) continue;
+
+        double path_dist_dm=0.0;
+        if (!calculateMinDistanceToPath(obs, path_x, path_y, path_dist_dm)) continue;
+        if (path_dist_dm > DIST_TO_PATH_MAX_DM) continue;
+
+        cand.push_back(obs);
+        Log::Info() << "  └─[후보차량] ID=" << obs.obstacle_id
+                    << " ts=" << obs.timestamp
+                    << " Ego거리=" << d_ego_dm/10.0 << "m"
+                    << " 경로거리=" << path_dist_dm/10.0 << "m";
+
+        // 처음 조건을 만족했다면 first_seen 기록 & 앵커 시작
+        double prev = s6_getFirstSeen(obs.obstacle_id);
+        s6_recordFirstSeen(obs.obstacle_id, obs.timestamp);
+        if (prev<0.0) s6_addAnchor(obs.obstacle_id, obs.timestamp);
+    }
+
+    if (cand.empty()) {
+        Log::Info() << "[시나리오6] 후보차량 없음 → 종료";
+        return;
+    }
+
+    // (2) 앵커 윈도우 유지
+    s6_pruneAnchors(frame_ts_max, WINDOW_MS);
+    Log::Info() << "[시나리오6] 활성 앵커 수=" << s6_anchor_windows.size();
+    if (s6_anchor_windows.empty()) {
+        Log::Info() << "[시나리오6] 활성 앵커 없음";
+        return;
+    }
+
+    // (3) 페어 탐지: 앵커 × 현재 후보
+    bool triggered=false;
+    double best_pair_dm=std::numeric_limits<double>::max();
+    adcm::obstacleListStruct best_a{}, best_b{};
+    
+    Log::Info() << "[시나리오6] 페어 탐지 시작: window=10s, 허용거리 ≤ 30 m";
+
+    for (auto &anc : s6_anchor_windows) {
+        auto anchor_id=anc.first; double t0=anc.second;
+        auto* anchor_ptr=s6_findInCand(cand,anchor_id);
+        if (!anchor_ptr) {
+            Log::Info() << "  └─[스킵] 앵커 차량 ID="<<anchor_id<<" 현재 프레임 후보에 없음";
+            continue;
         }
+        for (auto &obj:cand) {
+            if (obj.obstacle_id==anchor_id) continue;
+            double fs=s6_getFirstSeen(obj.obstacle_id);
+            if (fs<0.0) continue;
 
-        if (newVehFound >= 2) {
-            veh_new_accumulated.insert(veh_new_accumulated.end(), veh_new.begin(), veh_new.end());
+            bool both_start=(fs>=t0-EPS && fs<=t0+FRAME_GRACE_MS+EPS);
+            bool newcomer=(fs>t0+FRAME_GRACE_MS+EPS && fs<=t0+WINDOW_MS+EPS);
 
-            new_veh_timestamp_min = std::numeric_limits<double>::max();
-            for (const auto& obs : veh_new_accumulated)
-                new_veh_timestamp_min = std::min(new_veh_timestamp_min, obs.timestamp);
-
-            uint64_t timestamp_diff = new_veh_timestamp_min - init_veh_timestamp_max;
-            Log::Info() << "timestamp diff: " << timestamp_diff;
-
-            if (timestamp_diff < TIMESTAMP_THRESHOLD) {
-                double max_distance = 0.0;
-                for (size_t i = 0; i < veh_current.size(); ++i) {
-                    for (size_t j = i + 1; j < veh_current.size(); ++j) {
-                        if (veh_current[i].obstacle_class < 1 || veh_current[i].obstacle_class > 19 || 
-                            veh_current[j].obstacle_class < 1 || veh_current[j].obstacle_class > 19) continue;
-
-                        max_distance = std::max(max_distance, calculateDistance(veh_current[i], veh_current[j]));
-                    }
-                }
-
-                Log::Info() << "차량 간 최대거리: " << max_distance;
-                if (max_distance < MAX_DISTANCE_BTW_OBS) {
-                    double min_distance = std::numeric_limits<double>::max();
-                    obstacleListStruct closest_obs;
-
-                    for (const auto& obs : veh_current) {
-                        double dist = calculateDistance(obs, ego_vehicle);
-                        if (dist < min_distance) {
-                            min_distance = dist;
-                            closest_obs = obs;
-                        }
-                    }
-
-                    double confidence = clampValue((MAX_DISTANCE_BTW_OBS - min_distance) / MAX_DISTANCE_BTW_OBS, 0.0, 1.0);
-
-                    riskAssessmentStruct scenario6{
-                        .obstacle_id = closest_obs.obstacle_id,
-                        .hazard_class = SCENARIO_6,
-                        .confidence = confidence
-                    };
-
-                    Log::Info() << "위험판단 시나리오 #6 | ID: " << closest_obs.obstacle_id
-                                << " | confidence: " << confidence;
-
-                    riskAssessment.riskAssessmentList.push_back(scenario6);
-                    resetScenario6State();  // reset 함수명이 시나리오5에 묶여 있다면, 시나리오6용으로 변경 고려
-                }
-            } else {
-                Log::Info() << "[Scenario 6] 두 번째 차량 10초 내 미등장 → 초기화";
-                resetScenario6State();
+            if (!(both_start||newcomer)) {
+                Log::Info() << "    · [무시] 앵커(ID="<<anchor_id<<", start="<<t0<<"ms)"
+                            << " vs 후보(ID="<<obj.obstacle_id<<", first_seen="<<fs<<"ms)"
+                            << " -> 시간조건 불일치"
+                            << " (동시등장="<<(both_start?"예":"아니오")
+                            << ", 10초내신규="<<(newcomer?"예":"아니오")<<")";
+                continue;
+            }
+            double dij=calculateDistance(*anchor_ptr,obj);
+            Log::Info() << "    · [검사] 차량쌍(" << anchor_id << "," << obj.obstacle_id << ")"
+            << " | 유형=" << (both_start ? "동시등장" : "앵커-뉴커머")
+            << " | 페어거리=" << (dij/10.0) << " m";
+            if (dij<=MAX_PAIR_DIST_DM && dij<best_pair_dm){
+                best_pair_dm=dij;
+                best_a=*anchor_ptr; best_b=obj;
+                triggered=true;
             }
         }
     }
 
-    if (newVehFound == 1) {
-        uint64_t now_timestamp = 0.0;
-        for (const auto& obs : veh_current)
-            now_timestamp = std::max(now_timestamp, obs.timestamp);
-
-        uint64_t timestamp_diff = now_timestamp - init_veh_timestamp_max;
-
-        if (timestamp_diff >= TIMESTAMP_THRESHOLD) {
-            Log::Info() << "[Scenario 6] 첫 차량만 있고 10초 경과 → 상태 초기화";
-            resetScenario6State();
-        }
+    if (!triggered) {
+        Log::Info() << "[시나리오6] 유효 차량쌍 없음";
+        return;
     }
 
-    veh_previous = veh_current;
-    Log::Info() << "============= scenario 6 DONE =============";
-}
+    // (4) 트리거 처리
+    // - 결과는 'Ego와 더 가까운 차량 1대'만 추가
+    const double d_ego_a_dm = calculateDistance(best_a, ego_vehicle);
+    const double d_ego_b_dm = calculateDistance(best_b, ego_vehicle);
+    const bool   a_is_closer = (d_ego_a_dm <= d_ego_b_dm);
 
-void resetScenario6State() {
-    newVehFound = 0;
-    veh_fix.clear();
-    veh_new_accumulated.clear();
-    init_veh_timestamp_max = 0.0;
-    new_veh_timestamp_min = std::numeric_limits<double>::max();
+    const adcm::obstacleListStruct& chosen = a_is_closer ? best_a : best_b;
+    const double min_ego_dm = a_is_closer ? d_ego_a_dm : d_ego_b_dm;
+    const double min_ego_m  = min_ego_dm / 10.0;
+    const double pair_m     = best_pair_dm / 10.0;
+
+    // confidence = 400dm / (min_ego_dm) * 0.7  (단위 일치)
+    double confidence = (400.0 / std::max(min_ego_dm, 1.0)) * 0.7; // 0 보호
+    confidence = clampValue(confidence, 0.0, 1.0);
+
+    adcm::riskAssessmentStruct s6{};
+    s6.obstacle_id  = chosen.obstacle_id;
+    s6.hazard_class = SCENARIO_6;
+    s6.confidence   = confidence;
+
+    Log::Info() << "위험판단 시나리오 #6에 해당하는"
+                << " | 페어 IDs=(" << best_a.obstacle_id << "," << best_b.obstacle_id << ")"
+                << " | 페어거리=" << pair_m << " m"
+                << " | Ego-가까운차 ID=" << chosen.obstacle_id
+                << " | Ego-가까운차 거리=" << min_ego_m << " m"
+                << " | confidence=" << confidence
+                << " (계산식: 400dm/" << min_ego_dm << " *0.7)";
+
+    riskAssessment.riskAssessmentList.push_back(s6);
+
+    // 정책: 한 번 트리거 후 상태 초기화 (원하면 유지 정책으로 변경 가능)
+    s6_reset_state();
+    Log::Info()<<"==================== [시나리오6 종료] ====================";
 }
 
 void evaluateScenario7(const std::vector<double>& path_x, 
