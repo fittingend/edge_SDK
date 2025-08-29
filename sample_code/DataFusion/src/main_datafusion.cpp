@@ -389,41 +389,41 @@ void processVehicleData(FusionData &vehicleData,
 
 void gpsToMapcoordinate(VehicleData &vehicle)
 {
-    if (!type) // 시뮬레이션
-    {
-        // wps84기반 gps(global)좌표계를 작업환경 XY 기반의 Map 좌표계로 변환
-        // 시뮬레이터 map 기준 원점(0,0) global좌표
-        double mapOrigin_x = 453.088714;
-        double mapOrigin_y = 507.550078;
-        // 시뮬레이터 기준점 utm좌표
-        double ref_x = 278296.968;
-        double ref_y = 3980466.846;
-        double angle_radians = -MAP_ANGLE * M_PI / 180.0;
-        double velocity_ang = vehicle.velocity_ang;
-        double position_x = vehicle.position_long;
-        double position_y = vehicle.position_lat;
-        double mapVehicle_theta = (vehicle.heading_angle + MAP_ANGLE) * M_PI / 180.0; // 시뮬레이터 상에서 차량이 바라보는 각도
-        // 차량 utm 좌표로 변환
-        double distance_x, distance_y; // 차량의 utm x,y 좌표
-        GPStoUTM(position_x, position_y, distance_x, distance_y);
-        distance_x -= ref_x;
-        distance_y -= ref_y;
-        vehicle.position_x = (distance_x * cos(angle_radians) - distance_y * sin(angle_radians) - mapOrigin_x) * M_TO_10CM_PRECISION;
-        vehicle.position_y = (distance_x * sin(angle_radians) + distance_y * cos(angle_radians) - mapOrigin_y) * M_TO_10CM_PRECISION;
-        // 속도 (각속도 보정 임시 제외)
-        double velocity_x = vehicle.velocity_long;
-        double velocity_y = vehicle.velocity_lat;
-        vehicle.velocity_x = velocity_x * cos(angle_radians) - velocity_y * sin(angle_radians);
-        vehicle.velocity_y = velocity_x * sin(angle_radians) + velocity_y * cos(angle_radians);
-        // vehicle.velocity_x = (velocity_ang * (-sin(theta) * (position_x - alpha) + (cos(theta) * (position_y - beta)))) + (velocity_x * cos(theta)) + (velocity_y * sin(theta));
-        // vehicle.velocity_y = (velocity_ang * (-cos(theta) * (position_x - alpha) - (sin(theta) * (position_y - beta)))) + (velocity_x * -sin(theta)) + (velocity_y * cos(theta));
-        vehicle.heading_angle = -(vehicle.heading_angle + MAP_ANGLE - 90); // 맵에 맞춰 차량 각도 회전
-        // adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
-        // adcm::Log::Info() << "timestamp: " << vehicle.timestamp << " 차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.heading_angle << ")";
-    }
+    // if (!type) // 시뮬레이션
+    // {
+    //     // wps84기반 gps(global)좌표계를 작업환경 XY 기반의 Map 좌표계로 변환
+    //     // 시뮬레이터 map 기준 원점(0,0) global좌표
+    //     double mapOrigin_x = 453.088714;
+    //     double mapOrigin_y = 507.550078;
+    //     // 시뮬레이터 기준점 utm좌표
+    //     double ref_x = 278296.968;
+    //     double ref_y = 3980466.846;
+    //     double angle_radians = -MAP_ANGLE * M_PI / 180.0;
+    //     double velocity_ang = vehicle.velocity_ang;
+    //     double position_x = vehicle.position_long;
+    //     double position_y = vehicle.position_lat;
+    //     double mapVehicle_theta = (vehicle.heading_angle + MAP_ANGLE) * M_PI / 180.0; // 시뮬레이터 상에서 차량이 바라보는 각도
+    //     // 차량 utm 좌표로 변환
+    //     double distance_x, distance_y; // 차량의 utm x,y 좌표
+    //     GPStoUTM(position_x, position_y, distance_x, distance_y);
+    //     distance_x -= ref_x;
+    //     distance_y -= ref_y;
+    //     vehicle.position_x = (distance_x * cos(angle_radians) - distance_y * sin(angle_radians) - mapOrigin_x) * M_TO_10CM_PRECISION;
+    //     vehicle.position_y = (distance_x * sin(angle_radians) + distance_y * cos(angle_radians) - mapOrigin_y) * M_TO_10CM_PRECISION;
+    //     // 속도 (각속도 보정 임시 제외)
+    //     double velocity_x = vehicle.velocity_long;
+    //     double velocity_y = vehicle.velocity_lat;
+    //     vehicle.velocity_x = velocity_x * cos(angle_radians) - velocity_y * sin(angle_radians);
+    //     vehicle.velocity_y = velocity_x * sin(angle_radians) + velocity_y * cos(angle_radians);
+    //     // vehicle.velocity_x = (velocity_ang * (-sin(theta) * (position_x - alpha) + (cos(theta) * (position_y - beta)))) + (velocity_x * cos(theta)) + (velocity_y * sin(theta));
+    //     // vehicle.velocity_y = (velocity_ang * (-cos(theta) * (position_x - alpha) - (sin(theta) * (position_y - beta)))) + (velocity_x * -sin(theta)) + (velocity_y * cos(theta));
+    //     vehicle.heading_angle = -(vehicle.heading_angle + MAP_ANGLE - 90); // 맵에 맞춰 차량 각도 회전
+    //     // adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
+    //     // adcm::Log::Info() << "timestamp: " << vehicle.timestamp << " 차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.heading_angle << ")";
+    // }
 
-    else // 실증
-    {
+    // else // 실증
+    // {
     double position_x = vehicle.position_long;
     double position_y = vehicle.position_lat;
     double veh_utm_x, veh_utm_y; // 차량 utm 좌표
@@ -436,7 +436,7 @@ void gpsToMapcoordinate(VehicleData &vehicle)
     // vehicle.heading_angle = 90 - vehicle.heading_angle;
     // adcm::Log::Info() << "차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 before (" << position_x << " , " << position_y << " , " << velocity_x << " , " << velocity_y << ")";
     // adcm::Log::Info() << "timestamp: " << vehicle.timestamp << " 차량" << vehicle.vehicle_class << "gpsToMapcoordinate 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.heading_angle << ")";
-    }
+    // }
 }
 
 void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData vehicle)
@@ -1436,17 +1436,17 @@ void ThreadReceiveWorkInfo()
 
             type = data->type;
 
-            if (!type) // 시뮬레이션이라면, (126.5482, 35.9398)의 utm좌표가 맵의 (0, 0)이 된다.
-            {
-                origin_x = 278835;
-                origin_y = 3980050;
-                map_x = 2000;
-                map_y = 1000;
-                adcm::Log::Info() << "[WorkInfo] 시뮬레이션 테스트";
-                adcm::Log::Info() << "맵 사이즈: (" << map_x << ", " << map_y << ")";
-            }
-            else // 실증이라면, boundary 좌표의 가장 작은 지점 min_x, min_y의 utm좌표가 맵의 (0, 0)이 된다.
-            {
+            // if (!type) // 시뮬레이션이라면, (126.5482, 35.9398)의 utm좌표가 맵의 (0, 0)이 된다.
+            // {
+            //     origin_x = 278835;
+            //     origin_y = 3980050;
+            //     map_x = 2000;
+            //     map_y = 1000;
+            //     adcm::Log::Info() << "[WorkInfo] 시뮬레이션 테스트";
+            //     adcm::Log::Info() << "맵 사이즈: (" << map_x << ", " << map_y << ")";
+            // }
+            // else // 실증이라면, boundary 좌표의 가장 작은 지점 min_x, min_y의 utm좌표가 맵의 (0, 0)이 된다.
+            // {
             min_lon = work_boundary[0].lon;
             min_lat = work_boundary[0].lat;
             max_lon = work_boundary[0].lon;
@@ -1786,7 +1786,7 @@ void ThreadSend()
 
             // 맵전송
             // mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
-            mapData_provider.send(tempMap);
+            mapData_provider.send(mapData);
             auto endTime = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> duration = endTime - startTime;
             double elapsed_ms = duration.count();
@@ -1819,19 +1819,12 @@ void ThreadNATS()
             adcm::map_data_Objects tempMap = map_nats_queue.front();
             map_nats_queue.pop();
 
-            // map_data_object 의 생성시간 추가
-            auto now = std::chrono::system_clock::now();
-            auto mapData_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-            // adcm::Log::Info() << "Current timestamp in milliseconds: " << mapData_timestamp;
-            tempMap.timestamp = mapData_timestamp;
-
-
             // 맵전송
             // mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
             auto startTime = std::chrono::high_resolution_clock::now();
             adcm::Log::Info() << "NATS 전송 시작";
             // mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
-            NatsSend(tempMap);
+            NatsSend(mapData);
             auto endTime = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> duration = endTime - startTime;
             adcm::Log::Info() << "NATS 전송 완료, 소요 시간: " << duration.count() << " ms.";
