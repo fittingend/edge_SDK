@@ -266,7 +266,7 @@ void NatsSend(const adcm::map_data_Objects &mapData)
     static int mapData_count = 0;
     if (s == NATS_OK)
     {
-        const char *pubSubject = "mapdata.map";
+        const char *pubSubject = "mapDataObjects.create";
         natsManager->ClearJsonData();
         adcm::Log::Info() << "NATS conversion start!";
         std::string mapDataStr = convertMapDataToJsonString(mapData);
@@ -1248,7 +1248,7 @@ std::vector<adcm::roadListStruct> ConvertRoadZToRoadList(const VehicleData &vehi
     for (size_t i = 0; i < vehicle.road_z.size(); ++i)
     {
         uint8_t rz = vehicle.road_z[i];
-        int idx_struct = (rz <= 22) ? rz : 23; // 0~22는 그대로, 그 외(255 등)는 23번에
+        int idx_struct = (rz <= 22) ? rz : 23; // 0~22는 그대로, 그 외(255 등)는 23번
         size_t row = i / num_cols;
         size_t col = i % num_cols;
         double local_x = start_x + row * cell_size;
@@ -1260,6 +1260,7 @@ std::vector<adcm::roadListStruct> ConvertRoadZToRoadList(const VehicleData &vehi
         adcm::map2dIndex idx = {map_x, map_y};
         result[idx_struct].map_2d_location.push_back(idx);
     }
+
     // road_index별로 좌표가 있는 struct만 반환
     std::vector<adcm::roadListStruct> filtered;
     for (const auto &r : result)
@@ -1307,6 +1308,58 @@ void fillObstacleList(std::vector<ObstacleData> &obstacle_list_fill, const std::
         obstacle_list_fill.push_back(obstacle_to_push);
     }
     return;
+}
+
+// boundary 외부 영역을 road_index 255로 설정하는 함수
+void processWorkingAreaBoundary(const std::vector<BoundaryData>& work_boundary) {
+    std::vector<Point2D> boundary_points;
+    adcm::roadListStruct outside_area;
+    outside_area.road_index = 255;
+    outside_area.Timestamp = std::chrono::duration_cast<std::chrono::milliseconds>
+                            (std::chrono::system_clock::now().time_since_epoch()).count();
+
+    // boundary 점들을 맵 좌표계로 변환
+    for(const auto &point : work_boundary) {
+        double utm_x, utm_y;
+        GPStoUTM(point.lon, point.lat, utm_x, utm_y);
+        boundary_points.push_back({
+            (utm_x - origin_x) * 10,  // M_TO_10CM_PRECISION
+            (utm_y - origin_y) * 10
+        });
+    }
+
+    // 전체 맵을 순회하면서 boundary 외부 점들 찾기
+    for(int x = 0; x < map_x; x++) {
+        for(int y = 0; y < map_y; y++) {
+            Point2D pt = {static_cast<double>(x), static_cast<double>(y)};
+            
+            // Ray casting algorithm으로 점이 다각형 내부인지 확인
+            bool inside = false;
+            for(size_t i = 0, j = boundary_points.size() - 1; i < boundary_points.size(); j = i++) {
+                if(((boundary_points[i].y > pt.y) != (boundary_points[j].y > pt.y)) &&
+                   (pt.x < (boundary_points[j].x - boundary_points[i].x) * 
+                    (pt.y - boundary_points[i].y) / (boundary_points[j].y - boundary_points[i].y) 
+                    + boundary_points[i].x)) {
+                    inside = !inside;
+                }
+            }
+
+            // 외부 점이면 road_index 255에 추가
+            if(!inside) {
+                adcm::map2dIndex idx = {x, y};
+                outside_area.map_2d_location.push_back(idx);
+            }
+        }
+    }
+
+    // road_list에 외부 영역 추가
+    {
+        lock_guard<mutex> lock(mtx_map_someip);
+        mapData.road_list.clear();
+        if(!outside_area.map_2d_location.empty()) {
+            mapData.road_list.push_back(outside_area);
+        }
+    }
 }
 
 // hubData 수신
@@ -1469,6 +1522,8 @@ void ThreadReceiveWorkInfo()
             adcm::Log::Info() << "맵 사이즈: (" << map_x << ", " << map_y << ")";
             origin_x = min_utm_x;
             origin_y = min_utm_y;
+
+            processWorkingAreaBoundary(work_boundary);
         }
 
         sendEmptyMap = true;
