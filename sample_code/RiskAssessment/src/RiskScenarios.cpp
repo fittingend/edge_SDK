@@ -972,5 +972,118 @@ void evaluateScenario8(const std::vector<double>& path_x,
         }
     }
     adcm::Log::Info() << "=============KATECH: scenario 8 DONE==============";
+
 }
 
+//===== 시나리오 #9. 목적지 반경 30m 내 사각영역 유발 위험 판단 (정차 차량 포함 높이 weight) =====
+void evaluateScenario9(const obstacleListVector& obstacle_list,
+                       const adcm::vehicleListStruct& ego_vehicle,
+                       const std::vector<double>& path_x,
+                       const std::vector<double>& path_y,
+                       adcm::risk_assessment_Objects& riskAssessment)
+{
+    adcm::Log::Info() << "============= KATECH: Scenario 9 START =============";
+
+    if (path_x.empty() || path_y.empty() || path_x.size() != path_y.size()) {
+        adcm::Log::Info() << "[시나리오9] 전역경로 비정상 → 종료";
+        adcm::Log::Info() << "============= KATECH: Scenario 9 DONE =============";
+        return;
+    }
+
+    // 목적지 좌표 = 경로의 마지막 점
+    const double goal_x = path_x.back();
+    const double goal_y = path_y.back();
+
+    // 단위: dm(0.1m)
+    constexpr double GOAL_RADIUS_DM = 300.0;  // 30m
+    constexpr double EGO_THRESH_DM  = 400.0;  // 40m
+    constexpr double HEIGHT_MAX_M   = 3.0;    // 3m 이상이면 s_height=1
+
+    // 가중치(합계 = 1.0): 목적지/ego/높이
+    constexpr double W_GOAL   = 0.5;
+    constexpr double W_EGO    = 0.3;
+    constexpr double W_HEIGHT = 0.2;
+
+    auto distanceObsToPointDm = [](const auto& obs, double px, double py) -> double {
+        const double dx = (obs.fused_position_x - px);
+        const double dy = (obs.fused_position_y - py);
+        return std::sqrt(dx*dx + dy*dy) * 10.0; // m → dm
+    };
+
+    // Ego가 목적지 반경 30m 이내인지 선행 확인
+    const double ego_dx = (ego_vehicle.position_x - goal_x);
+    const double ego_dy = (ego_vehicle.position_y - goal_y);
+    const double ego_to_goal_dm = std::sqrt(ego_dx*ego_dx + ego_dy*ego_dy) * 10.0;
+    if (ego_to_goal_dm > GOAL_RADIUS_DM) {
+        adcm::Log::Info() << "[시나리오9] Ego 목적지 반경 밖(" << (ego_to_goal_dm/10.0) << " m) → 종료";
+        adcm::Log::Info() << "============= KATECH: Scenario 9 DONE =============";
+        return;
+    }
+
+    obstacleListVector candidates;
+    candidates.reserve(obstacle_list.size());
+
+    for (const auto& obs : obstacle_list) {
+        // (i) 정차 차량 OR 높이 1m 이상 정적 장애물
+        const bool cond_vehicle_stopped =
+            (obs.obstacle_class >= 1 && obs.obstacle_class <= 19 && obs.stop_count >= STOP_VALUE);
+        const bool cond_static_high =
+            (obs.obstacle_class >= 30 && obs.obstacle_class <= 49 && obs.fused_cuboid_z > 1.0);
+        if (!(cond_vehicle_stopped || cond_static_high)) continue;
+
+        // (ii) 목적지 반경 30m 이내
+        const double d_goal_dm = distanceObsToPointDm(obs, goal_x, goal_y);
+        if (d_goal_dm > GOAL_RADIUS_DM) continue;
+
+        adcm::Log::Info() << "[9 후보] ID=" << obs.obstacle_id
+                          << " | class=" << static_cast<int>(obs.obstacle_class)
+                          << " | stop_count=" << obs.stop_count
+                          << " | height=" << obs.fused_cuboid_z
+                          << " | 목적지거리=" << (d_goal_dm/10.0) << " m";
+        candidates.push_back(obs);
+    }
+
+    if (candidates.empty()) {
+        adcm::Log::Info() << "[시나리오9] 후보 없음 → 종료";
+        adcm::Log::Info() << "============= KATECH: Scenario 9 DONE =============";
+        return;
+    }
+
+    adcm::Log::Info() << "[시나리오9] 최종 후보군 " << candidates.size() << "개";
+
+    for (const auto& obs : candidates) {
+        // 목적지 근접도 (30m에서 0, 가까울수록 1)
+        const double d_goal_dm = distanceObsToPointDm(obs, goal_x, goal_y);
+        const double s_goal = clampValue((GOAL_RADIUS_DM - d_goal_dm) / GOAL_RADIUS_DM, 0.0, 1.0);
+
+        // Ego 근접도 (40m에서 0, 가까울수록 1)
+        const double d_ego_dm = calculateDistance(obs, ego_vehicle); // dm 반환 가정
+        const double s_ego = clampValue((EGO_THRESH_DM - d_ego_dm) / EGO_THRESH_DM, 0.0, 1.0);
+
+        // 높이 점수: 1m → 0, 3m 이상 → 1 (정차 차량과 정적 장애물 모두 적용)
+        double s_height = 0.0;
+        if (obs.fused_cuboid_z > 1.0) {
+            s_height = clampValue((obs.fused_cuboid_z - 1.0) / (HEIGHT_MAX_M - 1.0), 0.0, 1.0);
+        }
+
+        // 최종 컨피던스 (가중합)
+        double confidence = clampValue(W_GOAL * s_goal +
+                                       W_EGO  * s_ego  +
+                                       W_HEIGHT * s_height, 0.0, 1.0);
+
+        adcm::riskAssessmentStruct r{};
+        r.obstacle_id  = obs.obstacle_id;
+        r.hazard_class = SCENARIO_9;
+        r.confidence   = confidence;
+
+        adcm::Log::Info() << "[시나리오9 TRIGGER] ID=" << obs.obstacle_id
+                          << " | s_goal=" << s_goal
+                          << ", s_ego=" << s_ego
+                          << ", s_height=" << s_height
+                          << " | confidence=" << confidence;
+
+        riskAssessment.riskAssessmentList.push_back(r);
+    }
+
+    adcm::Log::Info() << "============= KATECH: Scenario 9 DONE =============";
+}

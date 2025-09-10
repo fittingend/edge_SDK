@@ -102,7 +102,9 @@ enum HazardClass {
     SCENARIO_5,
     SCENARIO_6,
     SCENARIO_7,
-    SCENARIO_8
+    SCENARIO_8,
+    SCENARIO_9,
+    SCENARIO_10
 };
 
 struct BoundaryData
