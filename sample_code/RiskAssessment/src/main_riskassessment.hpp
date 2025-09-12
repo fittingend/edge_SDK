@@ -162,6 +162,16 @@ void evaluateScenario8(const std::vector<double>& path_x,
                         const std::vector<double>& path_y,
                         const std::vector<adcm::map_2dListVector>& map_2d,
                         adcm::risk_assessment_Objects& riskAssessment);
+void evaluateScenario9(const obstacleListVector& obstacle_list,
+                        const adcm::vehicleListStruct& ego_vehicle,
+                        const std::vector<double>& path_x,
+                        const std::vector<double>& path_y,
+                        adcm::risk_assessment_Objects& riskAssessment);
+void evaluateScenario10(const obstacleListVector& obstacle_list,
+                        const adcm::vehicleListStruct& ego_vehicle,
+                        const std::vector<double>& path_x,
+                        const std::vector<double>& path_y,
+                        adcm::risk_assessment_Objects& riskAssessment);
 
 // ==== confidence 값을 clamp 해주는 clampValue 함수 선언 ====
 template <typename T>
@@ -203,12 +213,8 @@ void calculateShiftedLines(int &x_start, int &x_end, int &y_start, int &y_end, i
 void printObstacleList(obstacleListVector obstacle_list);
 // 문자열 변환 함수 선언
 const char* to_string(ObstacleClass cls);
-// ==== 위험판단 시나리오 선언
-
-void evaluateScenario1(const obstacleListVector& obstacle_list, 
-                       const adcm::vehicleListStruct& ego_vehicle, 
-                       adcm::risk_assessment_Objects& riskAssessment);
-
+double distanceObsToPointDm(const adcm::obstacleListStruct& obs, double px, double py);
+double distanceEgoToPointDm(const adcm::vehicleListStruct& vehicle, double px, double py);
 
 // ==== 템플릿 함수 ====
 template <typename T>

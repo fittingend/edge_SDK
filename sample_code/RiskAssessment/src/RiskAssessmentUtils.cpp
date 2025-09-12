@@ -598,3 +598,23 @@ void calculateShiftedLines(int &x_start, int &x_end, int &y_start, int &y_end, i
     up_c = original_c + shift;
     down_c = original_c - shift;
 }
+
+// 특장차와 임의의 좌표(px, py) 사이의 거리를 dm(0.1m) 단위로 계산
+double distanceEgoToPointDm(const adcm::vehicleListStruct& vehicle, double px, double py)
+{
+    double dx = vehicle.position_x - px;  // x축 차이 (dm)
+    double dy = vehicle.position_y - py;  // y축 차이 (dm)
+
+    double dist_dm = std::sqrt(dx * dx + dy * dy);  // 거리 (dm)
+    return dist_dm;
+}
+
+// 장애물과 임의의 좌표(px, py) 사이의 거리를 dm(0.1m) 단위로 계산
+double distanceObsToPointDm(const adcm::obstacleListStruct& obs, double px, double py)
+{
+    double dx = obs.fused_position_x - px;  // x축 차이 (dm)
+    double dy = obs.fused_position_y - py;  // y축 차이 (dm)
+
+    double dist_dm = std::sqrt(dx * dx + dy * dy);  // 거리 (dm)
+    return dist_dm;
+}

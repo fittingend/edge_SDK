@@ -283,7 +283,7 @@ void ThreadReceiveBuildPath()
                         std::lock_guard<std::mutex> lock(mtx_path);
                         path_x = std::vector<double>(route.size());
                         path_y = std::vector<double>(route.size());
-                        // 새로운 경로를 받으면 예전 변환값이 담긴 path_x 와 path_y 초기화
+                        // 새로운 경로를 받으면 예전 변환값이 담긴 path_x 와 path_y 를 route.size() 길이만큼 0.0 값이 채워진 상태로 초기화
                         adcm::Log::Info() << "특장차의 경로 좌표변환 진행";
                         gpsToMapcoordinate(route, path_x, path_y);
 
@@ -431,6 +431,8 @@ void ThreadRASS()
             evaluateScenario6(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
             //evaluateScenario7(path_x, path_y, map_2d, riskAssessment);
             //evaluateScenario8(path_x, path_y, map_2d, riskAssessment);
+            evaluateScenario9(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
+            evaluateScenario10(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
         }
 
         adcm::Log::Info() << "build riskAssessment data - size " << riskAssessment.riskAssessmentList.size();
