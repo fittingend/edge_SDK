@@ -33,7 +33,6 @@
 #include "munkres/src/munkres.h"
 #include "NatsConnManager.h"
 
-
 #define INVALID_VALUE 999
 
 #define M_TO_10CM_PRECISION 10.0
@@ -285,6 +284,8 @@ std::vector<ObstacleData> mergeAndCompareLists(
     const VehicleData &sub1Vehicle,
     const VehicleData &sub2Vehicle);
 
+void processWorkingAreaBoundary(const std::vector<BoundaryData>& work_boundary);
+
 // stop_count 업데이트
 void updateStopCount(std::vector<ObstacleData> &mergedList,
                      const std::vector<ObstacleData> &previousFusionList,
@@ -294,7 +295,7 @@ void updateStopCount(std::vector<ObstacleData> &mergedList,
 void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleData> &obstacle_list, const std::vector<VehicleData> &vehicles);
 
 // road_z를 맵 좌표로 변환해 roadListStruct로 만드는 함수
-std::vector<adcm::roadListStruct> ConvertRoadZToRoadList(const VehicleData& vehicle);
+std::vector<adcm::roadListStruct> ConvertRoadZToRoadList(const VehicleData &vehicle);
 
 // VehicleData -> vehicleListStruct(맵데이터 호환)
 adcm::vehicleListStruct ConvertToVehicleListStruct(const VehicleData &vehicle, std::vector<adcm::map_2dListVector> &map);
