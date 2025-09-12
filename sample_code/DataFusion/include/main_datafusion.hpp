@@ -15,6 +15,8 @@
 #include <unistd.h>
 #include <limits.h>
 #include <libgen.h>
+#include <dirent.h>
+#include <sys/stat.h>
 
 #include <ara/com/e2exf/status_handler.h>
 #include <ara/exec/execution_client.h>
@@ -55,6 +57,7 @@ double origin_y = 0;
 double min_utm_x, min_utm_y, max_utm_x, max_utm_y;
 
 bool useNats = false;
+bool saveJson = false;
 
 IDManager id_manager; // 장애물 ID 부여 및 반환
 bool ego = false;
@@ -216,6 +219,11 @@ adcm::map_data_Objects mapData;
 ///////////////////////////////////////////////////////////////////////
 // 함수 목록
 
+// nats json 만드는 함수
+Poco::JSON::Object::Ptr buildMapDataJson(const adcm::map_data_Objects &mapData);
+void saveMapDataJsonFile(const std::string &filePrefix, Poco::JSON::Object::Ptr mapObj, int &fileCount);
+void clearJsonDirectory(const std::string &dirPath);
+
 // wgs84 -> utm 좌표변환
 void GPStoUTM(double lat, double lon, double &utmX, double &utmY);
 
@@ -284,7 +292,7 @@ std::vector<ObstacleData> mergeAndCompareLists(
     const VehicleData &sub1Vehicle,
     const VehicleData &sub2Vehicle);
 
-void processWorkingAreaBoundary(const std::vector<BoundaryData>& work_boundary);
+void processWorkingAreaBoundary(const std::vector<BoundaryData> &work_boundary);
 
 // stop_count 업데이트
 void updateStopCount(std::vector<ObstacleData> &mergedList,

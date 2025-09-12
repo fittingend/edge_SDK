@@ -14,6 +14,7 @@ public:
     int serverPort;
     bool useSSL;
     bool useNats;
+    bool saveJson;
 
     void setDefault(boost::property_tree::ptree &pt, std::string &serverAddress, int &serverPort, bool &useSSL, bool &useNats)
     {
@@ -22,6 +23,7 @@ public:
         serverPort = pt.get<int>("Network.ServerPort", 0);                                            // 기본값 설정
         useSSL = pt.get<bool>("Network.UseSSL", false);                                               // 기본값 설정
         useNats = pt.get<bool>("Network.UseNats", false);
+        saveJson = pt.get<bool>("Network.SaveJson", false);
     }
 
     // INI 파일 읽기 및 멤버 변수 초기화
@@ -50,5 +52,7 @@ public:
         adcm::Log::Info() << "Server Address: " << serverAddress;
         adcm::Log::Info() << "Server Port: " << serverPort;
         adcm::Log::Info() << "Use SSL: " << (useSSL ? "true" : "false");
+        adcm::Log::Info() << "Use NATS: " << (useNats ? "true" : "false");
+        adcm::Log::Info() << "Save JSON: " << (saveJson ? "true" : "false");
     }
 };

@@ -94,11 +94,162 @@ void onMsg(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closur
     natsManager->NatsMsgDestroy(msg);
 }
 
+// 신규 최적화 버전
+Poco::JSON::Object::Ptr buildMapDataJson(const adcm::map_data_Objects &mapData)
+{
+    Poco::JSON::Object::Ptr mapObj = new Poco::JSON::Object;
+
+    // obstacle_list
+    Poco::JSON::Array::Ptr obsArr = new Poco::JSON::Array;
+    for (const auto &item : mapData.obstacle_list)
+    {
+        Poco::JSON::Object::Ptr obj = new Poco::JSON::Object;
+        obj->set("obstacle_id", item.obstacle_id);
+        obj->set("obstacle_class", item.obstacle_class);
+        obj->set("timestamp", item.timestamp);
+        obj->set("stop_count", item.stop_count);
+        obj->set("fused_cuboid_x", item.fused_cuboid_x);
+        obj->set("fused_cuboid_y", item.fused_cuboid_y);
+        obj->set("fused_cuboid_z", item.fused_cuboid_z);
+        obj->set("fused_heading_angle", item.fused_heading_angle);
+        obj->set("fused_position_x", item.fused_position_x);
+        obj->set("fused_position_y", item.fused_position_y);
+        obj->set("fused_position_z", item.fused_position_z);
+        obj->set("fused_velocity_x", item.fused_velocity_x);
+        obj->set("fused_velocity_y", item.fused_velocity_y);
+        obj->set("fused_velocity_z", item.fused_velocity_z);
+
+        Poco::JSON::Array::Ptr locArr = new Poco::JSON::Array;
+        for (const auto &pt : item.map_2d_location)
+        {
+            Poco::JSON::Object::Ptr loc = new Poco::JSON::Object;
+            loc->set("x", pt.x);
+            loc->set("y", pt.y);
+            locArr->add(loc);
+        }
+        obj->set("map_2d_location", locArr);
+
+        obsArr->add(obj);
+    }
+    mapObj->set("obstacle_list", obsArr);
+
+    // vehicle_list
+    Poco::JSON::Array::Ptr vehArr = new Poco::JSON::Array;
+    for (const auto &item : mapData.vehicle_list)
+    {
+        Poco::JSON::Object::Ptr obj = new Poco::JSON::Object;
+        obj->set("vehicle_class", item.vehicle_class);
+        obj->set("timestamp", item.timestamp);
+        obj->set("position_long", item.position_long);
+        obj->set("position_lat", item.position_lat);
+        obj->set("position_height", item.position_height);
+        obj->set("position_x", item.position_x);
+        obj->set("position_y", item.position_y);
+        obj->set("position_z", item.position_z);
+        obj->set("heading_angle", item.heading_angle);
+        obj->set("velocity_long", item.velocity_long);
+        obj->set("velocity_lat", item.velocity_lat);
+        obj->set("velocity_x", item.velocity_x);
+        obj->set("velocity_y", item.velocity_y);
+        obj->set("velocity_ang", item.velocity_ang);
+
+        Poco::JSON::Array::Ptr locArr = new Poco::JSON::Array;
+        for (const auto &pt : item.map_2d_location)
+        {
+            Poco::JSON::Object::Ptr loc = new Poco::JSON::Object;
+            loc->set("x", pt.x);
+            loc->set("y", pt.y);
+            locArr->add(loc);
+        }
+        obj->set("map_2d_location", locArr);
+
+        vehArr->add(obj);
+    }
+    mapObj->set("vehicle_list", vehArr);
+
+    /*
+        // road_list
+        Poco::JSON::Array::Ptr roadArr = new Poco::JSON::Array;
+        for (const auto &road : mapData.road_list)
+        {
+            Poco::JSON::Object::Ptr obj = new Poco::JSON::Object;
+            obj->set("road_index", road.road_index);
+            obj->set("timestamp", road.Timestamp);
+
+            Poco::JSON::Array::Ptr locArr = new Poco::JSON::Array;
+            for (const auto &pt : road.map_2d_location)
+            {
+                Poco::JSON::Object::Ptr loc = new Poco::JSON::Object;
+                loc->set("x", pt.x);
+                loc->set("y", pt.y);
+                locArr->add(loc);
+            }
+            obj->set("map_2d_location", locArr);
+
+            roadArr->add(obj);
+        }
+        mapObj->set("road_list", roadArr);
+    */
+
+    return mapObj;
+}
+
+void saveMapDataJsonFile(const std::string &filePrefix, Poco::JSON::Object::Ptr mapObj, int &fileCount)
+{
+    std::string dirPath = "/opt/DataFusion/json/";
+
+    std::ostringstream fileNameStream;
+    fileNameStream << dirPath << filePrefix << "_" << fileCount << ".json";
+    std::string fileName = fileNameStream.str();
+
+    std::ofstream outFile(fileName);
+    if (outFile.is_open())
+    {
+        Poco::JSON::Stringifier::stringify(mapObj, outFile, 4); // pretty print
+        outFile.close();
+        fileCount++;
+        adcm::Log::Info() << "JSON data stored in " << fileName;
+    }
+    else
+    {
+        adcm::Log::Error() << "Failed to open file " << fileName << " for writing!";
+    }
+}
+
+void clearJsonDirectory(const std::string &dirPath)
+{
+    DIR *dir = opendir(dirPath.c_str());
+    if (!dir)
+        return; // 디렉토리가 없으면 바로 종료
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != nullptr)
+    {
+        std::string fileName = entry->d_name;
+
+        // "."과 ".." 제외
+        if (fileName == "." || fileName == "..")
+            continue;
+
+        std::string fullPath = dirPath + "/" + fileName;
+
+        // 파일인지 확인
+        struct stat st;
+        if (stat(fullPath.c_str(), &st) == 0 && S_ISREG(st.st_mode))
+        {
+            remove(fullPath.c_str()); // 실패 시에도 그냥 넘어감
+        }
+    }
+
+    closedir(dir);
+}
+// 구버전
 std::string convertMapDataToJsonString(const adcm::map_data_Objects &mapData)
 {
     std::ostringstream oss; // Use a string stream for easier manipulation
     oss << "{\n";           // Start the JSON object
 
+    /* map_2d는 제외
     // Convert map_2d to JSON
     oss << "    \"map_2d\": [\n";
     for (size_t i = 0; i < mapData.map_2d.size(); ++i)
@@ -128,6 +279,7 @@ std::string convertMapDataToJsonString(const adcm::map_data_Objects &mapData)
         oss << "\n"; // Newline for readability
     }
     oss << "    ],\n";
+    */
 
     // Convert obstacle_list to JSON
     oss << "    \"obstacle_list\": [\n";
@@ -251,6 +403,7 @@ void saveToJsonFile(const std::string &key, const std::string &value, int &fileC
     // Increment the file count for the next call
     ++fileCount;
 }
+
 void NatsStart()
 {
     if (firstTime == true)
@@ -261,6 +414,7 @@ void NatsStart()
         firstTime = false;
     }
 }
+
 void NatsSend(const adcm::map_data_Objects &mapData)
 {
     static int mapData_count = 0;
@@ -269,14 +423,19 @@ void NatsSend(const adcm::map_data_Objects &mapData)
         const char *pubSubject = "mapDataObjects.create";
         natsManager->ClearJsonData();
         adcm::Log::Info() << "NATS conversion start!";
-        std::string mapDataStr = convertMapDataToJsonString(mapData);
+        // std::string mapDataStr = convertMapDataToJsonString(mapData);
+        Poco::JSON::Object::Ptr mapObj = buildMapDataJson(mapData);
         adcm::Log::Info() << "NATS conversion done!";
-        natsManager->addJsonData("mapData", mapDataStr);
+        natsManager->addJsonData("mapData", mapObj);
         adcm::Log::Info() << "NATS make Json Data!";
         natsManager->NatsPublishJson(pubSubject);
         adcm::Log::Info() << "NATS publish Json!"; // publish가 오래 걸림
-        // saveToJsonFile("mapData", mapDataStr, mapData_count);
-        // adcm::Log::Info() << "NATS save Json file!";
+        if (saveJson)
+        {
+            // saveToJsonFile("mapData", mapDataStr, mapData_count);
+            saveMapDataJsonFile("mapData", mapObj, mapData_count);
+            adcm::Log::Info() << "NATS save Json file!";
+        }
     }
     else
     {
@@ -485,6 +644,7 @@ void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleDa
         // adcm::Log::Info() << iter->obstacle_class << " 장애물 relativeToMap 좌표변환 after (" << iter->fused_position_x << " , " << iter->fused_position_y << " , " << iter->fused_velocity_x << " , " << iter->fused_velocity_y << ")";
     }
 }
+
 // 레이캐스팅 대체 삼각형 내부포함 판단
 bool isPointInTriangle(const Point2D &pt, const Point2D &v1, const Point2D &v2, const Point2D &v3)
 {
@@ -1224,10 +1384,9 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
     return;
 }
 
-// road_z를 맵 좌표로 변환해 roadListStruct로 만드는 함수
+// road_z -> road_list
 std::vector<adcm::roadListStruct> ConvertRoadZToRoadList(const VehicleData &vehicle)
 {
-    // road_index별로 좌표를 그룹화하여 roadListStruct 24개 생성
     std::vector<adcm::roadListStruct> result(24); // 0~22, 255
     for (int i = 0; i < 23; ++i)
     {
@@ -1240,35 +1399,39 @@ std::vector<adcm::roadListStruct> ConvertRoadZToRoadList(const VehicleData &vehi
     double car_x = vehicle.position_x;
     double car_y = vehicle.position_y;
     double theta = vehicle.heading_angle * M_PI / 180.0;
-    double cell_size = 0.1; // 10cm
-    double start_x = 3.0;   // 차량 앞 3m 제외
-    double box_width = 4.0;
-    size_t num_rows = 70;
-    size_t num_cols = 40;
+
+    double cell_size = 0.1; // 10 cm 단위
+    double start_x = 3.0;   // 전방 3m 제외
+    double end_x = 10.0;    // 전방 최대 10m
+    double box_width = 4.0; // 좌측 2m ~ 우측 2m
+
+    size_t num_rows = 70; // 전방 거리: (10m-3m)/0.1 = 70
+    size_t num_cols = 40; // 좌우 거리: 4m/0.1 = 40
+
     for (size_t i = 0; i < vehicle.road_z.size(); ++i)
     {
         uint8_t rz = vehicle.road_z[i];
-        int idx_struct = (rz <= 22) ? rz : 23; // 0~22는 그대로, 그 외(255 등)는 23번
-        size_t row = i / num_cols;
-        size_t col = i % num_cols;
-        double local_x = start_x + row * cell_size;
+        int idx_struct = (rz <= 22) ? rz : 23;
+
+        size_t col = i / num_rows; // 0 ~ 39
+        size_t row = i % num_rows; // 0 ~ 69
+
+        // row : 0 -> 전방 10m, row : 69 -> 전방 3m
+        double local_x = end_x - row * cell_size;
         double local_y = -box_width / 2 + col * cell_size;
-        double rotated_x = local_x * sin(theta) * (-1) + local_y * cos(theta) * (-1);
-        double rotated_y = local_x * cos(theta) + local_y * sin(theta) * (-1);
+
+        // 회전 변환
+        double rotated_x = -local_x * sin(theta) - local_y * cos(theta);
+        double rotated_y = local_x * cos(theta) - local_y * sin(theta);
+
         double map_x = car_x + rotated_x;
         double map_y = car_y + rotated_y;
+
         adcm::map2dIndex idx = {map_x, map_y};
         result[idx_struct].map_2d_location.push_back(idx);
     }
 
-    // road_index별로 좌표가 있는 struct만 반환
-    std::vector<adcm::roadListStruct> filtered;
-    for (const auto &r : result)
-    {
-        if (!r.map_2d_location.empty())
-            filtered.push_back(r);
-    }
-    return filtered;
+    return result;
 }
 
 // 차량 데이터 저장
@@ -1311,41 +1474,45 @@ void fillObstacleList(std::vector<ObstacleData> &obstacle_list_fill, const std::
 }
 
 // boundary 외부 영역을 road_index 255로 설정하는 함수
-void processWorkingAreaBoundary(const std::vector<BoundaryData>& work_boundary) {
+void processWorkingAreaBoundary(const std::vector<BoundaryData> &work_boundary)
+{
     std::vector<Point2D> boundary_points;
     adcm::roadListStruct outside_area;
     outside_area.road_index = 255;
-    outside_area.Timestamp = std::chrono::duration_cast<std::chrono::milliseconds>
-                            (std::chrono::system_clock::now().time_since_epoch()).count();
+    outside_area.Timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 
     // boundary 점들을 맵 좌표계로 변환
-    for(const auto &point : work_boundary) {
+    for (const auto &point : work_boundary)
+    {
         double utm_x, utm_y;
         GPStoUTM(point.lon, point.lat, utm_x, utm_y);
-        boundary_points.push_back({
-            (utm_x - origin_x) * 10,  // M_TO_10CM_PRECISION
-            (utm_y - origin_y) * 10
-        });
+        boundary_points.push_back({(utm_x - origin_x) * 10, // M_TO_10CM_PRECISION
+                                   (utm_y - origin_y) * 10});
     }
 
     // 전체 맵을 순회하면서 boundary 외부 점들 찾기
-    for(int x = 0; x < map_x; x++) {
-        for(int y = 0; y < map_y; y++) {
+    for (int x = 0; x < map_x; x++)
+    {
+        for (int y = 0; y < map_y; y++)
+        {
             Point2D pt = {static_cast<double>(x), static_cast<double>(y)};
-            
+
             // Ray casting algorithm으로 점이 다각형 내부인지 확인
             bool inside = false;
-            for(size_t i = 0, j = boundary_points.size() - 1; i < boundary_points.size(); j = i++) {
-                if(((boundary_points[i].y > pt.y) != (boundary_points[j].y > pt.y)) &&
-                   (pt.x < (boundary_points[j].x - boundary_points[i].x) * 
-                    (pt.y - boundary_points[i].y) / (boundary_points[j].y - boundary_points[i].y) 
-                    + boundary_points[i].x)) {
+            for (size_t i = 0, j = boundary_points.size() - 1; i < boundary_points.size(); j = i++)
+            {
+                if (((boundary_points[i].y > pt.y) != (boundary_points[j].y > pt.y)) &&
+                    (pt.x < (boundary_points[j].x - boundary_points[i].x) *
+                                    (pt.y - boundary_points[i].y) / (boundary_points[j].y - boundary_points[i].y) +
+                                boundary_points[i].x))
+                {
                     inside = !inside;
                 }
             }
 
             // 외부 점이면 road_index 255에 추가
-            if(!inside) {
+            if (!inside)
+            {
                 adcm::map2dIndex idx = {x, y};
                 outside_area.map_2d_location.push_back(idx);
             }
@@ -1356,7 +1523,8 @@ void processWorkingAreaBoundary(const std::vector<BoundaryData>& work_boundary) 
     {
         lock_guard<mutex> lock(mtx_map_someip);
         mapData.road_list.clear();
-        if(!outside_area.map_2d_location.empty()) {
+        if (!outside_area.map_2d_location.empty())
+        {
             mapData.road_list.push_back(outside_area);
         }
     }
@@ -1982,8 +2150,12 @@ int main(int argc, char *argv[])
         nats_server_url = config.serverAddress + ":" + to_string(config.serverPort);
     }
     adcm::Log::Info() << "NATS_SERVER_URL: " << nats_server_url;
+
     if (config.useNats == true)
         useNats = true;
+
+    if (config.saveJson == true)
+        saveJson = true;
 
     if (useNats)
         adcm::Log::Info() << "NATS ON";
@@ -1995,6 +2167,7 @@ int main(int argc, char *argv[])
     thread_list.push_back(std::thread(ThreadKatech));
     thread_list.push_back(std::thread(ThreadReceiveEdgeInfo));
     thread_list.push_back(std::thread(ThreadSend));
+
     if (useNats)
         thread_list.push_back(std::thread(ThreadNATS));
 

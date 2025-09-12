@@ -6,6 +6,7 @@
 
 #include "nats/nats.h"
 #include "Poco/JSON/Object.h"
+#include "Poco/JSON/Array.h"
 
 #include "ara/core/vector.h"
 #include "adcm/impl_type_obstacleliststruct.h"
