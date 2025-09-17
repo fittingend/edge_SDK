@@ -225,6 +225,7 @@ adcm::map_data_Objects mapData;
 Poco::JSON::Object::Ptr buildMapDataJson(const adcm::map_data_Objects &mapData);
 void saveMapDataJsonFile(const std::string &filePrefix, Poco::JSON::Object::Ptr mapObj, int &fileCount);
 void clearJsonDirectory(const std::string &dirPath);
+void makeJSON(const adcm::map_data_Objects &mapData);
 
 // wgs84 -> utm 좌표변환
 void GPStoUTM(double lat, double lon, double &utmX, double &utmY);

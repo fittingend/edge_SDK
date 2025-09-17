@@ -430,12 +430,6 @@ void NatsSend(const adcm::map_data_Objects &mapData)
         adcm::Log::Info() << "NATS make Json Data!";
         natsManager->NatsPublishJson(pubSubject);
         adcm::Log::Info() << "NATS publish Json!"; // publish가 오래 걸림
-        if (saveJson)
-        {
-            // saveToJsonFile("mapData", mapDataStr, mapData_count);
-            saveMapDataJsonFile("mapData", mapObj, mapData_count);
-            adcm::Log::Info() << "NATS save Json file!";
-        }
     }
     else
     {
@@ -453,6 +447,18 @@ void NatsSend(const adcm::map_data_Objects &mapData)
 }
 
 #endif
+
+void makeJSON(const adcm::map_data_Objects &mapData)
+{
+    static int mapData_count = 0;
+    if (saveJson)
+    {
+        // std::string mapDataStr = convertMapDataToJsonString(mapData);
+        Poco::JSON::Object::Ptr mapObj = buildMapDataJson(mapData);
+        saveMapDataJsonFile("mapData", mapObj, mapData_count);
+        adcm::Log::Info() << "save Json file!";
+    }
+}
 
 void GPStoUTM(double lon, double lat, double &utmX, double &utmY)
 {
@@ -2016,10 +2022,12 @@ void ThreadSend()
             auto mapData_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
             // adcm::Log::Info() << "Current timestamp in milliseconds: " << mapData_timestamp;
             tempMap.timestamp = mapData_timestamp;
-
+            // json 저장
+            if (saveJson)
+                makeJSON(tempMap);
             // 맵전송
             // mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
-            mapData_provider.send(mapData);
+            mapData_provider.send(tempMap);
             auto endTime = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> duration = endTime - startTime;
             double elapsed_ms = duration.count();
@@ -2178,7 +2186,7 @@ int main(int argc, char *argv[])
     thread_list.push_back(std::thread(ThreadReceiveEdgeInfo));
     thread_list.push_back(std::thread(ThreadSend));
 
-    if (useNats)
+    if (saveJson)
     {
         const char *path = "/opt/DataFusion/json";
         DIR *dir = opendir(path);

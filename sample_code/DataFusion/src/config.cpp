@@ -13,8 +13,8 @@ public:
     std::string serverAddress;
     int serverPort;
     bool useSSL;
-    bool useNats;
-    bool saveJson;
+    bool useNats=false;
+    bool saveJson=false;
 
     void setDefault(boost::property_tree::ptree &pt, std::string &serverAddress, int &serverPort, bool &useSSL, bool &useNats)
     {
