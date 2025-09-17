@@ -16,6 +16,7 @@
 #include <limits.h>
 #include <libgen.h>
 #include <dirent.h>
+#include <unistd.h>
 #include <sys/stat.h>
 
 #include <ara/com/e2exf/status_handler.h>
@@ -41,6 +42,7 @@
 #define MAP_ANGLE -86
 
 using namespace std;
+
 // 사이즈는 10cm 단위 기준
 
 ///////////////////////////////////////////////////////////////////////

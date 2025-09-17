@@ -669,7 +669,7 @@ bool isPointInTriangle(const Point2D &pt, const Point2D &v1, const Point2D &v2, 
     return (a >= 0) && (b >= 0) && (c >= 0);
 }
 
-/* 기존 레이캐스팅 기반
+// 기존 레이캐스팅 기반
 void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, VehicleData &vehicle)
 {
     Point2D points[] = {p0, p1, p2, p3};
@@ -717,6 +717,7 @@ void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, Vehi
     }
 }
 
+/*
 void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std::vector<ObstacleData>::iterator iter)
 {
     if (iter == std::vector<ObstacleData>::iterator())
@@ -767,7 +768,7 @@ void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std:
 }
 */
 
-// barycentric 알고리즘 기반
+/* barycentric 알고리즘 기반
 void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, VehicleData &vehicle)
 {
     Point2D points[] = {p0, p1, p2, p3};
@@ -792,6 +793,7 @@ void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, Vehi
         }
     }
 }
+*/
 
 void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std::vector<ObstacleData>::iterator iter)
 {
@@ -861,7 +863,6 @@ void find4VerticesVehicle(VehicleData &target_vehicle)
     checkRange(RU);
     checkRange(RL);
     checkRange(LL);
-
     // road_z -> road_index 변경
     // generateRoadZValue(target_vehicle, map_2d_test);
 
@@ -1633,20 +1634,29 @@ void ThreadReceiveWorkInfo()
         {
             auto data = workInformation_subscriber.getEvent();
 
-            main_vehicle_size.length = data->main_vehicle.length;
-            main_vehicle_size.width = data->main_vehicle.width;
+            main_vehicle_size.length = data->main_vehicle.length / 100.0;
+            main_vehicle_size.width = data->main_vehicle.width / 100.0;
             if (main_vehicle_size.length != 0) // 메인차량이 있다면 workego = true
+            {
                 workego = true;
+                adcm::Log::Info() << "[WorkInfo] 메인차량 길이: " << main_vehicle_size.length << ", 폭: " << main_vehicle_size.width;
+            }
 
             sub_vehicle_size.clear();
             for (const auto &sub_vehicle : data->sub_vehicle)
             {
-                sub_vehicle_size.push_back({sub_vehicle.length, sub_vehicle.width});
+                sub_vehicle_size.push_back({sub_vehicle.length / 100, sub_vehicle.width / 100});
             }
             if (sub_vehicle_size.size() >= 1) // 서브차량이 있다면 work상태 true
+            {
                 worksub1 = true;
+                adcm::Log::Info() << "[WorkInfo] 서브차량1 길이: " << sub_vehicle_size[0].length << ", 폭: " << sub_vehicle_size[0].width;
+            }
             if (sub_vehicle_size.size() >= 2)
+            {
                 worksub2 = true;
+                adcm::Log::Info() << "[WorkInfo] 서브차량2 길이: " << sub_vehicle_size[1].length << ", 폭: " << sub_vehicle_size[1].width;
+            }
 
             adcm::Log::Info() << "[WorkInfo] workego: " << workego << ", worksub1: " << worksub1 << ", worksub2: " << worksub2;
             work_boundary.clear();
@@ -2169,7 +2179,46 @@ int main(int argc, char *argv[])
     thread_list.push_back(std::thread(ThreadSend));
 
     if (useNats)
+    {
+        const char *path = "/opt/DataFusion/json";
+        DIR *dir = opendir(path);
+        if (!dir)
+        {
+            // 디렉토리 없으면 생성
+            if (mkdir(path, 0755) == 0)
+            {
+                adcm::Log::Info() << "Json 폴더 생성 완료: " << path;
+                dir = opendir(path); // 생성 후 다시 열기
+            }
+            else
+            {
+                adcm::Log::Error() << "Json 폴더 생성 실패: " << path;
+            }
+        }
+
+        if (dir)
+        {
+            dirent *entry;
+            while ((entry = readdir(dir)) != nullptr)
+            {
+                if (entry->d_name[0] == '.')
+                    continue; // . , .. 무시
+                if (entry->d_type == DT_REG)
+                { // 일반 파일만
+                    std::string filePath = std::string(path) + "/" + entry->d_name;
+                    unlink(filePath.c_str());
+                }
+            }
+            adcm::Log::Info() << "Json 파일 삭제 완료" << path;
+            closedir(dir);
+        }
+        else
+        {
+            adcm::Log::Error() << "Could not open directory: " << path;
+        }
+
         thread_list.push_back(std::thread(ThreadNATS));
+    }
 
     adcm::Log::Info() << "Thread join";
     for (int i = 0; i < static_cast<int>(thread_list.size()); i++)
