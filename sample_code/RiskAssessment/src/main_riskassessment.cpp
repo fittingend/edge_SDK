@@ -74,6 +74,7 @@ std::vector<double> path_x, path_y;
 obstacleListVector obstacle_list;
 adcm::vehicleListStruct ego_vehicle, sub_vehicle_1, sub_vehicle_2, sub_vehicle_3, sub_vehicle_4;
 adcm::risk_assessment_Objects riskAssessment;
+uint64_t timestamp_map = 0; 
 
 std::uint8_t type = 0; // 시뮬레이션 = 0, 실증 = 1
 
@@ -149,6 +150,7 @@ void ThreadReceiveMapData()
                 obstacle_list = data->obstacle_list;
                 auto vehicle_list = data->vehicle_list;
                 auto road_list = data->road_list;
+                timestamp_map = data->timestamp;
 
                 adcm::Log::Info() << "[DEBUG] map_2d assign 완료";
 
@@ -497,6 +499,11 @@ void ThreadSend()
         adcm::Log::Info() << "→ NATS 전송 소요 시간: " << nats_duration_ms << " ms";
 #endif
 
+#ifdef ENABLE_JSON
+
+        SaveAsJson(riskAssessment);
+
+#endif
         auto t_end_total = std::chrono::high_resolution_clock::now();
         auto total_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end_total - t_start_total).count();
         adcm::Log::Info() << "→ 전체 전송 처리 시간: " << total_duration_ms << " ms";

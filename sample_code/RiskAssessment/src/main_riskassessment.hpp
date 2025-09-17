@@ -37,6 +37,8 @@
 #define WHEEL_DIAMETER_M 0.71
 #define MAP_ANGLE -86
 
+extern uint64_t timestamp_map; 
+
 // 맵 x, y 방향 사이즈
 extern std::uint16_t map_x;
 extern std::uint16_t map_y;

@@ -1,9 +1,18 @@
 #include "NatsHandler.hpp"
+#include "../main_riskassessment.hpp"
 #include <sstream>
 #include <fstream>
 #include <filesystem>
 #include <iostream>
 #include <mutex>
+#include <boost/filesystem.hpp>
+#include <Poco/JSON/Object.h>
+#include <Poco/JSON/Array.h>
+#include <Poco/JSON/Stringifier.h>
+
+namespace fs = boost::filesystem;
+using namespace Poco::JSON;
+
 
 // 전역 변수 정의
 #ifdef NATS
@@ -28,76 +37,16 @@ void onMsg(natsConnection* nc, natsSubscription* sub, natsMsg* msg, void* closur
     natsManager->NatsMsgDestroy(msg);
 }
 
-void saveToJsonFile(const std::string& key, const std::string& value, int& fileCount)
-{
-    std::stringstream fileNameStream;
-    fileNameStream << key << "_" << fileCount << ".json";
-    std::string fileName = fileNameStream.str();
-
-    std::ofstream outFile(fileName);
-    if (outFile.is_open()) {
-        outFile << value;
-        outFile.close();
-        adcm::Log::Info() << "JSON data stored in " << fileName;
-    } else {
-        adcm::Log::Error() << "Failed to open file " << fileName << " for writing!";
-    }
-    ++fileCount;
-}
-
-std::string convertRiskAssessmentToJsonString(const adcm::risk_assessment_Objects& riskAssessment)
-{
-    uint64_t timestamp_map = 111;
-    uint64_t timestamp_risk = riskAssessment.timestamp;
-    std::string model_id = "test_id_v1";
-
-    std::stringstream oss;
-    oss << "{\n\"riskAssessmentList\": [\n";
-
-    for (size_t i = 0; i < riskAssessment.riskAssessmentList.size(); ++i) {
-        const auto& item = riskAssessment.riskAssessmentList[i];
-        oss << "        {\n"
-            << "            \"obstacle_id\": " << item.obstacle_id << ",\n"
-            << "            \"wgs84_xy_start\": [\n";
-
-        for (size_t j = 0; j < item.wgs84_xy_start.size(); ++j) {
-            oss << "                { \"x\": " << item.wgs84_xy_start[j].x
-                << ", \"y\": " << item.wgs84_xy_start[j].y << "}";
-            if (j < item.wgs84_xy_start.size() - 1) oss << ",";
-            oss << "\n";
-        }
-
-        oss << "            ],\n\"wgs84_xy_end\": [\n";
-
-        for (size_t j = 0; j < item.wgs84_xy_end.size(); ++j) {
-            oss << "                { \"x\": " << item.wgs84_xy_end[j].x
-                << ", \"y\": " << item.wgs84_xy_end[j].y << "}";
-            if (j < item.wgs84_xy_end.size() - 1) oss << ",";
-            oss << "\n";
-        }
-
-        oss << "            ],\n"
-            << "            \"hazard_class\": " << static_cast<int>(item.hazard_class) << ",\n"
-            << "            \"isHarzard\": " << (item.isHarzard ? "true" : "false") << ",\n"
-            << "            \"confidence\": " << item.confidence << ",\n"
-            << "            \"timestamp_map\": " << timestamp_map << ",\n"
-            << "            \"timestamp_risk\": " << timestamp_risk << ",\n"
-            << "            \"model_id\": \"" << model_id << "\"\n"
-            << "        }";
-        if (i < riskAssessment.riskAssessmentList.size() - 1) oss << ",";
-        oss << "\n";
-    }
-    oss << "    ]\n}";
-    return oss.str();
-}
-
 void NatsSend(const adcm::risk_assessment_Objects& riskAssessment)
 {
-    static int risk_count = 0;
+    static bool firstTime = true;
+    static natsStatus s = NATS_OK;
 
     if (firstTime) {
         adcm::Log::Info() << "NATS first time setup!";
-        natsManager = std::make_shared<adcm::etc::NatsConnManager>(HMI_SERVER_URL, subject, onMsg, asyncCb, adcm::etc::NatsConnManager::Mode::Default);
+        natsManager = std::make_shared<adcm::etc::NatsConnManager>(
+            HMI_SERVER_URL, subject, onMsg, asyncCb,
+            adcm::etc::NatsConnManager::Mode::Default);
         s = natsManager->NatsExecute();
         firstTime = false;
     }
@@ -109,15 +58,111 @@ void NatsSend(const adcm::risk_assessment_Objects& riskAssessment)
         natsManager->addJsonData("riskAssessment", riskToStr);
         natsManager->NatsPublishJson(pubSubject);
         adcm::Log::Info() << "NatsPublishJson";
-        saveToJsonFile("riskAssessment", riskToStr, risk_count);
     } else {
         std::cout << "Nats Connection error" << std::endl;
         try {
-            natsManager = std::make_shared<adcm::etc::NatsConnManager>(HMI_SERVER_URL, subject, onMsg, asyncCb, adcm::etc::NatsConnManager::Mode::Default);
+            natsManager = std::make_shared<adcm::etc::NatsConnManager>(
+                HMI_SERVER_URL, subject, onMsg, asyncCb,
+                adcm::etc::NatsConnManager::Mode::Default);
             s = natsManager->NatsExecute();
         } catch (std::exception& e) {
             std::cout << "Nats reConnection error" << std::endl;
         }
     }
 }
+
+
 #endif
+
+#ifdef ENABLE_JSON
+void SaveAsJson(const adcm::risk_assessment_Objects& riskAssessment)
+{
+    static int risk_count = 0;
+    std::string riskToStr = convertRiskAssessmentToJsonString(riskAssessment);
+    saveToJsonFile("riskAssessment", riskToStr, risk_count);
+}
+#endif
+
+void saveToJsonFile(const std::string& key, const std::string& value, int& fileCount)
+{
+    namespace fs = boost::filesystem;
+    boost::system::error_code ec;
+
+    fs::path outDir = "/opt/RiskAssessment/json";
+
+    if (!fs::exists(outDir)) {
+        if (!fs::create_directories(outDir, ec)) {
+            adcm::Log::Error() << "Failed to create directory " 
+                               << outDir.string() 
+                               << " : " << ec.message();
+            return;
+        }
+    }
+
+    std::stringstream fileNameStream;
+    fileNameStream << key << "_" << fileCount << ".json";
+    fs::path filePath = outDir / fileNameStream.str();
+
+    std::ofstream outFile(filePath.string());
+    if (outFile.is_open()) {
+        outFile << value;
+        outFile.close();
+        adcm::Log::Info() << "JSON data stored in " << filePath.string();
+    } else {
+        adcm::Log::Error() << "Failed to open file " << filePath.string()
+                           << " for writing! errno=" << strerror(errno);
+    }
+    ++fileCount;
+}
+std::string convertRiskAssessmentToJsonString(const adcm::risk_assessment_Objects& riskAssessment)
+{
+    using namespace Poco::JSON;
+
+    Object root;
+    Array::Ptr riskList = new Array;
+
+    //uint64_t timestamp_map = 111;
+    uint64_t timestamp_risk = riskAssessment.timestamp;
+    std::string model_id = "test_id_v1";
+
+    for (const auto& item : riskAssessment.riskAssessmentList) {
+        Object::Ptr obj = new Object;
+
+        obj->set("obstacle_id", item.obstacle_id);
+
+        // wgs84_xy_start
+        Array::Ptr startArr = new Array;
+        for (const auto& pt : item.wgs84_xy_start) {
+            Object::Ptr xy = new Object;
+            xy->set("x", pt.x);
+            xy->set("y", pt.y);
+            startArr->add(xy);
+        }
+        obj->set("wgs84_xy_start", startArr);
+
+        // wgs84_xy_end
+        Array::Ptr endArr = new Array;
+        for (const auto& pt : item.wgs84_xy_end) {
+            Object::Ptr xy = new Object;
+            xy->set("x", pt.x);
+            xy->set("y", pt.y);
+            endArr->add(xy);
+        }
+        obj->set("wgs84_xy_end", endArr);
+
+        obj->set("hazard_class", static_cast<int>(item.hazard_class));
+        obj->set("isHazard", item.isHarzard);
+        obj->set("confidence", item.confidence);
+        obj->set("timestamp_map", timestamp_map);
+        obj->set("timestamp_risk", timestamp_risk);
+        obj->set("model_id", model_id);
+
+        riskList->add(obj);
+    }
+
+    root.set("riskAssessmentList", riskList);
+
+    std::ostringstream oss;
+    root.stringify(oss, 2);  // 2 = 들여쓰기 (pretty print)
+    return oss.str();
+}

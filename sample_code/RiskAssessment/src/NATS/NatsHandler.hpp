@@ -27,4 +27,12 @@ void NatsSend(const adcm::risk_assessment_Objects& riskAssessment);
 
 #endif // NATS
 
+
+#ifdef ENABLE_JSON
+#include "../main_riskassessment.hpp"  // 필요한 데이터 타입 참조
+void SaveAsJson(const adcm::risk_assessment_Objects& riskAssessment);
+void saveToJsonFile(const std::string& key, const std::string& value, int& fileCount);
+std::string convertRiskAssessmentToJsonString(const adcm::risk_assessment_Objects& riskAssessment);
+#endif
+
 #endif // NATS_HANDLER_HPP

@@ -56,10 +56,11 @@ add_compile_definitions(DEFAULT_LOG_TAG="${PROC_NAME}")
 include(GNUInstallDirs)
 include(AUTOSAR/apd)
 
-# SDK Options
+# build Options
 option(sa "Build with sa SDK" OFF)
 option(orin "Build with orin SDK" OFF)
 option(nats "Enable NATS integration" OFF)
+option(json "Enable JSON output" OFF)
 
 #Build Time
 string(TIMESTAMP BUILD_TIMESTAMP "%Y-%m-%d %H:%M:%S")
@@ -73,6 +74,16 @@ else()
     message(STATUS "NATS is disabled")
     add_definitions(-UNATS)
 endif()
+
+if (json)
+    message(STATUS "save to JSON is enabled")
+    add_definitions(-DENABLE_JSON)
+else()
+    message(STATUS "save to JSON is disabled")
+    add_definitions(-UENABLE_JSON)
+endif()
+
+
 # SDK common Path
 set(COMMON_DIR "")
 
@@ -115,6 +126,7 @@ find_package(ara-log REQUIRED)
 find_package(Poco COMPONENTS Foundation Net JSON REQUIRED)
 #nats
 find_library(NATS_LIB nats REQUIRED)
+find_package(Boost REQUIRED COMPONENTS filesystem system)
 
 # Protocol Binding
 # It's not possible to enable some/ip and opendds at the same time
@@ -282,11 +294,23 @@ if(HAS_OPENDDS_BINDING)
     )
 endif()
 
-
-target_link_libraries(${CMAKE_PROJECT_NAME} ${CMAKE_THREAD_LIBS_INIT} ${ARA_LIBRARIES} ${COMMUNICATION_LIBRARY} ara_com e2exf e2e ara::log ara::exec_execution_client ara::core)
-
-#NATS용 library 추가
-target_link_libraries(${CMAKE_PROJECT_NAME} ${CMAKE_THREAD_LIBS_INIT} ${ARA_LIBRARIES} ${COMMUNICATION_LIBRARY} ara_com e2exf e2e ara::log ara::exec_execution_client ara::core ${NATS_LIB} ara::core Poco::Net Poco::Foundation Poco::JSON ${Boost_LIBRARIES})
+target_link_libraries(${CMAKE_PROJECT_NAME}
+    ${CMAKE_THREAD_LIBS_INIT}
+    ${ARA_LIBRARIES}
+    ${COMMUNICATION_LIBRARY}
+    ara_com
+    e2exf
+    e2e
+    ara::log
+    ara::exec_execution_client
+    ara::core
+    ${NATS_LIB}
+    Poco::Net
+    Poco::Foundation
+    Poco::JSON
+    Boost::filesystem
+    Boost::system
+)
 
 #add_dependencies(${PROJECT_NAME} ${INTERFACES_MAKE_TARGET} ${PROCESS_ARTIFACTS_MAKE_TARGET})
 
