@@ -618,3 +618,35 @@ double distanceObsToPointDm(const adcm::obstacleListStruct& obs, double px, doub
     double dist_dm = std::sqrt(dx * dx + dy * dy);  // 거리 (dm)
     return dist_dm;
 }
+
+bool isOutOfWork(uint8_t z) { return z == 0xFF; }
+
+bool zToCm(uint8_t z, double& out_cm) {
+    switch (z) {
+        case 0:   out_cm = -50.0; return true; // ≤ -50
+        case 1:   out_cm = -47.5; return true; // -50 ~ -45
+        case 2:   out_cm = -42.5; return true; // -45 ~ -40
+        case 3:   out_cm = -37.5; return true; // -40 ~ -35
+        case 4:   out_cm = -32.5; return true; // -35 ~ -30
+        case 5:   out_cm = -27.5; return true; // -30 ~ -25
+        case 6:   out_cm = -22.5; return true; // -25 ~ -20
+        case 7:   out_cm = -17.5; return true; // -20 ~ -15
+        case 8:   out_cm = -12.5; return true; // -15 ~ -10
+        case 9:   out_cm =  -7.5; return true; // -10 ~ -5
+        case 10:  out_cm =  -2.5; return true; // -5  ~ 0
+        case 11:  out_cm =  +2.5; return true; // 0   ~ +5
+        case 12:  out_cm =  +7.5; return true; // +5  ~ +10
+        case 13:  out_cm = +12.5; return true; // +10 ~ +15
+        case 14:  out_cm = +17.5; return true; // +15 ~ +20
+        case 15:  out_cm = +22.5; return true; // +20 ~ +25
+        case 16:  out_cm = +27.5; return true; // +25 ~ +30
+        case 17:  out_cm = +32.5; return true; // +30 ~ +35
+        case 18:  out_cm = +37.5; return true; // +35 ~ +40
+        case 19:  out_cm = +42.5; return true; // +40 ~ +45
+        case 20:  out_cm = +47.5; return true; // +45 ~ +50
+        case 21:  out_cm = +52.5; return true; // +50 ~ +55
+        case 22:  out_cm = +55.0; return true; // ≥ +55
+        case 0xFF: return false;               // 작업영역 외 지역
+        default:   return false;               // 잘못된 값
+    }
+}

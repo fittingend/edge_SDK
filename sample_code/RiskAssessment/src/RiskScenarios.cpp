@@ -947,10 +947,18 @@ void evaluateScenario8(const std::vector<double>& path_x,
 {
     adcm::Log::Info() << "=============KATECH: scenario 8 START==============";
 
-    constexpr int SHIFT_DISTANCE = 50;   // 전역경로 근방 5m 스캔
-    constexpr int RISK_THRESHOLD = 20;   // 위험 카운트 임계값
-    constexpr double VEHICLE_ROAD_Z = 0; // TODO: 실제 노면 정보로 수정 필요    
-    Point2D p1, p2, p3, p4;
+    // 파라미터
+    constexpr int SHIFT_DISTANCE = 50;            // 전역경로 근방 5m
+    constexpr int RISK_THRESHOLD = 20;            // 위험 카운트 임계값
+    constexpr double HEIGHT_DIFF_CM = 30.0;       // 높이차 30cm 이상
+    constexpr double SLOPE_THRESHOLD = 0.20;      // 기울기 20% 이상
+    constexpr int STEP = 5;                       // 5셀 = 50cm
+    constexpr double STDDEV_THRESHOLD = 15.0;     // 표준편차 15cm 이상
+    constexpr double CELL_SIZE_CM = 10.0;         // 1셀 = 10cm
+
+    Point2D p1{}, p2{}, p3{}, p4{};
+    const int width  = static_cast<int>(map_2d.size());
+    const int height = width ? static_cast<int>(map_2d[0].size()) : 0;
 
     for (size_t i = 0; i < path_x.size() - 1; ++i) {
 
@@ -959,8 +967,8 @@ void evaluateScenario8(const std::vector<double>& path_x,
         int y_start = static_cast<int>(floor(path_y[i]));
         int y_end   = static_cast<int>(floor(path_y[i + 1]));
 
-        double original_m, original_c, up_c, down_c, x_up, x_down;
-        bool isVertical;
+        double original_m = 0, original_c = 0, up_c = 0, down_c = 0, x_up = 0, x_down = 0;
+        bool isVertical = false;
         calculateShiftedLines(x_start, x_end, y_start, y_end, SHIFT_DISTANCE, 
                               original_m, original_c, up_c, down_c, isVertical, x_up, x_down);
         // Print the line equations
@@ -987,46 +995,103 @@ void evaluateScenario8(const std::vector<double>& path_x,
             p3 = {x_start, original_m * x_start + down_c};   // Second line start point
             p4 = {x_end, original_m * x_end + down_c}; // Second line end point
         }
-
-        int minX = std::min({p1.x, p2.x, p3.x, p4.x});
-        int maxX = std::max({p1.x, p2.x, p3.x, p4.x});
-        int minY = std::min({p1.y, p2.y, p3.y, p4.y});
-        int maxY = std::max({p1.y, p2.y, p3.y, p4.y});
+      
+        // 바운딩 박스 (double → int 인덱스 변환)
+        int minX = std::max(0, static_cast<int>(std::floor(std::min({p1.x, p2.x, p3.x, p4.x}))));
+        int maxX = std::min(width-1,  static_cast<int>(std::ceil (std::max({p1.x, p2.x, p3.x, p4.x}))));
+        int minY = std::max(0, static_cast<int>(std::floor(std::min({p1.y, p2.y, p3.y, p4.y}))));
+        int maxY = std::min(height-1, static_cast<int>(std::ceil (std::max({p1.y, p2.y, p3.y, p4.y}))));
         
+        // 위험 카운트 & 표준편차 계산을 위한 샘플
         int risk_count = 0;
-        //노면상태 스캔
-        for (int x = minX; x <= maxX; ++x) {
-            for (int y = minY; y <= maxY; ++y) {
+        std::vector<double> z_cm_samples;
+        z_cm_samples.reserve(std::max(1, (maxX - minX + 1) * (maxY - minY + 1)));        
+        
+        // === 스캔 시작 ===
+        for (int x = minX; x <= maxX && risk_count < RISK_THRESHOLD; ++x) {
+            for (int y = minY; y <= maxY && risk_count < RISK_THRESHOLD; ++y) {
 
-                if (x < 0 || y < 0 || x >= map_2d.size() || y >= map_2d[0].size()) continue;
-
-                if (std::abs(map_2d[x][y].road_z - VEHICLE_ROAD_Z) > WHEEL_DIAMETER_M / 2) {
-                    risk_count++;
+                const uint8_t z_xy = map_2d[x][y].road_z;
+                double z_xy_cm = 0.0;
+                if (!isOutOfWork(z_xy) && zToCm(z_xy, z_xy_cm)) {
+                    z_cm_samples.push_back(z_xy_cm);
+                } else {
+                    // 작업영역 외/무효는 스킵
+                    continue;
                 }
 
-                if (risk_count >= RISK_THRESHOLD) {
-                    adcm::Log::Info() << "Road cave-in detected! Generating risk assessment.";
+                // 1) 인접 셀 높이차 30cm 이상 (x-1, y 동일 / x 동일, y-1)
+                if (x > minX) {
+                    const uint8_t z_prev = map_2d[x - 1][y].road_z;
+                    double z_prev_cm;
+                    if (!isOutOfWork(z_prev) && zToCm(z_prev, z_prev_cm)) {
+                        const double dz_cm = std::fabs(z_xy_cm - z_prev_cm);
+                        if (dz_cm >= HEIGHT_DIFF_CM) ++risk_count;
+                    }
+                }
+                if (y > minY) {
+                    const uint8_t z_prev = map_2d[x][y - 1].road_z;
+                    double z_prev_cm;
+                    if (!isOutOfWork(z_prev) && zToCm(z_prev, z_prev_cm)) {
+                        const double dz_cm = std::fabs(z_xy_cm - z_prev_cm);
+                        if (dz_cm >= HEIGHT_DIFF_CM) ++risk_count;
+                    }
+                }
 
-                    adcm::riskAssessmentStruct riskAssessment8;
-                    adcm::globalPathPosition start_path{path_x[i], path_y[i]};
-                    adcm::globalPathPosition end_path{path_x[i + 1], path_y[i + 1]};
-
-                    riskAssessment8.wgs84_xy_start.push_back(start_path);
-                    riskAssessment8.wgs84_xy_end.push_back(end_path);
-                    riskAssessment8.hazard_class = SCENARIO_8;
-                    riskAssessment8.isHarzard = true;
-
-                    adcm::Log::Info() << "Risk assessment generated for #8 at X: " 
-                                      << path_x[i] << ", Y: " << path_y[i];
-
-                    riskAssessment.riskAssessmentList.push_back(riskAssessment8);
-                    break;
+                // 2) 기울기 20% 이상 (STEP 셀 간격: 5셀=50cm)
+                if (x + STEP <= maxX) {
+                    const uint8_t z_far = map_2d[x + STEP][y].road_z;
+                    double z_far_cm;
+                    if (!isOutOfWork(z_far) && zToCm(z_far, z_far_cm)) {
+                        const double dz_cm = std::fabs(z_far_cm - z_xy_cm);
+                        const double slope = dz_cm / (STEP * CELL_SIZE_CM);
+                        if (slope >= SLOPE_THRESHOLD) ++risk_count;
+                    }
+                }
+                if (y + STEP <= maxY) {
+                    const uint8_t z_far = map_2d[x][y + STEP].road_z;
+                    double z_far_cm;
+                    if (!isOutOfWork(z_far) && zToCm(z_far, z_far_cm)) {
+                        const double dz_cm = std::fabs(z_far_cm - z_xy_cm);
+                        const double slope = dz_cm / (STEP * CELL_SIZE_CM);
+                        if (slope >= SLOPE_THRESHOLD) ++risk_count;
+                    }
                 }
             }
+        }
 
-            if (risk_count >= RISK_THRESHOLD) break;
+        // 3) 표준편차 15cm 이상
+        if (!z_cm_samples.empty()) {
+            const double mean = std::accumulate(z_cm_samples.begin(), z_cm_samples.end(), 0.0) /
+                                static_cast<double>(z_cm_samples.size());
+            double sq_sum = 0.0;
+            for (double v : z_cm_samples) {
+                const double d = v - mean;
+                sq_sum += d * d;
+            }
+            const double stddev = std::sqrt(sq_sum / static_cast<double>(z_cm_samples.size()));
+            if (stddev >= STDDEV_THRESHOLD) {
+                risk_count += RISK_THRESHOLD; // 강제 위험 판정
+            }
+        }
+
+        if (risk_count >= RISK_THRESHOLD) {
+            adcm::Log::Info() << "Scenario 8 hazard detected at segment " << i;
+
+            adcm::riskAssessmentStruct out;
+            out.wgs84_xy_start.push_back(adcm::globalPathPosition{ path_x[i],     path_y[i]     });
+            out.wgs84_xy_end.push_back  (adcm::globalPathPosition{ path_x[i + 1], path_y[i + 1] });
+            out.hazard_class = SCENARIO_8;
+            out.isHarzard = true;
+
+            adcm::Log::Info() << "Risk assessment generated for #8 at X: " 
+                                << path_x[i] << ", Y: " << path_y[i];
+
+            riskAssessment.riskAssessmentList.push_back(std::move(out));
+            //break;
         }
     }
+
     adcm::Log::Info() << "=============KATECH: scenario 8 DONE==============";
 
 }

@@ -213,6 +213,9 @@ void calculateShiftedLines(int &x_start, int &x_end, int &y_start, int &y_end, i
                            bool &isVertical, double &x_up, double &x_down);
 
 void printObstacleList(obstacleListVector obstacle_list);
+bool isOutOfWork(uint8_t z);
+bool zToCm(uint8_t z, double& out_cm);
+
 // 문자열 변환 함수 선언
 const char* to_string(ObstacleClass cls);
 double distanceObsToPointDm(const adcm::obstacleListStruct& obs, double px, double py);

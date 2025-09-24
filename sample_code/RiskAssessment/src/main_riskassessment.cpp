@@ -145,8 +145,7 @@ void ThreadReceiveMapData()
                 adcm::Log::Info() << "[DEBUG] data->map_2d.size() = " << (data->map_2d.size()) * (data->map_2d[0].size());
 
                 // 안전성 체크 후 assign
-                // map_2d.clear();  // <- 이건 메모리 누적 방지용으로는 OK
-                map_2d = data->map_2d;
+                // map_2d = data->map_2d; // outdated interface (현재 삭제됨)
                 obstacle_list = data->obstacle_list;
                 auto vehicle_list = data->vehicle_list;
                 auto road_list = data->road_list;
@@ -201,47 +200,60 @@ void ThreadReceiveMapData()
                     adcm::Log::Info() << "vehicle_list Vector empty!!! ";
                 }
 
-                if (!road_list.empty())
-                {
+                if (!road_list.empty()) {
                     adcm::Log::Verbose() << "=== road_list ===";
-                    for (auto itr = road_list.begin(); itr != road_list.end(); ++itr)
-                    {
-                        adcm::Log::Verbose() << "road_index : " << itr->road_index;
-                        adcm::Log::Verbose() << "Timestamp : " << itr->Timestamp;
 
-                        auto map_2d_location = itr->map_2d_location;
+                    // road_list 정보 로그 출력
+                    for (const auto& road : road_list) {
+                        adcm::Log::Verbose() << "road_index : " << road.road_index;
+                        adcm::Log::Verbose() << "Timestamp  : " << road.Timestamp;
 
-                        if (!map_2d_location.empty())
-                        {
-                            adcm::Log::Verbose() << "=== map_2d_location ===";
-                            for (auto itr = map_2d_location.begin(); itr != map_2d_location.end(); ++itr)
-                            {
-                                adcm::Log::Verbose() << "x index : " << itr->x;
-                                adcm::Log::Verbose() << "y index : " << itr->y;
-                            }
-                        }
-                        else
-                        {
-                            adcm::Log::Verbose() << "road_list map_2d_location Vector empty!!! ";
+                        if (road.map_2d_location.empty()) {
+                            adcm::Log::Verbose() << "road_list map_2d_location Vector empty!!!";
                         }
                     }
-                }
-                else
-                {
-                    adcm::Log::Verbose() << "road_list Vector empty!!! ";
+
+                    // road_list[0..N-2] -> road_index assign
+                    if (road_list.size() > 1) {
+                        for (size_t i = 0; i < road_list.size() - 1; i++) {
+                            for (const auto& loc : road_list[i].map_2d_location) {
+                                int x = loc.x;
+                                int y = loc.y;
+                                if (x >= 0 && x < static_cast<int>(map_2d.size()) &&
+                                    y >= 0 && y < static_cast<int>(map_2d[x].size())) {
+                                    map_2d[x][y].road_z = static_cast<uint8_t>(i);
+                                }
+                            }
+                        }
+                    }
+
+                    // 마지막 요소 -> road_z = 0xFF
+                    const auto& last = road_list.back();
+                    for (const auto& loc : last.map_2d_location) {
+                        int x = loc.x;
+                        int y = loc.y;
+                        if (x >= 0 && x < static_cast<int>(map_2d.size()) &&
+                            y >= 0 && y < static_cast<int>(map_2d[x].size())) {
+                            map_2d[x][y].road_z = 0xFF;
+                        }
+                    }
+
+                } else {
+                    adcm::Log::Verbose() << "road_list Vector empty!!!";
                 }
 
+                // 데이터 사용 가능 플래그 + 알림
                 {
                     std::lock_guard<std::mutex> lock(mtx_cv);
                     isMapAvailable = true;
                     adcm::Log::Info() << "Map Available";
                 }
                 cv_mapData.notify_one(); // 다른 스레드에게 알림
-                //adcm::Log::Info() << "ThreadRass 에게 알림";
             }
         }
     }
 }
+
 
 /**
  * @brief 경로(Build Path) 수신 쓰레드
