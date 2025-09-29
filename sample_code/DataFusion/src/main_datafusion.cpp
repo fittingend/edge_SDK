@@ -1343,6 +1343,7 @@ adcm::obstacleListStruct ConvertToObstacleListStruct(const ObstacleData &obstacl
     obstacle_map.fused_cuboid_x = obstacle.fused_cuboid_x;
     obstacle_map.fused_cuboid_y = obstacle.fused_cuboid_y;
     obstacle_map.fused_cuboid_z = obstacle.fused_cuboid_z;
+    adcm::Log::Info() << "장애물 ID " << obstacle.obstacle_id << " 크기: [" << obstacle.fused_cuboid_x << ", " << obstacle.fused_cuboid_y << ", " << obstacle.fused_cuboid_z << "]";
     obstacle_map.fused_heading_angle = obstacle.fused_heading_angle;
     obstacle_map.fused_position_x = obstacle.fused_position_x;
     obstacle_map.fused_position_y = obstacle.fused_position_y;
@@ -1358,6 +1359,8 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
 {
     mapData.obstacle_list.clear();
     mapData.vehicle_list.clear();
+    mapData.road_list.clear();
+    
     for (const auto &obstacle : obstacle_list)
         mapData.obstacle_list.push_back(ConvertToObstacleListStruct(obstacle, mapData.map_2d));
 
@@ -1369,6 +1372,7 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
             if (vehicle->road_z.size() > 1) // 시뮬레이션에선 road_z size가 1이므로 예외 처리
             {
                 std::vector<adcm::roadListStruct> road_list = ConvertRoadZToRoadList(*vehicle);
+
                 mapData.road_list.insert(mapData.road_list.end(), road_list.begin(), road_list.end());
             }
             else
@@ -1378,7 +1382,7 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
 
     adcm::Log::Info() << "mapData 장애물 반영 완료 개수: " << mapData.obstacle_list.size();
     adcm::Log::Info() << "mapData 차량 반영 완료 개수: " << mapData.vehicle_list.size();
-    adcm::Log::Info() << "mapData road_list 반영 완료: " << mapData.road_list.size();
+    adcm::Log::Info() << "mapData road_list 반영 완료 개수: " << mapData.road_list.size();
 
     for (const auto &road : mapData.road_list)
     {
@@ -1468,6 +1472,7 @@ void fillObstacleList(std::vector<ObstacleData> &obstacle_list_fill, const std::
         obstacle_to_push.fused_cuboid_x = obstacle.cuboid_x;
         obstacle_to_push.fused_cuboid_y = obstacle.cuboid_y;
         obstacle_to_push.fused_cuboid_z = obstacle.cuboid_z;
+        adcm::Log::Info() << "장애물 크기: " << obstacle.cuboid_x << ", " << obstacle.cuboid_y << ", " << obstacle.cuboid_z;
         obstacle_to_push.fused_heading_angle = obstacle.heading_angle;
         obstacle_to_push.fused_position_x = obstacle.position_x;
         obstacle_to_push.fused_position_y = obstacle.position_y;
@@ -1484,9 +1489,18 @@ void fillObstacleList(std::vector<ObstacleData> &obstacle_list_fill, const std::
 void processWorkingAreaBoundary(const std::vector<BoundaryData> &work_boundary)
 {
     std::vector<Point2D> boundary_points;
-    adcm::roadListStruct outside_area;
-    outside_area.road_index = 255;
-    outside_area.Timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    std::vector<adcm::roadListStruct> road_list(24); // 0~22, 255 총 24개
+
+    // road_list 초기화
+    for (int i = 0; i < 23; ++i)
+    {
+        road_list[i].road_index = i;
+        road_list[i].Timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                     std::chrono::system_clock::now().time_since_epoch())
+                                     .count();
+    }
+    road_list[23].road_index = 255;
+    road_list[23].Timestamp = road_list[0].Timestamp;
 
     // boundary 점들을 맵 좌표계로 변환
     for (const auto &point : work_boundary)
@@ -1521,19 +1535,15 @@ void processWorkingAreaBoundary(const std::vector<BoundaryData> &work_boundary)
             if (!inside)
             {
                 adcm::map2dIndex idx = {x, y};
-                outside_area.map_2d_location.push_back(idx);
+                road_list[23].map_2d_location.push_back(idx); // 255 인덱스는 23번째
             }
         }
     }
 
-    // road_list에 외부 영역 추가
+    // road_list를 mapData에 적용
     {
         lock_guard<mutex> lock(mtx_map_someip);
-        mapData.road_list.clear();
-        if (!outside_area.map_2d_location.empty())
-        {
-            mapData.road_list.push_back(outside_area);
-        }
+        mapData.road_list = road_list;
     }
 }
 
@@ -1681,6 +1691,7 @@ void ThreadReceiveWorkInfo()
             //     map_y = 1000;
             //     adcm::Log::Info() << "[WorkInfo] 시뮬레이션 테스트";
             //     adcm::Log::Info() << "맵 사이즈: (" << map_x << ", " << map_y << ")";
+
             // }
             // else // 실증이라면, boundary 좌표의 가장 작은 지점 min_x, min_y의 utm좌표가 맵의 (0, 0)이 된다.
             // {
@@ -1698,6 +1709,7 @@ void ThreadReceiveWorkInfo()
             }
             adcm::Log::Info() << "[WorkInfo] 실증 테스트";
             adcm::Log::Info() << "map의 min(lon, lat) 값: (" << min_lon << ", " << min_lat << "), max(lon, lat) 값 : (" << max_lon << ", " << max_lat << ")";
+
             GPStoUTM(min_lon, min_lat, min_utm_x, min_utm_y);
             GPStoUTM(max_lon, max_lat, max_utm_x, max_utm_y);
             adcm::Log::Info() << "map의 minutm(x, y) 값: (" << min_utm_x << ", " << min_utm_y << "), maxutm(x, y) 값 : (" << max_utm_x << ", " << max_utm_y << ")";
@@ -1957,6 +1969,7 @@ void ThreadKatech()
             }
 
             //==============7. 현재까지의 데이터를 adcm mapData 형식으로 재구성해서 업데이트 ================
+
             //================ adcm mapData 내 obstacle list 업데이트 ===============================
 
             // adcm::Log::Info() << "mapdata 장애물 반영 예정 개수: " << obstacle_list.size();
@@ -2106,7 +2119,6 @@ int main(int argc, char *argv[])
     UNUSED(argc);
     UNUSED(argv);
 
-    // config.ini에서 NATS IP 받아오기
     Config config;
 
     // 설정 파일 경로
