@@ -138,7 +138,7 @@ struct VehicleData
     unsigned char vehicle_class;
     std::vector<Point2D> map_2d_location;
     std::uint64_t timestamp;
-    std::vector<int> road_z;
+    ::uint8Vector road_z;
     //    double road_z[4];
     double position_long; // wgs84좌표 -> x
     double position_lat;  // wgs84좌표 -> y
