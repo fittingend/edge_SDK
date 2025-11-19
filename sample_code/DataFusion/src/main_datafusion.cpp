@@ -1109,7 +1109,7 @@ std::vector<ObstacleData> mergeAndCompareLists(
             std::vector<ObstacleData> fusionList = listA;
             if (!listA.empty() && !listB.empty())
             {
-                auto distMatrix = createDistanceMatrix(listB, listA);
+                    auto distMatrix = createDistanceMatrix(listA, listB);
                 auto assignment = solveAssignment(distMatrix);
                 // for (int i = 0; i < assignment.size(); i++)
                 //     adcm::Log::Info() << "assignment" << i << ": " << assignment[i];
@@ -1172,7 +1172,7 @@ std::vector<ObstacleData> mergeAndCompareLists(
             }
 
             // adcm::Log::Info() << "융합: 이전 데이터와 융합하여 ID부여 시도";
-            auto distMatrix = createDistanceMatrix(previousFusionList, mergedList);
+            auto distMatrix = createDistanceMatrix(mergedList, previousFusionList);
             // adcm::Log::Info() << "융합: 거리배열 생성";
             auto assignment = solveAssignment(distMatrix);
             // adcm::Log::Info() << "융합: Munkres Algorithm 적용: " << assignment.size();
