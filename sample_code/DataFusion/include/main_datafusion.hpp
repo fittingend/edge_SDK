@@ -94,10 +94,10 @@ int map_2d_size = 0;
 // 좌표가 10 cm 단위이므로 게이트도 10배 확대(0.5 m -> 5, 1.0 m -> 10)
 constexpr double STATIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD = 15.0;  // 1.5 m in 10 cm units (temporal match)
 constexpr double DYNAMIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD = 25.0; // 2.5 m in 10 cm units (temporal match)
-// 차량 간 동일 장애물 매칭을 조금 더 관대하게 보기 위한 임계값 (지도 좌표 기준)
-// 교차 차량 매칭도 동일하게 스케일 (2 m -> 20, 3.5 m -> 35)
-constexpr double CROSS_STATIC_MATCH_DISTANCE_THRESHOLD = 20.0;  // 2.0 m in 10 cm units
-constexpr double CROSS_DYNAMIC_MATCH_DISTANCE_THRESHOLD = 35.0; // 3.5 m in 10 cm units
+// 차량 간 동일 장애물 매칭 임계값 (지나친 병합을 방지하기 위해 축소)
+// 기존 2.0m/3.5m → 1.2m/2.5m 수준으로 감소 (10cm 단위)
+constexpr double CROSS_STATIC_MATCH_DISTANCE_THRESHOLD = 12.0;  // 1.2 m in 10 cm units
+constexpr double CROSS_DYNAMIC_MATCH_DISTANCE_THRESHOLD = 25.0; // 2.5 m in 10 cm units
 constexpr double HUNGARIAN_MAX_COST = 999999.0;
 constexpr std::size_t STATIC_OBSTACLE_HISTORY_WINDOW = 10;
 constexpr int STATIC_OBSTACLE_MAX_UNMATCHED_FRAMES = 3;
