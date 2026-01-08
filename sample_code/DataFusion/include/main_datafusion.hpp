@@ -12,6 +12,7 @@
 #include <string>
 #include <algorithm>
 #include <queue>
+#include <deque>
 #include <unistd.h>
 #include <limits.h>
 #include <libgen.h>
@@ -65,9 +66,13 @@ IDManager id_manager; // 장애물 ID 부여 및 반환
 bool ego = false;
 bool sub1 = false;
 bool sub2 = false;
+bool sub3 = false;
+bool sub4 = false;
 bool workego = false;
 bool worksub1 = false;
 bool worksub2 = false;
+bool worksub3 = false;
+bool worksub4 = false;
 bool get_workinfo = false;
 
 mutex mtx_data;
@@ -86,14 +91,27 @@ mutex mtx;
 
 int map_2d_size = 0;
 
+// 좌표가 10 cm 단위이므로 게이트도 10배 확대(0.5 m -> 5, 1.0 m -> 10)
+constexpr double STATIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD = 15.0;  // 1.5 m in 10 cm units (temporal match)
+constexpr double DYNAMIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD = 25.0; // 2.5 m in 10 cm units (temporal match)
+// 차량 간 동일 장애물 매칭을 조금 더 관대하게 보기 위한 임계값 (지도 좌표 기준)
+// 교차 차량 매칭도 동일하게 스케일 (2 m -> 20, 3.5 m -> 35)
+constexpr double CROSS_STATIC_MATCH_DISTANCE_THRESHOLD = 20.0;  // 2.0 m in 10 cm units
+constexpr double CROSS_DYNAMIC_MATCH_DISTANCE_THRESHOLD = 35.0; // 3.5 m in 10 cm units
+constexpr double HUNGARIAN_MAX_COST = 999999.0;
+constexpr std::size_t STATIC_OBSTACLE_HISTORY_WINDOW = 10;
+constexpr int STATIC_OBSTACLE_MAX_UNMATCHED_FRAMES = 3;
+constexpr int DYNAMIC_OBSTACLE_MAX_UNMATCHED_FRAMES = 3;
+constexpr int STOP_COUNT_REMOVE_THRESHOLD = 3;
+
 enum VehicleClass
 {
     EGO_VEHICLE = 0xF0,
     SUB_VEHICLE_1 = 0x01,
     SUB_VEHICLE_2 = 0x02,
-    SUB_VEHICLE_3 = 0x02,
-    SUB_VEHICLE_4 = 0x03,
-    NO_VEHICLE = 0x04
+    SUB_VEHICLE_3 = 0x03,
+    SUB_VEHICLE_4 = 0x04,
+    NO_VEHICLE = 0x05
 };
 
 struct Point2D
@@ -154,6 +172,11 @@ struct VehicleData
     double velocity_ang;
 };
 
+struct StaticObstacleHistory
+{
+    std::deque<Point2D> positions;
+};
+
 enum ObstacleClass
 {
     NO_OBSTACLE,
@@ -181,6 +204,29 @@ struct FusionData
     std::vector<ObstacleData> obstacle_list;
 };
 
+class ObstacleTracker
+{
+public:
+    std::vector<ObstacleData> update(const std::vector<ObstacleData> &detections);
+
+private:
+    struct Track
+    {
+        ObstacleData data;
+        int unmatchedFrames{0};
+        StaticObstacleHistory history;
+    };
+
+    std::vector<Track> staticTracks_;
+    std::vector<Track> dynamicTracks_;
+
+    void updateStaticTracks(const std::vector<ObstacleData> &detections, std::vector<ObstacleData> &output);
+    void updateDynamicTracks(const std::vector<ObstacleData> &detections, std::vector<ObstacleData> &output);
+    void smoothStaticPosition(Track &track);
+};
+
+bool isStaticObstacle(const ObstacleData &obstacle);
+
 // moodycamel::ConcurrentQueue<FusionData> main_vehicle_queue;
 // moodycamel::ConcurrentQueue<FusionData> sub1_vehicle_queue;
 // moodycamel::ConcurrentQueue<FusionData> sub2_vehicle_queue;
@@ -191,19 +237,27 @@ queue<int> order;
 VehicleData main_vehicle_temp;
 VehicleData sub1_vehicle_temp;
 VehicleData sub2_vehicle_temp;
+VehicleData sub3_vehicle_temp;
+VehicleData sub4_vehicle_temp;
 std::vector<ObstacleData> obstacle_list_temp;
 
 // 맵데이터 생성 시 사용하는 데이터
 FusionData main_vehicle_data;
 FusionData sub1_vehicle_data;
 FusionData sub2_vehicle_data;
+FusionData sub3_vehicle_data;
+FusionData sub4_vehicle_data;
 std::vector<ObstacleData> obstacle_list_main;
 std::vector<ObstacleData> obstacle_list_sub1;
 std::vector<ObstacleData> obstacle_list_sub2;
+std::vector<ObstacleData> obstacle_list_sub3;
+std::vector<ObstacleData> obstacle_list_sub4;
 VehicleData main_vehicle;
 VehicleData sub1_vehicle;
 VehicleData sub2_vehicle;
-std::vector<VehicleData *> vehicles = {&main_vehicle, &sub1_vehicle, &sub2_vehicle};
+VehicleData sub3_vehicle;
+VehicleData sub4_vehicle;
+std::vector<VehicleData *> vehicles = {&main_vehicle, &sub1_vehicle, &sub2_vehicle, &sub3_vehicle, &sub4_vehicle};
 
 // 이전 TimeStamp의 Obstacle_list
 std::vector<ObstacleData> previous_obstacle_list;
@@ -252,6 +306,10 @@ void generateRoadZValue(VehicleData target_vehicle, std::vector<adcm::map_2dList
 void find4VerticesVehicle(VehicleData &target_vehicle);
 void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered);
 
+void splitObstaclesByType(const std::vector<ObstacleData> &input,
+                          std::vector<ObstacleData> &statics,
+                          std::vector<ObstacleData> &dynamics);
+                          
 // map_2d_location 계산
 void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, VehicleData &vehicle);
 void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std::vector<ObstacleData>::iterator iter);
@@ -270,7 +328,7 @@ void fillObstacleList(std::vector<ObstacleData> &obstacle_list_fill, const std::
 double euclideanDistance(const ObstacleData &a, const ObstacleData &b);
 
 // 거리 행렬 생성
-std::vector<std::vector<double>> createDistanceMatrix(const std::vector<ObstacleData> &listA, const std::vector<ObstacleData> &listB);
+std::vector<std::vector<double>> createDistanceMatrix(const std::vector<ObstacleData> &listA, const std::vector<ObstacleData> &listB, double maxDistance);
 
 // 신뢰성 기반 융합 계산
 double calculateWeightedPosition(const std::vector<double> &positions, const std::vector<double> &variances);
@@ -284,6 +342,10 @@ void processFusion(
     const std::vector<ObstacleData> &prevList,
     const std::vector<int> &assignment);
 // void processFusion(std::vector<ObstacleData> &fusedList, const std::vector<ObstacleData> &listB, const std::vector<int> &assignment);
+
+std::vector<ObstacleData> mergeAndCompareListsDynamic(
+    const std::vector<ObstacleData> &previousFusionList,
+    const std::vector<ObstacleData> &currentFusionList);
 
 // 장애물 리스트 융합 및 이전 데이터와 비교
 std::vector<ObstacleData> mergeAndCompareLists(
