@@ -95,13 +95,19 @@ void BuildPath_Subscriber::init(std::string instance)
     adcm::Log::Info() << "exit BuildPath_Subscriber::init()";
 }
 
-std::shared_ptr<build_path_Objects> BuildPath_Subscriber::BuildPath(const double& destination_latitude, const double& destination_longitude, 
+std::shared_ptr<build_path_Objects> BuildPath_Subscriber::BuildPath(const std::vector<adcm::destinationStruct>& destination, 
     const std::uint8_t& mve_type, const std::uint64_t deadLine)
 {
-    adcm::Log::Verbose() << "destination_latitude / destination_longitude / mve_type";
-    adcm::Log::Verbose() << destination_latitude << " / " << destination_longitude << " / " << mve_type;
 
-    auto buildPath_future = m_proxy->GetBuildPath(destination_latitude, destination_longitude, mve_type);
+    for(const auto& dest : destination)
+    {
+        adcm::Log::Verbose() << "latitude / longitude";
+        adcm::Log::Verbose() << dest.latitude << " / " << dest.longitude ;
+    }
+
+    adcm::Log::Verbose() << "mve_type : " << mve_type;
+
+    auto buildPath_future = m_proxy->GetBuildPath(destination, mve_type);
     buildPath_future.wait_for(std::chrono::milliseconds(deadLine));
     auto result = buildPath_future.GetResult();
 

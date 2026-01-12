@@ -103,7 +103,7 @@ public:
 
     void fireAndForgetMethodCall();
 
-    std::shared_ptr<build_path_Objects> BuildPath(const double& destination_latitude, const double& destination_longitude, 
+    std::shared_ptr<build_path_Objects> BuildPath(const std::vector<adcm::destinationStruct>& destination, 
         const std::uint8_t& mve_type, const std::uint64_t deadLine);
 
     build_path_Objects getBuildPath();

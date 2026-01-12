@@ -52,7 +52,7 @@ void NatsSend(const adcm::risk_assessment_Objects& riskAssessment)
     }
 
     if (s == NATS_OK) {
-        const char* pubSubject = "riskAssessment.json";
+        const char* pubSubject = "riskAssessmentObjects.create";
         natsManager->ClearJsonData();
         std::string riskToStr = convertRiskAssessmentToJsonString(riskAssessment);
         natsManager->addJsonData("riskAssessment", riskToStr);
