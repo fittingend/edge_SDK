@@ -607,7 +607,7 @@ int main(int argc, char *argv[])
     adcm::Log::Info() << "RiskAssessment: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
     adcm::Log::Info() << "Ok, let's produce some RiskAssessment data...";
-    adcm::Log::Info() << "SDK release_250707_interface v2.3 for sa8195";
+    adcm::Log::Info() << "SDK release_251209_interface v2.5 for sa8195";
     // adcm::Log::Info() << "SDK release_250321_interface v2.1, AGX Orin version";
     adcm::Log::Info() << "RiskAssessment Build " << BUILD_TIMESTAMP;
 
