@@ -2247,10 +2247,11 @@ void ThreadKatech()
     std::vector<ObstacleData> obstacle_list;
 
     adcm::map_2dListVector map_2dListVector;
-    auto startTime = std::chrono::high_resolution_clock::now();
     while (continueExecution)
     {
         // 수신한 허브 데이터가 없으면 송신 X
+        std::chrono::high_resolution_clock::time_point fusion_startTime, fusion_endTime;
+        
         adcm::Log::Info() << "Wait Hub Data";
         {
             unique_lock<mutex> lock(mtx_data);
@@ -2258,8 +2259,19 @@ void ThreadKatech()
                            { return (get_workinfo && ((!workego || ego) || ((!worksub1 || sub1) && (!worksub2 || sub2) && (!worksub3 || sub3) && (!worksub4 || sub4)))); });
 
             // adcm::Log::Info() << "송신이 필요한 남은 허브 데이터 개수: " << main_vehicle_queue.size_approx() + sub1_vehicle_queue.size_approx() + sub2_vehicle_queue.size_approx();
-            startTime = std::chrono::high_resolution_clock::now();
             adcm::Log::Info() << "==============KATECH modified code start==========";
+
+            // Check order queue is not empty before accessing front()
+            if (order.empty())
+            {
+                adcm::Log::Error() << "ERROR: order queue is empty! Skipping this cycle.";
+                ego = false;
+                sub1 = false;
+                sub2 = false;
+                sub3 = false;
+                sub4 = false;
+                continue;
+            }
 
             adcm::Log::Info() << "KATECH: 이번 데이터 기준 차량: " << order.front();
             //==============1. 차량 및 장애물 데이터 위치 변환=================
@@ -2284,42 +2296,42 @@ void ThreadKatech()
                 processVehicleData(sub4_vehicle_data, sub4_vehicle, obstacle_list_sub4);
                 adcm::Log::Info() << "[SUB_VEHICLE_4] 처리: obstacle_list_sub4 size = " << obstacle_list_sub4.size();
             }
+            
+            adcm::Log::Info() << "차량 및 장애물 좌표계 변환 완료";
+
+            // ==============2. 장애물 데이터 융합 / 3. 특장차 및 보조차량 제거 / 4. 장애물 ID 부여 =================
+            fusion_startTime = std::chrono::high_resolution_clock::now();
+            
+            adcm::Log::Info() << "[mergeAndCompareLists] Before calling: main=" << obstacle_list_main.size() 
+                              << ", sub1=" << obstacle_list_sub1.size() 
+                              << ", sub2=" << obstacle_list_sub2.size() 
+                              << ", sub3=" << obstacle_list_sub3.size() 
+                              << ", sub4=" << obstacle_list_sub4.size();
+            
+            obstacle_list = mergeAndCompareLists(previous_obstacle_list, obstacle_list_main, obstacle_list_sub1,
+                                                 obstacle_list_sub2, obstacle_list_sub3, obstacle_list_sub4,
+                                                 main_vehicle, sub1_vehicle, sub2_vehicle, sub3_vehicle, sub4_vehicle);
+
+            adcm::Log::Info() << "mergeAndCompareLists 호출 후: 최종 obstacle_list size = " << obstacle_list.size();
+
+            previous_obstacle_list = obstacle_list;
+            
+            // Pop order queue and reset flags while still holding lock
+            if (!order.empty())
+            {
+                order.pop();
+            }
+            else
+            {
+                adcm::Log::Error() << "ERROR: order queue is empty at pop time! This should not happen.";
+            }
+            
             ego = false;
             sub1 = false;
             sub2 = false;
             sub3 = false;
             sub4 = false;
-            adcm::Log::Info() << "차량 및 장애물 좌표계 변환 완료";
-        }
-
-        // ==============2. 장애물 데이터 융합 / 3. 특장차 및 보조차량 제거 / 4. 장애물 ID 부여 =================
-        adcm::Log::Info() << "mergeAndCompareLists 호출 전: main=" << obstacle_list_main.size() 
-                          << ", sub1=" << obstacle_list_sub1.size() 
-                          << ", sub2=" << obstacle_list_sub2.size() 
-                          << ", sub3=" << obstacle_list_sub3.size() 
-                          << ", sub4=" << obstacle_list_sub4.size();
-        
-        obstacle_list = mergeAndCompareLists(previous_obstacle_list, obstacle_list_main, obstacle_list_sub1,
-                                             obstacle_list_sub2, obstacle_list_sub3, obstacle_list_sub4,
-                                             main_vehicle, sub1_vehicle, sub2_vehicle, sub3_vehicle, sub4_vehicle);
-
-        adcm::Log::Info() << "mergeAndCompareLists 호출 후: 최종 obstacle_list size = " << obstacle_list.size();
-
-        order.pop();
-
-        previous_obstacle_list = obstacle_list;
-
-        /*
-        for (auto obstacle : obstacle_list)
-        {
-            adcm::Log::Info() << obstacle.obstacle_class << ": [" << obstacle.fused_position_x << ", " << obstacle.fused_position_y << "]";
-        }
-
-        adcm::Log::Info() << "장애물 리스트 융합 및 ID 부여 완료";
-        adcm::Log::Info() << "장애물 리스트 사이즈: " << obstacle_list.size();
-        */
-
-        // adcm::Log::Info() << "previous_obstacle_list: " << previous_obstacle_list.size();
+        } // lock 해제
 
         // adcm::Log::Info() << "mapData obstacle list size is at start is" << mapData.obstacle_list.size();
 
@@ -2474,10 +2486,10 @@ void ThreadKatech()
 
             mapData.map_2d = map_2d_test;
             UpdateMapData(mapData, obstacle_list, vehicles);
-            auto endTime = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double, std::milli> duration = endTime - startTime;
-            double elapsed_ms = duration.count();
-            adcm::Log::Info() << "KATECH: mapdata 융합 소요 시간: " << elapsed_ms << " ms.";
+            
+            fusion_endTime = std::chrono::high_resolution_clock::now();
+            auto fusion_elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(fusion_endTime - fusion_startTime).count();
+            adcm::Log::Info() << "[FUSION_TIME] 맵 융합 및 생성 소요 시간: " << fusion_elapsed_ms << " ms";
 
             {
                 lock_guard<mutex> map_lock(mtx_map_someip);
@@ -2511,12 +2523,17 @@ void ThreadSend()
 
     while (continueExecution)
     {
+        long long wait_ms = 0;
+        
         {
             unique_lock<mutex> lock(mtx_map_someip);
             someipReady.wait(lock, []
                              { return sendEmptyMap == true ||
                                       !map_someip_queue.empty(); });
+            
+            // Timer starts after data is ready
             auto startTime = std::chrono::high_resolution_clock::now();
+            
             if (sendEmptyMap)
             {
                 mapData_provider.send(mapData);
@@ -2541,18 +2558,23 @@ void ThreadSend()
             // mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
             mapData_provider.send(tempMap);
             auto endTime = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double, std::milli> duration = endTime - startTime;
-            double elapsed_ms = duration.count();
+            auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
 
             adcm::Log::Info() << mapVer << "번째 로컬 mapdata 전송 완료, 소요 시간: " << elapsed_ms << " ms.";
 
-            if (elapsed_ms < 300.0)
+            // Guarantee 300ms period from data arrival
+            if (elapsed_ms < 300)
             {
-                std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<int>(300.0 - elapsed_ms)));
-                adcm::Log::Info() << static_cast<int>(300.0 - elapsed_ms) << "ms 만큼 전송 대기";
+                wait_ms = 300 - elapsed_ms;
             }
-            // send_map = 0;
-            // std::this_thread::sleep_for(std::chrono::milliseconds(200)); // 대기시간
+            
+        } // Lock released here before sleep
+        
+        // Sleep OUTSIDE the lock to allow ThreadKatech to push new data
+        if (wait_ms > 0)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(wait_ms));
+            adcm::Log::Info() << wait_ms << "ms 만큼 전송 대기";
         }
     }
 }
@@ -2646,8 +2668,8 @@ int main(int argc, char *argv[])
     adcm::Log::Info() << "DataFusion: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
     adcm::Log::Info() << "Ok, let's produce some DataFusion data...";
-    adcm::Log::Info() << "SDK release_250707_interface v2.4 for sa8195";
-    // adcm::Log::Info() << "SDK release_250321_interface v2.1 for orin";
+    // adcm::Log::Info() << "SDK release_251209_interface v2.5 for sa8195";
+    adcm::Log::Info() << "SDK release_251211_interface v2.5 for orin";
     adcm::Log::Info() << "DataFusion Build " << BUILD_TIMESTAMP;
 
     // 파일 경로 얻
