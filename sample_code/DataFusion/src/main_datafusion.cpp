@@ -1417,16 +1417,25 @@ void processFusion(
             unobservedObstacle.stop_count++;
         }
 
-        // 임계값 이하면 유지, 초과하면 제거
-        if (unobservedObstacle.stop_count <= STOP_COUNT_REMOVE_THRESHOLD)
+        // 정적 장애물은 누적 유지 (삭제하지 않음)
+        if (isStaticObstacle(unobservedObstacle))
         {
             newList.push_back(unobservedObstacle);
             ++carriedCount;
         }
         else
         {
-            id_manager.retID(unobservedObstacle.obstacle_id);
-            ++droppedCount;
+            // 동적 장애물만 기존 로직으로 pruning
+            if (unobservedObstacle.stop_count <= STOP_COUNT_REMOVE_THRESHOLD)
+            {
+                newList.push_back(unobservedObstacle);
+                ++carriedCount;
+            }
+            else
+            {
+                id_manager.retID(unobservedObstacle.obstacle_id);
+                ++droppedCount;
+            }
         }
     }
 
@@ -1546,20 +1555,9 @@ void ObstacleTracker::updateStaticTracks(const std::vector<ObstacleData> &detect
         // Static 장애물 위치 스무딩 적용
         smoothStaticPosition(track);
 
-        // Pruning 조건 체크 (두 임계값 모두 충족해야 유지)
-        const bool withinUnmatchedLimit = track.unmatchedFrames <= STATIC_OBSTACLE_MAX_UNMATCHED_FRAMES;
-        const bool withinStopCountLimit = track.data.stop_count <= STOP_COUNT_REMOVE_THRESHOLD;
-        
-        if (withinUnmatchedLimit && withinStopCountLimit)
-        {
-            survivingTracks.push_back(track);
-            output.push_back(track.data);
-        }
-        else
-        {
-            // 트랙 제거 시 ID 반환
-            id_manager.retID(track.data.obstacle_id);
-        }
+        // 정적 트랙은 pruning 없이 계속 유지 (누적)
+        survivingTracks.push_back(track);
+        output.push_back(track.data);
     }
 
     staticTracks_.swap(survivingTracks);
@@ -2314,6 +2312,21 @@ void ThreadKatech()
 
             adcm::Log::Info() << "mergeAndCompareLists 호출 후: 최종 obstacle_list size = " << obstacle_list.size();
 
+            // 최종 융합(추적)된 장애물들의 위치/속도 정보 로깅
+            if (!obstacle_list.empty())
+            {
+                for (size_t oi = 0; oi < obstacle_list.size(); ++oi)
+                {
+                    const auto &o = obstacle_list[oi];
+                    adcm::Log::Info() << "[FINAL_OBS] idx=" << oi
+                                      << ", id=" << o.obstacle_id
+                                      << ", class=" << static_cast<int>(o.obstacle_class)
+                                      << ", pos=(" << o.fused_position_x << ", " << o.fused_position_y << ", " << o.fused_position_z << ")"
+                                      << ", vel=(" << o.fused_velocity_x << ", " << o.fused_velocity_y << ")"
+                                      << ", stop_count=" << static_cast<int>(o.stop_count);
+                }
+            }
+
             previous_obstacle_list = obstacle_list;
             
             // Pop order queue and reset flags while still holding lock
@@ -2523,27 +2536,40 @@ void ThreadSend()
 
     while (continueExecution)
     {
-        long long wait_ms = 0;
-        
         {
             unique_lock<mutex> lock(mtx_map_someip);
             someipReady.wait(lock, []
-                             { return sendEmptyMap == true ||
-                                      !map_someip_queue.empty(); });
-            
-            // Timer starts after data is ready
-            auto startTime = std::chrono::high_resolution_clock::now();
-            
+                             { return sendEmptyMap == true || !map_someip_queue.empty(); });
+
             if (sendEmptyMap)
             {
+                // send static empty map immediately
+                lock.unlock();
                 mapData_provider.send(mapData);
                 adcm::Log::Info() << "Send empty map data";
                 sendEmptyMap = false;
                 continue;
             }
 
+            // If multiple maps queued, drop older ones and keep the latest to preserve real-time freshness
+            size_t dropped = 0;
+            while (map_someip_queue.size() > 1)
+            {
+                map_someip_queue.pop();
+                ++dropped;
+            }
+
+            if (dropped > 0)
+            {
+                adcm::Log::Info() << "Dropped " << dropped << " stale map(s) to send the latest one.";
+            }
+
+            // Pop the latest map and send it. Keep the critical section short.
             adcm::map_data_Objects tempMap = map_someip_queue.front();
             map_someip_queue.pop();
+            // release lock before performing potentially slow operations (JSON, send)
+            lock.unlock();
+
             adcm::Log::Info() << ++mapVer << "번째 로컬 mapdata 전송 시작";
 
             // map_data_object 의 생성시간 추가
@@ -2551,31 +2577,16 @@ void ThreadSend()
             auto mapData_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
             adcm::Log::Info() << "Current timestamp in milliseconds: " << mapData_timestamp;
             tempMap.timestamp = mapData_timestamp;
-            // json 저장
+
+            // json 저장 (비동기 또는 경량화 가능)
             if (saveJson)
                 makeJSON(tempMap);
-            // 맵전송
-            // mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
+
+            // 즉시 전송 — 더 이상 300ms 최소 대기 보장하지 않음
             mapData_provider.send(tempMap);
-            auto endTime = std::chrono::high_resolution_clock::now();
-            auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
-
-            adcm::Log::Info() << mapVer << "번째 로컬 mapdata 전송 완료, 소요 시간: " << elapsed_ms << " ms.";
-
-            // Guarantee 300ms period from data arrival
-            if (elapsed_ms < 300)
-            {
-                wait_ms = 300 - elapsed_ms;
-            }
-            
-        } // Lock released here before sleep
-        
-        // Sleep OUTSIDE the lock to allow ThreadKatech to push new data
-        if (wait_ms > 0)
-        {
-            std::this_thread::sleep_for(std::chrono::milliseconds(wait_ms));
-            adcm::Log::Info() << wait_ms << "ms 만큼 전송 대기";
+            adcm::Log::Info() << mapVer << "번째 로컬 mapdata 전송 완료.";
         }
+        // loop immediately to check for more data; no artificial sleep to avoid delaying fresher maps
     }
 }
 
@@ -2587,19 +2598,35 @@ void ThreadNATS()
     {
         {
             unique_lock<mutex> lock(mtx_map_nats);
-            natsReady.wait(lock, []
-                           { return sendEmptyMap == true ||
-                                    !map_nats_queue.empty(); });
+            natsReady.wait(lock, [] { return sendEmptyMap == true || !map_nats_queue.empty(); });
+
+            if (sendEmptyMap)
+            {
+                lock.unlock();
+                NatsSend(mapData);
+                sendEmptyMap = false;
+                continue;
+            }
+
+            size_t dropped = 0;
+            while (map_nats_queue.size() > 1)
+            {
+                map_nats_queue.pop();
+                ++dropped;
+            }
+            if (dropped > 0)
+            {
+                adcm::Log::Info() << "Dropped " << dropped << " stale NATS map(s) to send the latest one.";
+            }
 
             adcm::map_data_Objects tempMap = map_nats_queue.front();
             map_nats_queue.pop();
+            lock.unlock();
 
-            // 맵전송
-            // mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
+            // 맵전송 (NatsSend 내부에서 자체적으로 JSON 직렬화 및 publish 수행)
             auto startTime = std::chrono::high_resolution_clock::now();
             adcm::Log::Info() << "NATS 전송 시작";
-            // mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
-            NatsSend(mapData);
+            NatsSend(tempMap);
             auto endTime = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> duration = endTime - startTime;
             adcm::Log::Info() << "NATS 전송 완료, 소요 시간: " << duration.count() << " ms.";
