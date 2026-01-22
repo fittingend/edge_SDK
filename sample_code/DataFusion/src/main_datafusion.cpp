@@ -47,6 +47,7 @@
 #include <sstream>
 #include <fstream> // Required for file handling
 #include <filesystem>
+#include <unordered_set>
 #include "main_datafusion.hpp"
 #include "config.cpp"
 
@@ -1590,39 +1591,20 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
     mapData.obstacle_list.clear();
     mapData.vehicle_list.clear();
     mapData.road_list.clear();
-    
+    std::unordered_set<std::uint16_t> seen_obstacle_ids;
+
     for (const auto &obstacle : obstacle_list)
     {
         if (!isObstacleInRange(obstacle))
         {
             continue;
         }
+        if (!seen_obstacle_ids.insert(static_cast<std::uint16_t>(obstacle.obstacle_id)).second)
+        {
+            continue;
+        }
         mapData.obstacle_list.push_back(ConvertToObstacleListStruct(obstacle, mapData.map_2d));
     }
-    adcm::obstacleListStruct obstacle_fense;
-    obstacle_fense.obstacle_id = 111111;
-    obstacle_fense.obstacle_class = 99; // 가상 장애물
-    obstacle_fense.timestamp = obstacle_list.empty() ? 0 : obstacle_list.front().timestamp;
-    obstacle_fense.stop_count = 0;
-    obstacle_fense.fused_cuboid_x = 1;
-    obstacle_fense.fused_cuboid_y = 1;
-    obstacle_fense.fused_cuboid_z = 1;
-    obstacle_fense.fused_heading_angle = 0;
-    obstacle_fense.fused_position_x = 0;
-    obstacle_fense.fused_position_y = 0;
-    obstacle_fense.fused_position_z = 0;
-    obstacle_fense.fused_velocity_x = 0;
-    obstacle_fense.fused_velocity_y = 0;
-    obstacle_fense.fused_velocity_z = 0;
-
-    for (int x = 200; x <= 500; ++x)
-    {
-        obstacle_fense.map_2d_location.push_back({x, 500});
-    }
-
-    mapData.obstacle_list.push_back(obstacle_fense);
-
-
     for (const auto &vehicle : vehicles)
     {
         if (vehicle->vehicle_class != 0)
@@ -2029,7 +2011,6 @@ void ThreadKatech()
     adcm::Log::Info() << "ThreadKatech start...";
     NatsStart();
     //==============1.전역변수인 MapData 생성 =================
-    IDManager id_manager;
     adcm::Log::Info() << "mapData created for the first time";
     ::adcm::map_2dListStruct map_2dStruct_init;
 
@@ -2275,7 +2256,7 @@ void ThreadKatech()
             }
 
             adcm::Log::Info() << "mapdata 융합 완료";
-            adcm::Log::Info() << "IDManager 장애물 ID 최대값(getNum): " << id_manager.getNum();
+            adcm::Log::Info() << "IDManager 장애물 ID 최대값(getNum): " << ::id_manager.getNum();
         }
     }
 }
