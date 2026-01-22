@@ -63,11 +63,11 @@ std::vector<const char *> subject = {"test1.*", "test2.*"};
 std::shared_ptr<adcm::etc::NatsConnManager> natsManager;
 
 // 정적/동적 장애물 매칭 임계값 (맵 좌표는 10cm 단위)
-constexpr double STATIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD = 0.5 * M_TO_10CM_PRECISION; // 0.5m = 5 (10cm 단위)
-constexpr double DYNAMIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD = 1.0 * M_TO_10CM_PRECISION; // 1.0m = 10 (10cm 단위)
+constexpr double STATIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD = 50.0;  // Vue 기준: 0.5m = 50 (10cm 단위)
+constexpr double DYNAMIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD = 100.0; // Vue 기준: 1.0m = 100 (10cm 단위)
 constexpr double OBSTACLE_MATCH_COST_LIMIT = 999999.0;
 constexpr std::size_t STATIC_POSITION_HISTORY_SIZE = 10;   // 정적 장애물 위치 히스토리 길이
-constexpr std::size_t DYNAMIC_MAX_UNMATCHED_FRAMES = 200;     // 동적 장애물 삭제 기준 프레임 수
+constexpr std::size_t DYNAMIC_MAX_UNMATCHED_FRAMES = 25;     // 동적 장애물 삭제 기준 프레임 수 (Vue 기준)
 
 ObstacleTracker obstacleTracker;
 
@@ -548,6 +548,12 @@ bool checkAllVehicleRange(const std::vector<VehicleData *> &vehicles)
         }
     }
     return true;
+}
+
+bool isObstacleInRange(const ObstacleData &obstacle)
+{
+    return obstacle.fused_position_x >= 0 && obstacle.fused_position_x < map_x &&
+           obstacle.fused_position_y >= 0 && obstacle.fused_position_y < map_y;
 }
 
 void processVehicleData(FusionData &vehicleData,
@@ -1587,6 +1593,10 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
     
     for (const auto &obstacle : obstacle_list)
     {
+        if (!isObstacleInRange(obstacle))
+        {
+            continue;
+        }
         mapData.obstacle_list.push_back(ConvertToObstacleListStruct(obstacle, mapData.map_2d));
     }
     adcm::obstacleListStruct obstacle_fense;
