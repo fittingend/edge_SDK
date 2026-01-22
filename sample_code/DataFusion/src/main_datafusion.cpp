@@ -1512,13 +1512,13 @@ void updateStopCount(std::vector<ObstacleData> &mergedList,
             {
                 obs.stop_count = 1; // 새 장애물, 정지 1프레임
             }
-            adcm::Log::Info() << "장애물 ID " << obs.obstacle_id << " 정지 카운트: " << obs.stop_count;
+            // adcm::Log::Info() << "장애물 ID " << obs.obstacle_id << " 정지 카운트: " << obs.stop_count;
         }
 
         else
         {
             obs.stop_count = 0; // 움직이면 카운트 리셋
-            adcm::Log::Info() << "장애물 ID " << obs.obstacle_id << " 정지 카운트 초기화(움직임): " << obs.stop_count;
+            // adcm::Log::Info() << "장애물 ID " << obs.obstacle_id << " 정지 카운트 초기화(움직임): " << obs.stop_count;
         }
     }
 }
@@ -1647,8 +1647,8 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
     for (const auto &road : mapData.road_list)
     {
 
-        adcm::Log::Info() << "road_index: " << static_cast<int>(road.road_index)
-                          << ", count: " << road.map_2d_location.size();
+        // adcm::Log::Info() << "road_index: " << static_cast<int>(road.road_index)
+                        //   << ", count: " << road.map_2d_location.size();
     }
 
     map_2d_size = 0;
@@ -1737,7 +1737,7 @@ void fillObstacleList(std::vector<ObstacleData> &obstacle_list_fill, const std::
         obstacle_to_push.fused_cuboid_x = obstacle.cuboid_x;
         obstacle_to_push.fused_cuboid_y = obstacle.cuboid_y;
         obstacle_to_push.fused_cuboid_z = obstacle.cuboid_z;
-        adcm::Log::Info() << "장애물 크기: " << obstacle.cuboid_x << ", " << obstacle.cuboid_y << ", " << obstacle.cuboid_z;
+        // adcm::Log::Info() << "장애물 크기: " << obstacle.cuboid_x << ", " << obstacle.cuboid_y << ", " << obstacle.cuboid_z;
         obstacle_to_push.fused_heading_angle = obstacle.heading_angle;
         obstacle_to_push.fused_position_x = obstacle.position_x;
         obstacle_to_push.fused_position_y = obstacle.position_y;
