@@ -12,6 +12,10 @@
 #include <string>
 #include <algorithm>
 #include <queue>
+#include <unordered_map>
+#include <unordered_set>
+#include <deque>
+#include <limits>
 #include <unistd.h>
 #include <limits.h>
 #include <libgen.h>
@@ -103,22 +107,29 @@ struct Point2D
 
 struct ObstacleData
 {
-    std::uint16_t obstacle_id;
-    std::uint8_t obstacle_class;
+    std::uint16_t obstacle_id = 0;
+    std::uint8_t obstacle_class = 0;
     std::uint64_t timestamp = 0;
     std::vector<Point2D> map_2d_location;
-    std::uint8_t stop_count;
-    double fused_cuboid_x;
-    double fused_cuboid_y;
-    double fused_cuboid_z;
-    double fused_heading_angle;
-    double fused_position_x;
-    double fused_position_y;
-    double fused_position_z;
-    double fused_velocity_x;
-    double fused_velocity_y;
-    double fused_velocity_z;
-    double standard_deviation; // 오차의 표준편차(추가)
+    std::uint8_t stop_count = 0;
+    double fused_cuboid_x = 0;
+    double fused_cuboid_y = 0;
+    double fused_cuboid_z = 0;
+    double fused_heading_angle = 0;
+    double fused_position_x = 0;
+    double fused_position_y = 0;
+    double fused_position_z = 0;
+    double fused_velocity_x = 0;
+    double fused_velocity_y = 0;
+    double fused_velocity_z = 0;
+    double standard_deviation = 0; // 오차의 표준편차(추가)
+};
+
+// 정적 장애물 히스토리 관리용
+struct StaticObstacleHistory
+{
+    ObstacleData obstacle;
+    std::deque<Point2D> position_history;
 };
 
 struct VehicleSizeData
@@ -265,12 +276,15 @@ void fillVehicleData(VehicleData &vehicle_fill, const std::shared_ptr<adcm::hub_
 // 장애물 데이터 저장
 void fillObstacleList(std::vector<ObstacleData> &obstacle_list_fill, const std::shared_ptr<adcm::hub_data_Objects> &data);
 
+// 정적 장애물 여부 확인 (class 30, 40)
+bool isStaticObstacle(std::uint8_t obstacle_class);
+
 // 장애물 리스트 처리 함수 //
 // 유클리디안 거리 계산
 double euclideanDistance(const ObstacleData &a, const ObstacleData &b);
 
 // 거리 행렬 생성
-std::vector<std::vector<double>> createDistanceMatrix(const std::vector<ObstacleData> &listA, const std::vector<ObstacleData> &listB);
+std::vector<std::vector<double>> createDistanceMatrix(const std::vector<ObstacleData> &listA, const std::vector<ObstacleData> &listB, double maxDistance = std::numeric_limits<double>::infinity());
 
 // 신뢰성 기반 융합 계산
 double calculateWeightedPosition(const std::vector<double> &positions, const std::vector<double> &variances);
@@ -280,6 +294,10 @@ std::vector<int> solveAssignment(const std::vector<std::vector<double>> &costMat
 
 // 장애물 데이터 융합
 void processFusion(
+    std::vector<ObstacleData> &presList,
+    const std::vector<ObstacleData> &prevList,
+    const std::vector<int> &assignment);
+void processFusionForVehiclePair(
     std::vector<ObstacleData> &presList,
     const std::vector<ObstacleData> &prevList,
     const std::vector<int> &assignment);
@@ -318,6 +336,24 @@ void ThreadReceiveHubData();
 void ThreadReceiveWorkInfo();
 void ThreadKatech();
 void ThreadMonitor();
+
+// 정적/동적 장애물 트래커
+class ObstacleTracker
+{
+public:
+    std::vector<ObstacleData> track(const std::vector<ObstacleData> &newList);
+    void reset();
+
+private:
+    struct DynamicState
+    {
+        ObstacleData obstacle;
+        std::size_t unmatchedFrames = 0;
+    };
+
+    std::unordered_map<std::uint16_t, DynamicState> dynamic_obstacles_;
+    std::unordered_map<std::uint16_t, StaticObstacleHistory> static_obstacles_;
+};
 
 // 리눅스 Sigterm 관리
 namespace

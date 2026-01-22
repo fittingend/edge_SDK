@@ -56,28 +56,13 @@ add_compile_definitions(DEFAULT_LOG_TAG="${PROC_NAME}")
 include(GNUInstallDirs)
 include(AUTOSAR/apd)
 
-# SDK Options
-option(sa "Build with sa SDK" OFF)
-option(orin "Build with orin SDK" OFF)
-
 # SDK common Path
-set(COMMON_DIR "")
+set(COMMON_DIR "${PROJECT_SOURCE_DIR}/../common")
 
 #Build Time
 string(TIMESTAMP BUILD_TIMESTAMP "%Y-%m-%d %H:%M:%S")
 
 add_definitions(-DBUILD_TIMESTAMP="${BUILD_TIMESTAMP}")
-
-# set common directory by SDK
-if(sa)
-    message(STATUS "Building with SA SDK")
-    set(COMMON_DIR "${PROJECT_SOURCE_DIR}/../common_sa")
-elseif(orin)
-    message(STATUS "Building with ORIN SDK")
-    set(COMMON_DIR "${PROJECT_SOURCE_DIR}/../common_orin")
-else()
-    message(FATAL_ERROR "No SDK specified. Please enable either SA_SDK or ORIN_SDK.")
-endif()
 
 
 # Generic stuff (ara generator and arxmls)
