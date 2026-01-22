@@ -2037,7 +2037,10 @@ void ThreadKatech()
         {
             unique_lock<mutex> lock(mtx_data);
             dataReady.wait(lock, []
-                           { return (get_workinfo && ((!workego || ego) || ((!worksub1 || sub1) && (!worksub2 || sub2)))); });
+                {
+                    // Proceed only when work info is received and there is at least one vehicle order to process.
+                    return get_workinfo && !order.empty();
+                });
 
             // adcm::Log::Info() << "송신이 필요한 남은 허브 데이터 개수: " << main_vehicle_queue.size_approx() + sub1_vehicle_queue.size_approx() + sub2_vehicle_queue.size_approx();
             startTime = std::chrono::high_resolution_clock::now();
