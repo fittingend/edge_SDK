@@ -1573,7 +1573,7 @@ adcm::obstacleListStruct ConvertToObstacleListStruct(const ObstacleData &obstacl
     obstacle_map.fused_cuboid_x = obstacle.fused_cuboid_x;
     obstacle_map.fused_cuboid_y = obstacle.fused_cuboid_y;
     obstacle_map.fused_cuboid_z = obstacle.fused_cuboid_z;
-    adcm::Log::Info() << "장애물 ID " << obstacle.obstacle_id << " 크기: [" << obstacle.fused_cuboid_x << ", " << obstacle.fused_cuboid_y << ", " << obstacle.fused_cuboid_z << "]";
+    // adcm::Log::Info() << "장애물 ID " << obstacle.obstacle_id << " 크기: [" << obstacle.fused_cuboid_x << ", " << obstacle.fused_cuboid_y << ", " << obstacle.fused_cuboid_z << "]";
     obstacle_map.fused_heading_angle = obstacle.fused_heading_angle;
     obstacle_map.fused_position_x = obstacle.fused_position_x;
     obstacle_map.fused_position_y = obstacle.fused_position_y;
@@ -1643,6 +1643,13 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
     adcm::Log::Info() << "mapData 장애물 반영 완료 개수: " << mapData.obstacle_list.size();
     adcm::Log::Info() << "mapData 차량 반영 완료 개수: " << mapData.vehicle_list.size();
     adcm::Log::Info() << "mapData road_list 반영 완료 개수: " << mapData.road_list.size();
+
+    for (const auto &obs : mapData.obstacle_list)
+    {
+        adcm::Log::Info() << "mapData 장애물 위치 확인 - ID " << obs.obstacle_id
+                          << ", class " << static_cast<int>(obs.obstacle_class)
+                          << ", pos [" << obs.fused_position_x << ", " << obs.fused_position_y << ", " << obs.fused_position_z << "]";
+    }
 
     for (const auto &road : mapData.road_list)
     {
