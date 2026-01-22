@@ -552,8 +552,8 @@ bool checkAllVehicleRange(const std::vector<VehicleData *> &vehicles)
 
 bool isObstacleInRange(const ObstacleData &obstacle)
 {
-    return obstacle.fused_position_x >= 0 && obstacle.fused_position_x < map_x &&
-           obstacle.fused_position_y >= 0 && obstacle.fused_position_y < map_y;
+    return obstacle.fused_position_x > 0 && obstacle.fused_position_x < map_x &&
+           obstacle.fused_position_y > 0 && obstacle.fused_position_y < map_y;
 }
 
 void processVehicleData(FusionData &vehicleData,
@@ -2275,6 +2275,7 @@ void ThreadKatech()
             }
 
             adcm::Log::Info() << "mapdata 융합 완료";
+            adcm::Log::Info() << "IDManager 장애물 ID 최대값(getNum): " << id_manager.getNum();
         }
     }
 }
