@@ -59,29 +59,12 @@ include(AUTOSAR/apd)
 # build Options
 option(sa "Build with sa SDK" OFF)
 option(orin "Build with orin SDK" OFF)
-option(nats "Enable NATS integration" OFF)
-option(json "Enable JSON output" OFF)
 
 #Build Time
 string(TIMESTAMP BUILD_TIMESTAMP "%Y-%m-%d %H:%M:%S")
 
 add_definitions(-DBUILD_TIMESTAMP="${BUILD_TIMESTAMP}")
 
-if (nats)
-    message(STATUS "NATS is enabled")
-    add_definitions(-DNATS)
-else()
-    message(STATUS "NATS is disabled")
-    add_definitions(-UNATS)
-endif()
-
-if (json)
-    message(STATUS "save to JSON is enabled")
-    add_definitions(-DENABLE_JSON)
-else()
-    message(STATUS "save to JSON is disabled")
-    add_definitions(-UENABLE_JSON)
-endif()
 
 
 # SDK common Path

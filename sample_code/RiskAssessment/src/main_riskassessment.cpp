@@ -47,6 +47,7 @@
 
 #include "main_riskassessment.hpp"
 #include "NATS/NatsHandler.hpp"
+#include "NATS/config.cpp"
 /**
   * 쓰레드간 관계
 [ThreadReceiveMapData]
@@ -75,6 +76,9 @@ obstacleListVector obstacle_list;
 adcm::vehicleListStruct ego_vehicle, sub_vehicle_1, sub_vehicle_2, sub_vehicle_3, sub_vehicle_4;
 adcm::risk_assessment_Objects riskAssessment;
 uint64_t timestamp_map = 0; 
+std::string nats_server_url;
+bool useNats = false;
+bool saveJson = false;
 
 std::uint8_t type = 0; // 시뮬레이션 = 0, 실증 = 1
 
@@ -500,22 +504,21 @@ void ThreadSend()
         auto send_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end_send - t_start_send).count();
         adcm::Log::Info() << "→ 위험판단 전송 소요 시간: " << send_duration_ms << " ms";
 
-#ifdef NATS
-        auto t_start_nats = std::chrono::high_resolution_clock::now();
-        adcm::Log::Info() << "→ NATS 전송 시작";
-        NatsSend(riskAssessment);
-        auto t_end_nats = std::chrono::high_resolution_clock::now();
-        adcm::Log::Info() << "→ NATS 전송 완료";
+        if (useNats)
+        {
+            auto t_start_nats = std::chrono::high_resolution_clock::now();
+            adcm::Log::Info() << "→ NATS 전송 시작";
+            NatsSend(riskAssessment);
+            auto t_end_nats = std::chrono::high_resolution_clock::now();
+            adcm::Log::Info() << "→ NATS 전송 완료";
 
-        auto nats_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end_nats - t_start_nats).count();
-        adcm::Log::Info() << "→ NATS 전송 소요 시간: " << nats_duration_ms << " ms";
-#endif
-
-#ifdef ENABLE_JSON
-
-        SaveAsJson(riskAssessment);
-
-#endif
+            auto nats_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end_nats - t_start_nats).count();
+            adcm::Log::Info() << "→ NATS 전송 소요 시간: " << nats_duration_ms << " ms";
+        }
+        if (saveJson)
+        {
+            SaveAsJson(riskAssessment);
+        }
         auto t_end_total = std::chrono::high_resolution_clock::now();
         auto total_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end_total - t_start_total).count();
         adcm::Log::Info() << "→ 전체 전송 처리 시간: " << total_duration_ms << " ms";
@@ -578,6 +581,9 @@ int main(int argc, char *argv[])
     UNUSED(argc);
     UNUSED(argv);
 
+    Config config;
+    std::string iniFilePath = "/opt/RiskAssessment/etc/config.ini";
+
     if (!ara::core::Initialize())
     {
         // No interaction with ARA is possible here since initialization failed
@@ -604,13 +610,34 @@ int main(int argc, char *argv[])
     adcm::Log::Info() << "SDK release_250707_interface v2.3 for sa8195";
     // adcm::Log::Info() << "SDK release_250321_interface v2.1, AGX Orin version";
     adcm::Log::Info() << "RiskAssessment Build " << BUILD_TIMESTAMP;
-#ifdef NATS
-    // Code to execute if NATS is defined
-    adcm::Log::Info() << "NATS ON";
-#else
-    // Code to execute if NATS is not defined
-    adcm::Log::Info() << "NATS OFF";
-#endif
+
+    if (config.loadFromFile(iniFilePath))
+    {
+        adcm::Log::Info() << "NATS Configuration loaded successfully!";
+        config.print();
+    }
+    else
+    {
+        adcm::Log::Info() << "Failed to load configuration.";
+        config.print();
+    }
+
+    if (config.serverPort == 0)
+    {
+        nats_server_url = config.serverAddress;
+    }
+    else
+    {
+        nats_server_url = config.serverAddress + ":" + std::to_string(config.serverPort);
+    }
+    adcm::Log::Info() << "NATS_SERVER_URL: " << nats_server_url;
+
+    if (config.useNats)
+        useNats = true;
+    if (config.saveJson)
+        saveJson = true;
+
+    adcm::Log::Info() << (useNats ? "NATS ON" : "NATS OFF");
     thread_list.push_back(std::thread(ThreadReceiveMapData));
     thread_list.push_back(std::thread(ThreadReceiveBuildPath));
     thread_list.push_back(std::thread(ThreadReceiveWorkInformation));

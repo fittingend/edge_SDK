@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <limits>
 #include <utility>
+#include <string>
 
 // ==== ARA & Logger 관련 헤더 ====
 #include <ara/com/e2exf/status_handler.h>
@@ -38,6 +39,9 @@
 #define MAP_ANGLE -86
 
 extern uint64_t timestamp_map; 
+extern std::string nats_server_url;
+extern bool useNats;
+extern bool saveJson;
 
 // 맵 x, y 방향 사이즈
 extern std::uint16_t map_x;

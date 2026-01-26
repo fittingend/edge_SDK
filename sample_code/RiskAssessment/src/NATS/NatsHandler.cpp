@@ -2,7 +2,6 @@
 #include "../main_riskassessment.hpp"
 #include <sstream>
 #include <fstream>
-#include <filesystem>
 #include <iostream>
 #include <mutex>
 #include <boost/filesystem.hpp>
@@ -10,14 +9,9 @@
 #include <Poco/JSON/Array.h>
 #include <Poco/JSON/Stringifier.h>
 
-namespace fs = boost::filesystem;
 using namespace Poco::JSON;
 
-
 // 전역 변수 정의
-#ifdef NATS
-bool firstTime = true;
-natsStatus s = NATS_OK;
 std::vector<const char*> subject = {};
 std::shared_ptr<adcm::etc::NatsConnManager> natsManager;
 std::mutex mtx;
@@ -45,14 +39,15 @@ void NatsSend(const adcm::risk_assessment_Objects& riskAssessment)
     if (firstTime) {
         adcm::Log::Info() << "NATS first time setup!";
         natsManager = std::make_shared<adcm::etc::NatsConnManager>(
-            HMI_SERVER_URL, subject, onMsg, asyncCb,
+            nats_server_url.c_str(), subject, onMsg, asyncCb,
             adcm::etc::NatsConnManager::Mode::Default);
         s = natsManager->NatsExecute();
         firstTime = false;
     }
 
     if (s == NATS_OK) {
-        const char* pubSubject = "riskAssessment.json";
+        //const char* pubSubject = "riskAssessment.json";
+        const char* pubSubject = "riskAssessmentObjects.create";
         natsManager->ClearJsonData();
         std::string riskToStr = convertRiskAssessmentToJsonString(riskAssessment);
         natsManager->addJsonData("riskAssessment", riskToStr);
@@ -62,7 +57,7 @@ void NatsSend(const adcm::risk_assessment_Objects& riskAssessment)
         std::cout << "Nats Connection error" << std::endl;
         try {
             natsManager = std::make_shared<adcm::etc::NatsConnManager>(
-                HMI_SERVER_URL, subject, onMsg, asyncCb,
+                nats_server_url.c_str(), subject, onMsg, asyncCb,
                 adcm::etc::NatsConnManager::Mode::Default);
             s = natsManager->NatsExecute();
         } catch (std::exception& e) {
@@ -72,16 +67,12 @@ void NatsSend(const adcm::risk_assessment_Objects& riskAssessment)
 }
 
 
-#endif
-
-#ifdef ENABLE_JSON
 void SaveAsJson(const adcm::risk_assessment_Objects& riskAssessment)
 {
     static int risk_count = 0;
     std::string riskToStr = convertRiskAssessmentToJsonString(riskAssessment);
     saveToJsonFile("riskAssessment", riskToStr, risk_count);
 }
-#endif
 
 void saveToJsonFile(const std::string& key, const std::string& value, int& fileCount)
 {
