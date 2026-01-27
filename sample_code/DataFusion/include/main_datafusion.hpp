@@ -103,7 +103,7 @@ struct Point2D
 
 struct ObstacleData
 {
-    std::uint16_t obstacle_id;
+    std::uint16_t obstacle_id = 0;
     std::uint8_t obstacle_class;
     std::uint64_t timestamp = 0;
     std::vector<Point2D> map_2d_location;
