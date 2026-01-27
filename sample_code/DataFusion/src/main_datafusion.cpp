@@ -732,6 +732,21 @@ void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered)
         checkRange(LL);
 
         generateOccupancyIndex(LU, RU, RL, LL, *(&iter));
+
+        adcm::Log::Info() << "[OCCUPANCY] obstacle center=" << obstacle_position_x << "," << obstacle_position_y
+                          << " size(m)=" << iter->fused_cuboid_x << "x" << iter->fused_cuboid_y
+                          << " heading(deg)=" << iter->fused_heading_angle;
+
+        adcm::Log::Info() << "[OCCUPANCY] corners LU=" << LU.x << "," << LU.y
+                  << " RU=" << RU.x << "," << RU.y
+                  << " RL=" << RL.x << "," << RL.y
+                  << " LL=" << LL.x << "," << LL.y;
+
+        adcm::Log::Info() << "[OCCUPANCY] obstacle map_2d_location total=" << iter->map_2d_location.size();
+        for (const auto &pt : iter->map_2d_location)
+        {
+            adcm::Log::Info() << "[OCCUPANCY] cell=(" << pt.x << ", " << pt.y << ")";
+        }
     }
 }
 
