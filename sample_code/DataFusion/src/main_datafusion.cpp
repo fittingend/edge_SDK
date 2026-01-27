@@ -48,9 +48,11 @@
 #include <fstream> // Required for file handling
 #include <filesystem>
 #include <limits>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include "main_datafusion.hpp"
+#include "occupancy_algorithm.hpp"
 #include "config.cpp"
 
 #include <unistd.h>
@@ -611,75 +613,23 @@ void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleDa
     }
 }
 
-// 레이캐스팅 대체 삼각형 내부포함 판단
-bool isPointInTriangle(const Point2D &pt, const Point2D &v1, const Point2D &v2, const Point2D &v3)
-{
-    // 벡터 방식으로 barycentric 판별
-    double dX = pt.x - v3.x;
-    double dY = pt.y - v3.y;
-    double dX21 = v2.x - v1.x;
-    double dY21 = v2.y - v1.y;
-    double dX31 = v3.x - v1.x;
-    double dY31 = v3.y - v1.y;
-
-    double denominator = dY21 * dX31 - dX21 * dY31;
-
-    // 삼각형 넓이가 0인 경우 예외 처리
-    if (denominator == 0)
-        return false;
-
-    double a = (dY21 * dX - dX21 * dY) / denominator;
-    double b = (dY31 * dX - dX31 * dY) / -denominator;
-    double c = 1.0 - a - b;
-
-    return (a >= 0) && (b >= 0) && (c >= 0);
-}
-
-// 기존 레이캐스팅 기반
+// occupancy_algorithm 기반
 void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, VehicleData &vehicle)
 {
-    Point2D points[] = {p0, p1, p2, p3};
+    constexpr double cellSize = 1.0; // 10cm 단위 그리드
+    std::vector<occupancy::Pt> poly = {
+        {p0.x, p0.y},
+        {p1.x, p1.y},
+        {p2.x, p2.y},
+        {p3.x, p3.y},
+    };
 
-    // 4개 지점 좌표의 최소값 최댓값 계산
-    double min_x = points[0].x, max_x = points[0].x;
-    double min_y = points[0].y, max_y = points[0].y;
-    for (const auto &p : points)
+    auto cells = occupancy::rasterizePolygonToCells(poly, cellSize);
+    for (const auto &cell : cells)
     {
-        min_x = std::min(min_x, p.x);
-        max_x = std::max(max_x, p.x);
-        min_y = std::min(min_y, p.y);
-        max_y = std::max(max_y, p.y);
-    }
-
-    Point2D index;
-    // 레이캐스팅 알고리즘
-    for (index.x = min_x; index.x <= max_x; ++index.x)
-    {
-        for (index.y = min_y; index.y <= max_y; ++index.y)
-        {
-            int cross = 0;
-            for (int i = 0; i < 4; i++)
-            {
-                int j = (i + 1) % 4;
-                if ((points[i].y > index.y) != (points[j].y > index.y))
-                {
-                    // 교차점을 구한다
-                    double meetX = (points[j].x - points[i].x) * (index.y - points[i].y) /
-                                       (points[j].y - points[i].y) +
-                                   points[i].x;
-                    // 교차점 meetX 가 검증을 진행하는 인덱스의 x 좌표보다 크면 교차발생 cross++
-                    if (index.x < meetX)
-                        cross++;
-                }
-            }
-            // 교차횟수 cross가 짝수이면 점은 외부, 홀수면 점은 내부에 있음
-            if (cross % 2 != 0)
-            {
-                vehicle.map_2d_location.push_back(index);
-                // road_z 코드 -> road_index로 수정 예정
-                // mapData.map_2d[index.x][index.y].road_z = 1;
-            }
-        }
+        Point2D index{static_cast<double>(cell.first), static_cast<double>(cell.second)};
+        checkRange(index);
+        vehicle.map_2d_location.push_back(index);
     }
 }
 
@@ -688,28 +638,20 @@ void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std:
     if (iter == std::vector<ObstacleData>::iterator())
         return; // 유효하지 않은 iterator 방지
 
-    Point2D points[] = {p0, p1, p2, p3};
+    constexpr double cellSize = 1.0; // 10cm 단위 그리드
+    std::vector<occupancy::Pt> poly = {
+        {p0.x, p0.y},
+        {p1.x, p1.y},
+        {p2.x, p2.y},
+        {p3.x, p3.y},
+    };
 
-    // AABB 계산
-    int min_x = static_cast<int>(std::floor(std::min({p0.x, p1.x, p2.x, p3.x})));
-    int max_x = static_cast<int>(std::ceil(std::max({p0.x, p1.x, p2.x, p3.x})));
-    int min_y = static_cast<int>(std::floor(std::min({p0.y, p1.y, p2.y, p3.y})));
-    int max_y = static_cast<int>(std::ceil(std::max({p0.y, p1.y, p2.y, p3.y})));
-
-    for (int x = min_x; x <= max_x; ++x)
+    auto cells = occupancy::rasterizePolygonToCells(poly, cellSize);
+    for (const auto &cell : cells)
     {
-        for (int y = min_y; y <= max_y; ++y)
-        {
-            Point2D pt = {static_cast<double>(x), static_cast<double>(y)};
-            // 삼각형 2개 중 하나에 포함되면 내부
-            if (isPointInTriangle(pt, p0, p1, p2) ||
-                isPointInTriangle(pt, p0, p2, p3))
-            {
-                iter->map_2d_location.push_back({x, y});
-                // map_2d_test[x][y].obstacle_id = iter->obstacle_id;
-                // map_2d_test[x][y].road_z = 1; // TODO: 장애물 마킹
-            }
-        }
+        Point2D index{static_cast<double>(cell.first), static_cast<double>(cell.second)};
+        checkRange(index);
+        iter->map_2d_location.push_back(index);
     }
 }
 
@@ -722,14 +664,14 @@ void find4VerticesVehicle(VehicleData &target_vehicle)
 
     if (target_vehicle.vehicle_class == EGO_VEHICLE)
     {
-        half_x = main_vehicle_size.length / 2;
-        half_y = main_vehicle_size.width / 2;
+        half_x = main_vehicle_size.length / 2 * M_TO_10CM_PRECISION;
+        half_y = main_vehicle_size.width / 2 * M_TO_10CM_PRECISION;
     }
 
     else
     {
-        half_x = sub_vehicle_size.front().length / 2;
-        half_y = sub_vehicle_size.front().width / 2;
+        half_x = sub_vehicle_size.front().length / 2 * M_TO_10CM_PRECISION;
+        half_y = sub_vehicle_size.front().width / 2 * M_TO_10CM_PRECISION;
     }
     // Top-left (LU)
     LU.x = target_vehicle.position_x + cos(theta) * (-half_x) - sin(theta) * (half_y);

@@ -181,6 +181,7 @@ set(APPLICATION_src
     src/id_manager.cpp
     src/config.cpp
     src/NatsConnManager.cpp
+    src/occupancy_algorithm.cpp
     ${${PROCESS_ARTIFACTS_MAKE_TARGET}_SOURCES}
     ${COMMON_DIR}/logger/src/logger.cpp
     ${COMMON_DIR}/service/src/map_data_provider.cpp
