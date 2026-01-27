@@ -270,7 +270,7 @@ void fillObstacleList(std::vector<ObstacleData> &obstacle_list_fill, const std::
 double euclideanDistance(const ObstacleData &a, const ObstacleData &b);
 
 // 거리 행렬 생성
-std::vector<std::vector<double>> createDistanceMatrix(const std::vector<ObstacleData> &listA, const std::vector<ObstacleData> &listB);
+std::vector<std::vector<double>> createDistanceMatrix(const std::vector<ObstacleData> &listA, const std::vector<ObstacleData> &listB, double maxDistance = std::numeric_limits<double>::infinity());
 
 // 신뢰성 기반 융합 계산
 double calculateWeightedPosition(const std::vector<double> &positions, const std::vector<double> &variances);

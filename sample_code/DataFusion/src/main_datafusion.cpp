@@ -1026,7 +1026,7 @@ ObstacleTracker obstacleTracker;
 std::vector<std::vector<double>> createDistanceMatrix(
     const std::vector<ObstacleData> &listA,
     const std::vector<ObstacleData> &listB,
-    double maxDistance = std::numeric_limits<double>::infinity())
+    double maxDistance)
 {
     std::vector<std::vector<double>> distanceMatrix(listA.size(), std::vector<double>(listB.size()));
     for (size_t i = 0; i < listA.size(); ++i)
