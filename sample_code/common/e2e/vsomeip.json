@@ -1,0 +1,57 @@
+{
+    "e2e":
+    {
+        "e2e_enabled": "true",
+        "protected":
+        [
+            {
+                "profile": "CRC8",
+                "variant": "both",
+                "data_id": "1234",
+                "service_id": "99",
+                "event_id": "1",
+                "crc_offset": "0",
+                "data_length": "16",
+                "counter_offset": "8",
+                "data_id_nibble_offset": "12",
+                "data_id_mode": "0"
+            },
+            {
+                "profile": "CRC8",
+                "variant": "both",
+                "data_id": "5678",
+                "service_id": "99",
+                "event_id": "2",
+                "crc_offset": "0",
+                "data_length": "16",
+                "counter_offset": "8",
+                "data_id_nibble_offset": "12",
+                "data_id_mode": "0"
+            },
+            {
+                "profile": "CRC8",
+                "variant": "protector",
+                "data_id": "8765",
+                "service_id": "99",
+                "event_id": "3000",
+                "crc_offset": "0",
+                "data_length": "16",
+                "counter_offset": "8",
+                "data_id_nibble_offset": "12",
+                "data_id_mode": "0"
+            },
+            {
+                "profile": "CRC8",
+                "variant": "protector",
+                "data_id": "4321",
+                "service_id": "99",
+                "event_id": "3004",
+                "crc_offset": "0",
+                "data_length": "16",
+                "counter_offset": "8",
+                "data_id_nibble_offset": "12",
+                "data_id_mode": "0"
+            }
+        ]
+    }
+}
