@@ -815,19 +815,37 @@ private:
     const size_t POSITION_HISTORY_SIZE = 10;                                           // 정적 장애물: 10프레임
 
 public:
-    std::vector<ObstacleData> track(const std::vector<ObstacleData> &newList)
+    enum class TrackMode
+    {
+        Both,
+        StaticOnly,
+        DynamicOnly
+    };
+
+    std::vector<ObstacleData> track(const std::vector<ObstacleData> &newList, TrackMode mode = TrackMode::Both)
     {
         std::vector<ObstacleData> trackedList;
         std::unordered_set<std::uint16_t> matchedDynamicIds;
         std::unordered_set<std::uint16_t> matchedStaticIds;
+        const std::string prefix = framePrefix();
 
         // 하나의 리스트에서 정적/동적 장애물 분기 처리
         for (const auto &currentObstacle : newList)
         {
             const bool isStatic = isStaticObstacle(currentObstacle.obstacle_class);
 
+            adcm::Log::Info() << prefix << "[TRACK] input id=" << currentObstacle.obstacle_id
+                              << " class=" << static_cast<int>(currentObstacle.obstacle_class)
+                              << " pos=(" << currentObstacle.fused_position_x << ", " << currentObstacle.fused_position_y << ")"
+                              << " type=" << (isStatic ? "static" : "dynamic");
+
             if (isStatic)
             {
+                if (mode == TrackMode::DynamicOnly)
+                {
+                    trackedList.push_back(currentObstacle);
+                    continue;
+                }
                 bool matched = false;
                 std::uint16_t bestMatchId = 0;
                 double bestDistance = std::numeric_limits<double>::infinity();
@@ -850,6 +868,9 @@ public:
 
                 if (matched && bestMatchId != 0)
                 {
+                    adcm::Log::Info() << prefix << "[TRACK] static match bestId=" << bestMatchId
+                                      << " bestDist=" << bestDistance
+                                      << " thresh=" << STATIC_DISTANCE_THRESHOLD;
                     auto &history = staticObstacles[bestMatchId];
 
                     history.positionHistory.push_back({currentObstacle.fused_position_x, currentObstacle.fused_position_y});
@@ -879,6 +900,8 @@ public:
                 }
                 else
                 {
+                    adcm::Log::Info() << prefix << "[TRACK] static no-match bestDist=" << bestDistance
+                                      << " thresh=" << STATIC_DISTANCE_THRESHOLD;
                     ObstacleData trackedObstacle = currentObstacle;
                     if (trackedObstacle.obstacle_id == 0)
                     {
@@ -892,6 +915,11 @@ public:
             }
             else
             {
+                if (mode == TrackMode::StaticOnly)
+                {
+                    trackedList.push_back(currentObstacle);
+                    continue;
+                }
                 bool matched = false;
                 std::uint16_t bestMatchId = 0;
                 double bestDistance = std::numeric_limits<double>::infinity();
@@ -914,6 +942,9 @@ public:
 
                 if (matched && bestMatchId != 0)
                 {
+                    adcm::Log::Info() << prefix << "[TRACK] dynamic match bestId=" << bestMatchId
+                                      << " bestDist=" << bestDistance
+                                      << " thresh=" << DISTANCE_THRESHOLD;
                     auto &tracked = dynamicObstacles[bestMatchId];
                     ObstacleData trackedObstacle = currentObstacle;
                     trackedObstacle.obstacle_id = tracked.obstacle.obstacle_id;
@@ -925,6 +956,8 @@ public:
                 }
                 else
                 {
+                    adcm::Log::Info() << prefix << "[TRACK] dynamic no-match bestDist=" << bestDistance
+                                      << " thresh=" << DISTANCE_THRESHOLD;
                     ObstacleData trackedObstacle = currentObstacle;
                     if (trackedObstacle.obstacle_id == 0)
                     {
@@ -939,51 +972,66 @@ public:
         }
 
         // 매칭되지 않은 기존 동적 장애물 처리
-        for (auto it = dynamicObstacles.begin(); it != dynamicObstacles.end();)
+        if (mode != TrackMode::StaticOnly)
         {
-            if (matchedDynamicIds.find(it->first) == matchedDynamicIds.end())
+            for (auto it = dynamicObstacles.begin(); it != dynamicObstacles.end();)
             {
-                it->second.unmatchedFrames += 1;
-                if (it->second.unmatchedFrames >= MAX_UNMATCHED_FRAMES)
+                if (matchedDynamicIds.find(it->first) == matchedDynamicIds.end())
                 {
-                    it = dynamicObstacles.erase(it);
-                    continue;
+                    it->second.unmatchedFrames += 1;
+                    if (it->second.unmatchedFrames >= MAX_UNMATCHED_FRAMES)
+                    {
+                        adcm::Log::Info() << prefix << "[TRACK] dynamic drop id=" << it->first
+                                          << " unmatchedFrames=" << it->second.unmatchedFrames;
+                        it = dynamicObstacles.erase(it);
+                        continue;
+                    }
+                    else
+                    {
+                        adcm::Log::Info() << prefix << "[TRACK] dynamic keep id=" << it->first
+                                          << " unmatchedFrames=" << it->second.unmatchedFrames
+                                          << " pos=(" << it->second.obstacle.fused_position_x << ", " << it->second.obstacle.fused_position_y << ")";
+                        trackedList.push_back(it->second.obstacle);
+                    }
                 }
-                else
-                {
-                    trackedList.push_back(it->second.obstacle);
-                }
+                ++it;
             }
-            ++it;
         }
 
         // 매칭되지 않은 기존 정적 장애물 처리 (유지)
-        for (const auto &pair : staticObstacles)
+        if (mode != TrackMode::DynamicOnly)
         {
-            const auto id = pair.first;
-            const auto &history = pair.second;
-            if (matchedStaticIds.find(id) == matchedStaticIds.end())
+            for (const auto &pair : staticObstacles)
             {
-                if (!history.positionHistory.empty())
+                const auto id = pair.first;
+                const auto &history = pair.second;
+                if (matchedStaticIds.find(id) == matchedStaticIds.end())
                 {
-                    double avgX = 0.0;
-                    double avgY = 0.0;
-                    for (const auto &pos : history.positionHistory)
+                    if (!history.positionHistory.empty())
                     {
-                        avgX += pos.x;
-                        avgY += pos.y;
-                    }
-                    avgX /= static_cast<double>(history.positionHistory.size());
-                    avgY /= static_cast<double>(history.positionHistory.size());
+                        adcm::Log::Info() << prefix << "[TRACK] static keep id=" << id
+                                          << " historySize=" << history.positionHistory.size();
+                        double avgX = 0.0;
+                        double avgY = 0.0;
+                        for (const auto &pos : history.positionHistory)
+                        {
+                            avgX += pos.x;
+                            avgY += pos.y;
+                        }
+                        avgX /= static_cast<double>(history.positionHistory.size());
+                        avgY /= static_cast<double>(history.positionHistory.size());
 
-                    ObstacleData trackedObstacle = history.obstacle;
-                    trackedObstacle.fused_position_x = avgX;
-                    trackedObstacle.fused_position_y = avgY;
-                    trackedList.push_back(trackedObstacle);
-                }
-                else
-                {
-                    trackedList.push_back(history.obstacle);
+                        ObstacleData trackedObstacle = history.obstacle;
+                        trackedObstacle.fused_position_x = avgX;
+                        trackedObstacle.fused_position_y = avgY;
+                        trackedList.push_back(trackedObstacle);
+                    }
+                    else
+                    {
+                        adcm::Log::Info() << prefix << "[TRACK] static keep id=" << id
+                                          << " historySize=0";
+                        trackedList.push_back(history.obstacle);
+                    }
                 }
             }
         }
@@ -1113,7 +1161,8 @@ void processFusionForVehiclePair(
 void processFusion(
     std::vector<ObstacleData> &presList,
     const std::vector<ObstacleData> &prevList,
-    const std::vector<int> &assignment)
+    const std::vector<int> &assignment,
+    ObstacleTracker::TrackMode mode)
 {
     std::vector<ObstacleData> newList;
 
@@ -1170,8 +1219,18 @@ void processFusion(
         }
     }
 
-    // 트래커 적용
-    const auto trackedList = obstacleTracker.track(newList);
+    if (newList.empty())
+    {
+        const auto trackedList = obstacleTracker.track(
+            newList,
+            mode);
+        presList = trackedList;
+        return;
+    }
+
+    const auto trackedList = obstacleTracker.track(
+        newList,
+        mode);
     presList = trackedList;
 }
 
@@ -1272,7 +1331,12 @@ std::vector<ObstacleData> mergeAndCompareLists(
         if (previousFusionList.empty())
             adcm::Log::Info() << prefix << "[MERGELIST] 장애물 리스트 비어있음";
         else
-            adcm::Log::Info() << prefix << "[MERGELIST] 현재 TimeStamp 장애물 X, 이전 TimeStamp 장애물리스트 그대로 사용";
+            adcm::Log::Info() << prefix << "[MERGELIST] 현재 TimeStamp 장애물 X, 이전 TimeStamp 장애물리스트 그대로 사용 및 출력";
+
+        for (const auto &obs : previousFusionList)
+        {
+            adcm::Log::Info() << prefix << "ID " << obs.obstacle_id << "(" << obs.obstacle_class << ") : [" << obs.fused_position_x << ", " << obs.fused_position_y << "]";
+        }
         return previousFusionList;
     }
     else
@@ -1318,7 +1382,12 @@ std::vector<ObstacleData> mergeAndCompareLists(
         {
             auto distMatrix = createDistanceMatrix(staticPrevList, staticMergedList, STATIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD);
             auto assignment = solveAssignment(distMatrix);
-            processFusion(staticMergedList, staticPrevList, assignment);
+            processFusion(staticMergedList, staticPrevList, assignment, ObstacleTracker::TrackMode::StaticOnly);
+        }
+        else if (staticMergedList.empty() && !staticPrevList.empty())
+        {
+            std::vector<int> emptyAssignment;
+            processFusion(staticMergedList, staticPrevList, emptyAssignment, ObstacleTracker::TrackMode::StaticOnly);
         }
         else if (!staticMergedList.empty())
         {
@@ -1336,7 +1405,12 @@ std::vector<ObstacleData> mergeAndCompareLists(
         {
             auto distMatrix = createDistanceMatrix(dynamicPrevList, dynamicMergedList, DYNAMIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD);
             auto assignment = solveAssignment(distMatrix);
-            processFusion(dynamicMergedList, dynamicPrevList, assignment);
+            processFusion(dynamicMergedList, dynamicPrevList, assignment, ObstacleTracker::TrackMode::DynamicOnly);
+        }
+        else if (dynamicMergedList.empty() && !dynamicPrevList.empty())
+        {
+            std::vector<int> emptyAssignment;
+            processFusion(dynamicMergedList, dynamicPrevList, emptyAssignment, ObstacleTracker::TrackMode::DynamicOnly);
         }
         else if (!dynamicMergedList.empty())
         {
