@@ -508,7 +508,7 @@ void ThreadSend()
         {
             auto t_start_nats = std::chrono::high_resolution_clock::now();
             adcm::Log::Info() << "→ NATS 전송 시작";
-            NatsSend(riskAssessment);
+            NatsSend(riskAssessment, obstacle_list);
             auto t_end_nats = std::chrono::high_resolution_clock::now();
             adcm::Log::Info() << "→ NATS 전송 완료";
 

@@ -18,7 +18,7 @@ std::mutex mtx;
 
 void asyncCb(natsConnection* nc, natsSubscription* sub, natsStatus err, void* closure)
 {
-    std::cout << "Async error: " << err << " - " << natsStatus_GetText(err) << std::endl;
+    adcm::Log::Info() << "Async error: " << err << " - " << natsStatus_GetText(err);
     natsManager->NatsSubscriptionGetDropped(sub, (int64_t*) &natsManager->dropped);
 }
 
@@ -27,20 +27,19 @@ void onMsg(natsConnection* nc, natsSubscription* sub, natsMsg* msg, void* closur
     std::lock_guard<std::mutex> lock(mtx);
     const char* subject = natsMsg_GetSubject(msg);
 
-    std::cout << "Received msg: [" << subject << " : " << natsMsg_GetDataLength(msg) << "]" << natsMsg_GetData(msg) << std::endl;
+    adcm::Log::Info() << "Received msg: [" << subject << " : " << natsMsg_GetDataLength(msg) << "]" << natsMsg_GetData(msg);
     natsManager->NatsMsgDestroy(msg);
 }
 
-void NatsSend(const adcm::risk_assessment_Objects& riskAssessment)
+void NatsSend(const adcm::risk_assessment_Objects& riskAssessment, const obstacleListVector& obstacle_list)
 {
     static bool firstTime = true;
     static natsStatus s = NATS_OK;
-
     if (firstTime) {
         adcm::Log::Info() << "NATS first time setup!";
         natsManager = std::make_shared<adcm::etc::NatsConnManager>(
             nats_server_url.c_str(), subject, onMsg, asyncCb,
-            adcm::etc::NatsConnManager::Mode::Default);
+            adcm::etc::NatsConnManager::Mode::Publish_Only);
         s = natsManager->NatsExecute();
         firstTime = false;
     }
@@ -49,19 +48,25 @@ void NatsSend(const adcm::risk_assessment_Objects& riskAssessment)
         //const char* pubSubject = "riskAssessment.json";
         const char* pubSubject = "riskAssessmentObjects.create";
         natsManager->ClearJsonData();
-        std::string riskToStr = convertRiskAssessmentToJsonString(riskAssessment);
+        std::string riskToStr = convertRiskAssessmentToJsonString(riskAssessment, obstacle_list);
+        adcm::Log::Info() << "RiskAssessment JSON created (size=" << riskToStr.size() << ")";
         natsManager->addJsonData("riskAssessment", riskToStr);
-        natsManager->NatsPublishJson(pubSubject);
-        adcm::Log::Info() << "NatsPublishJson";
+        adcm::Log::Info() << "RiskAssessment JSON added to NATS payload";
+        natsStatus pubStatus = natsManager->NatsPublishJson(pubSubject);
+        if (pubStatus == NATS_OK) {
+            adcm::Log::Info() << "NATS publish OK: " << pubSubject;
+        } else {
+            adcm::Log::Error() << "NATS publish FAIL(" << pubStatus << "): " << pubSubject;
+        }
     } else {
-        std::cout << "Nats Connection error" << std::endl;
+        adcm::Log::Info() << "Nats Connection error";
         try {
             natsManager = std::make_shared<adcm::etc::NatsConnManager>(
                 nats_server_url.c_str(), subject, onMsg, asyncCb,
-                adcm::etc::NatsConnManager::Mode::Default);
+                adcm::etc::NatsConnManager::Mode::Publish_Only);
             s = natsManager->NatsExecute();
         } catch (std::exception& e) {
-            std::cout << "Nats reConnection error" << std::endl;
+            adcm::Log::Info() << "Nats reConnection error";
         }
     }
 }
@@ -105,7 +110,7 @@ void saveToJsonFile(const std::string& key, const std::string& value, int& fileC
     }
     ++fileCount;
 }
-std::string convertRiskAssessmentToJsonString(const adcm::risk_assessment_Objects& riskAssessment)
+std::string convertRiskAssessmentToJsonString(const adcm::risk_assessment_Objects& riskAssessment, const obstacleListVector& obstacle_list)
 {
     using namespace Poco::JSON;
 
@@ -118,8 +123,20 @@ std::string convertRiskAssessmentToJsonString(const adcm::risk_assessment_Object
 
     for (const auto& item : riskAssessment.riskAssessmentList) {
         Object::Ptr obj = new Object;
-
         obj->set("obstacle_id", item.obstacle_id);
+        const adcm::obstacleListStruct* matched = nullptr;
+        for (const auto& obs : obstacle_list) {
+            if (obs.obstacle_id == item.obstacle_id) {
+                matched = &obs;
+                break;
+            }
+        }
+        if (matched != nullptr) {
+            Object::Ptr xy = new Object;
+            xy->set("x", matched->fused_position_x);
+            xy->set("y", matched->fused_position_y);
+            obj->set("obstacle_xy", xy);
+        }
 
         // wgs84_xy_start
         Array::Ptr startArr = new Array;
@@ -156,4 +173,10 @@ std::string convertRiskAssessmentToJsonString(const adcm::risk_assessment_Object
     std::ostringstream oss;
     root.stringify(oss, 2);  // 2 = 들여쓰기 (pretty print)
     return oss.str();
+}
+
+std::string convertRiskAssessmentToJsonString(const adcm::risk_assessment_Objects& riskAssessment)
+{
+    static const obstacleListVector empty;
+    return convertRiskAssessmentToJsonString(riskAssessment, empty);
 }

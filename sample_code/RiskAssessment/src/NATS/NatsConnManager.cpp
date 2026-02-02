@@ -55,18 +55,18 @@ natsStatus NatsConnManager::NatsExecute()
 
     if (s == NATS_OK) 
     {
-        std::cout << "NATS Connection" << std::endl;
+        adcm::Log::Info() << "NATS Connection";
         s = NatsConnection();
     }
 
     if (s != NATS_OK) 
     {
-        std::cout << "NATS ConnectionFail" << std::endl;
+        adcm::Log::Info() << "NATS ConnectionFail";
     }
 
     if (s != NATS_OK)
     {
-        std::cout << "NATS Connection Error: " << s << " - " << natsStatus_GetText(s) << std::endl;
+        adcm::Log::Info() << "NATS Connection Error: " << s << " - " << natsStatus_GetText(s);
         NatsPrintLastErrorStack();
         opts = nullptr;
         conn = nullptr;
@@ -96,15 +96,15 @@ natsStatus NatsConnManager::NatsCreateNetsOptions()
         if(parseUrls(mServerUrl, serverUrls, &numOfServer) != false) {
             //std::cout << "num of server : " << (int)numOfServer << std::endl;
             for(int i = 0 ; i < numOfServer ; i++) {
-                std::cout  << "[" << i << "]"<< serverUrls[i] << std::endl;
+                adcm::Log::Info()  << "[" << i << "]"<< serverUrls[i];
             }
 
-            std::cout << "SetServer..." << std::endl;
+            adcm::Log::Info() << "SetServer...";
             s = natsOptions_SetServers(opts, const_cast<const char**>(serverUrls), numOfServer);
 
         } else {
             s = NATS_ERR;
-            std::cout << "serverURL Parsing fail..." << std::endl;
+            adcm::Log::Info() << "serverURL Parsing fail...";
         }
     }
 
@@ -115,18 +115,18 @@ natsStatus NatsConnManager::NatsCreateNetsOptions()
     }
 
     if(subscribeFlag != Mode::Default) {
-        std::cout << "Not want subscribe..." << std::endl;
-        std::cout << "skip natsOptions_SetErrorHandler()" << std::endl;
+        adcm::Log::Info() << "Not want subscribe...";
+        adcm::Log::Info() << "skip natsOptions_SetErrorHandler()";
     } else if(asyncCb != NULL) {
         s = natsOptions_SetErrorHandler(opts, asyncCb, NULL);
 
     } else {
         s = NATS_ERR;
-        std::cout << "asyncCb is null..." << std::endl;
+        adcm::Log::Info() << "asyncCb is null...";
     }
 
     if(s != NATS_OK) {
-        std::cout << "Error parsing arguments : "<< s << " - " << natsStatus_GetText(s) << std::endl;
+        adcm::Log::Info() << "Error parsing arguments : "<< s << " - " << natsStatus_GetText(s);
         nats_PrintLastErrorStack(stderr);
         natsOptions_Destroy(opts);
         nats_Close();
@@ -144,12 +144,12 @@ natsStatus NatsConnManager::NatsConnection()
     }
 
     if(s == NATS_OK) {
-        std::cout  << "Connection..." << std::endl;
+        adcm::Log::Info()  << "Connection...";
         if(subscribeFlag == Mode::Publish_Only) {
-            std::cout  << "Not want subscribe..." << std::endl;
-            std::cout  << "skip natsConnection_Subscribe()" << std::endl;
+            adcm::Log::Info()  << "Not want subscribe...";
+            adcm::Log::Info()  << "skip natsConnection_Subscribe()";
         } else if(onMsgCb != NULL && subj.size() != 0) {
-            std::cout  << "natsConnection_Subscribe()" << std::endl;
+            adcm::Log::Info()  << "natsConnection_Subscribe()";
 
             //s = natsConnection_Subscribe(&sub, conn, subj, onMsgCb, NULL);
 
@@ -159,14 +159,14 @@ natsStatus NatsConnManager::NatsConnection()
                 if (s != NATS_OK) 
                 {
                     s = NATS_ERR;
-                    std::cout << "Failed to subscribe to subject: " << subject << std::endl;
+                    adcm::Log::Info() << "Failed to subscribe to subject: " << subject;
                     break;
                 }                
             }
 
         } else {
             s = NATS_ERR;
-            std::cout  << "onMsgCb or subj is null..." << std::endl;
+            adcm::Log::Info()  << "onMsgCb or subj is null...";
         }
 
         // For maximum performance, set no limit on the number of pending messages.
@@ -181,7 +181,7 @@ natsStatus NatsConnManager::NatsConnection()
     }
 
     if(s != NATS_OK) {
-        std::cout  << "Error parsing arguments : "<< s << " - " << natsStatus_GetText(s) << std::endl;
+        adcm::Log::Info()  << "Error parsing arguments : "<< s << " - " << natsStatus_GetText(s);
         nats_PrintLastErrorStack(stderr);
         natsOptions_Destroy(opts);
         nats_Close();
@@ -253,7 +253,7 @@ natsStatus NatsConnManager::NatsPublish(const char* subject, const char*  payloa
 
     } else {
         s = NATS_ERR;
-        std::cout << "subject is null..." << std::endl;
+        adcm::Log::Info() << "subject is null...";
     }
 
     if(s == NATS_OK) {
@@ -264,7 +264,7 @@ natsStatus NatsConnManager::NatsPublish(const char* subject, const char*  payloa
         printStats(STATS_OUT, conn, NULL, stats);
 
     } else {
-        std::cout << "Error: " << s << " - " << natsStatus_GetText(s) << std::endl;
+        adcm::Log::Info() << "Error: " << s << " - " << natsStatus_GetText(s);
         nats_PrintLastErrorStack(stderr);
     }
 
@@ -287,7 +287,7 @@ natsStatus NatsConnManager::NatsPublishJson(const char* subject)
 
     } else {
         s = NATS_ERR;
-        std::cout << "subject is null..." << std::endl;
+        adcm::Log::Info() << "subject is null...";
     }
 
     if(s == NATS_OK) {
@@ -299,7 +299,7 @@ natsStatus NatsConnManager::NatsPublishJson(const char* subject)
         //printPerf("Sent");
 
     } else {
-        std::cout << "Error: " << s << " - " << natsStatus_GetText(s) << std::endl;
+        adcm::Log::Info() << "Error: " << s << " - " << natsStatus_GetText(s);
         nats_PrintLastErrorStack(stderr);
     }
 
@@ -317,7 +317,7 @@ void NatsConnManager::PrintSendData()
     std::stringstream sendData;
 
     jsonObj.stringify(sendData);
-    std::cout << " Send data : " << sendData.str() <<  ", length : " << sendData.str().size() << std::endl;
+    adcm::Log::Info() << " Send data : " << sendData.str() <<  ", length : " << sendData.str().size();
 }
 
 void NatsConnManager::NatsPrintLastErrorStack()

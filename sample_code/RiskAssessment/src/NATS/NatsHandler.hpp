@@ -17,7 +17,9 @@ void asyncCb(natsConnection* nc, natsSubscription* sub, natsStatus err, void* cl
 void onMsg(natsConnection* nc, natsSubscription* sub, natsMsg* msg, void* closure);
 void saveToJsonFile(const std::string& key, const std::string& value, int& fileCount);
 std::string convertRiskAssessmentToJsonString(const adcm::risk_assessment_Objects& riskAssessment);
-void NatsSend(const adcm::risk_assessment_Objects& riskAssessment);
+std::string convertRiskAssessmentToJsonString(const adcm::risk_assessment_Objects& riskAssessment,
+                                              const obstacleListVector& obstacle_list);
+void NatsSend(const adcm::risk_assessment_Objects& riskAssessment, const obstacleListVector& obstacle_list);
 
 void SaveAsJson(const adcm::risk_assessment_Objects& riskAssessment);
 
