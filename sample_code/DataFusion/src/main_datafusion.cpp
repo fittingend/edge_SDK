@@ -83,6 +83,13 @@ void asyncCb(natsConnection *nc, natsSubscription *sub, natsStatus err, void *cl
     natsManager->NatsSubscriptionGetDropped(sub, (int64_t *)&natsManager->dropped);
 }
 
+static inline std::uint64_t getCurrentUTCMilliseconds()
+{
+    auto now = std::chrono::system_clock::now();
+    return static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count());
+}
+
 void onMsg(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closure)
 {
     const char *subject = NULL;
@@ -1543,6 +1550,29 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
     mapData.vehicle_list.clear();
     mapData.road_list.clear();
 
+    std::vector<adcm::roadListStruct> merged_road_list;
+    bool hasRoadZ = false;
+    std::unordered_map<std::uint64_t, std::pair<std::uint8_t, std::uint64_t>> cell_to_road;
+    std::unordered_map<std::uint8_t, std::uint64_t> road_timestamp;
+
+    auto packCell = [](int x, int y) -> std::uint64_t
+    {
+        return (static_cast<std::uint64_t>(static_cast<std::uint32_t>(x)) << 32) |
+               static_cast<std::uint32_t>(y);
+    };
+
+    auto initMergedRoadList = [&]()
+    {
+        merged_road_list.resize(24);
+        for (int i = 0; i < 23; ++i)
+        {
+            merged_road_list[i].road_index = i;
+            merged_road_list[i].Timestamp = 0;
+        }
+        merged_road_list[23].road_index = 255;
+        merged_road_list[23].Timestamp = 0;
+    };
+
     for (const auto &obstacle : obstacle_list)
     {
         mapData.obstacle_list.push_back(ConvertToObstacleListStruct(obstacle, mapData.map_2d));
@@ -1557,12 +1587,69 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
             {
                 /** 두대 노면 데이터가 다를때 어떻게 반영할지? 0930_테스트 */
                 std::vector<adcm::roadListStruct> road_list = ConvertRoadZToRoadList(*vehicle);
+                if (!hasRoadZ)
+                {
+                    initMergedRoadList();
+                    hasRoadZ = true;
+                }
 
-                mapData.road_list.insert(mapData.road_list.end(), road_list.begin(), road_list.end());
+                for (size_t i = 0; i < road_list.size() && i < merged_road_list.size(); ++i)
+                {
+                    for (const auto &loc : road_list[i].map_2d_location)
+                    {
+                        const int x = static_cast<int>(loc.x);
+                        const int y = static_cast<int>(loc.y);
+                        if (x < 0 || y < 0 || x >= map_x || y >= map_y)
+                            continue;
+
+                        const auto key = packCell(x, y);
+                        const std::uint8_t road_index = road_list[i].road_index;
+                        const auto ts = road_list[i].Timestamp;
+                        auto it = cell_to_road.find(key);
+                        if (it == cell_to_road.end() || ts > it->second.second)
+                        {
+                            cell_to_road[key] = {road_index, ts};
+                        }
+                    }
+                }
             }
             else
                 adcm::Log::Info() << prefix << vehicle->vehicle_class << " 차량 road_z 데이터 없음, road_list 반영 X";
         }
+    }
+
+    if (hasRoadZ)
+    {
+        for (const auto &entry : cell_to_road)
+        {
+            const std::uint64_t key = entry.first;
+            const std::uint8_t road_index = entry.second.first;
+            const std::uint64_t ts = entry.second.second;
+
+            const int x = static_cast<int>(key >> 32);
+            const int y = static_cast<int>(key & 0xFFFFFFFFu);
+
+            size_t idx = (road_index <= 22) ? road_index : 23;
+            adcm::map2dIndex loc = {static_cast<double>(x), static_cast<double>(y)};
+            merged_road_list[idx].map_2d_location.push_back(loc);
+
+            auto tsIt = road_timestamp.find(road_index);
+            if (tsIt == road_timestamp.end() || ts > tsIt->second)
+            {
+                road_timestamp[road_index] = ts;
+            }
+        }
+
+        for (size_t i = 0; i < merged_road_list.size(); ++i)
+        {
+            const std::uint8_t road_index = merged_road_list[i].road_index;
+            auto tsIt = road_timestamp.find(road_index);
+            if (tsIt != road_timestamp.end())
+            {
+                merged_road_list[i].Timestamp = tsIt->second;
+            }
+        }
+        mapData.road_list = std::move(merged_road_list);
     }
 
     adcm::Log::Info() << prefix << "mapData 장애물 반영 완료 개수: " << mapData.obstacle_list.size();
@@ -2072,10 +2159,24 @@ void ThreadSend()
             adcm::Log::Info() << sendPrefix << "[SEND] " << currentSendVer << "번째 로컬 mapdata 전송 시작";
 
             // map_data_object 의 생성시간 추가
-            auto now = std::chrono::system_clock::now();
-            auto mapData_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-            adcm::Log::Info() << sendPrefix << "[SEND] Current timestamp in milliseconds: " << mapData_timestamp;
+            auto mapData_timestamp = getCurrentUTCMilliseconds();
+            adcm::Log::Info() << sendPrefix << "[SEND] Current Map timestamp in milliseconds: " << mapData_timestamp;
             tempMap.timestamp = mapData_timestamp;
+
+            if (!tempMap.vehicle_list.empty())
+            {
+                std::uint64_t maxVehicleTs = 0;
+                for (const auto &veh : tempMap.vehicle_list)
+                {
+                    if (veh.timestamp > maxVehicleTs)
+                        maxVehicleTs = veh.timestamp;
+                }
+                const auto deltaMs = static_cast<std::int64_t>(mapData_timestamp) -
+                                     static_cast<std::int64_t>(maxVehicleTs);
+                adcm::Log::Info() << sendPrefix << "[SEND] Map/Vehicle timestamp diff(ms): "
+                                  << deltaMs << " (map=" << mapData_timestamp
+                                  << ", vehicle_max=" << maxVehicleTs << ")";
+            }
             // json 저장
             if (saveJson)
                 makeJSON(tempMap);
@@ -2185,8 +2286,8 @@ int main(int argc, char *argv[])
                                                              ara::com::e2exf::ConfigurationFormat::JSON);
     adcm::Log::Info() << "DataFusion: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
-    adcm::Log::Info() << "SDK release_251209_interface v2.5 for sa8195";
-    // adcm::Log::Info() << "SDK release_251211_interface v2.1 for orin";
+    // adcm::Log::Info() << "SDK release_251209_interface v2.5 for sa8195";
+    adcm::Log::Info() << "SDK release_251211_interface v2.5 for orin";
     adcm::Log::Info() << "DataFusion Build " << BUILD_TIMESTAMP;
 
     // 파일 경로 얻
