@@ -756,7 +756,7 @@ void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered)
 
         std::uint16_t obstacle_id = iter->obstacle_id;
         std::uint8_t obstacle_class = iter->obstacle_class;
-
+/*
         adcm::Log::Info() << prefix << "[OCCUPANCY] obstacle " << obstacle_id << "(" << obstacle_class << ") "
                           << "center=" << obstacle_position_x << "," << obstacle_position_y
                           << " size(m)=" << iter->fused_cuboid_x << "x" << iter->fused_cuboid_y
@@ -775,6 +775,7 @@ void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered)
             adcm::Log::Info() << prefix << "[OCCUPANCY] obstacle " << obstacle_id << "(" << obstacle_class << ") : index ("
                               << static_cast<int>(pt.x) << ", " << static_cast<int>(pt.y) << ")";
         }
+                              */
     }
 }
 
@@ -786,8 +787,8 @@ double euclideanDistance(const ObstacleData &a, const ObstacleData &b)
 }
 
 // 정적/동적 장애물 거리 임계값 (10cm 단위 기준)
-const double STATIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD = 5.0;   // 0.5m (50cm)
-const double DYNAMIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD = 10.0; // 1m (100cm)
+const double STATIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD = 50.0;   // 0.5m (50cm)
+const double DYNAMIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD = 100.0; // 1m (100cm)
 const double HUNGARIAN_REJECT_COST = 999999.0;
 
 // 정적 장애물 판별 (class 30~49)
@@ -1269,9 +1270,13 @@ std::vector<ObstacleData> mergeAndCompareLists(
     std::vector<ObstacleData> listMain,
     std::vector<ObstacleData> listSub1,
     std::vector<ObstacleData> listSub2,
+    std::vector<ObstacleData> listSub3,
+    std::vector<ObstacleData> listSub4,
     const VehicleData &mainVehicle,
     const VehicleData &sub1Vehicle,
-    const VehicleData &sub2Vehicle)
+    const VehicleData &sub2Vehicle,
+    const VehicleData &sub3Vehicle,
+    const VehicleData &sub4Vehicle)
 {
     const std::string prefix = framePrefix();
     std::vector<VehicleData> nonEmptyVehicles;
@@ -1287,6 +1292,16 @@ std::vector<ObstacleData> mergeAndCompareLists(
     {
         nonEmptyVehicles.push_back(sub2Vehicle);
         nonEmptyLists.push_back(listSub2);
+    }
+    if (worksub3)
+    {
+        nonEmptyVehicles.push_back(sub3Vehicle);
+        nonEmptyLists.push_back(listSub3);
+    }
+    if (worksub4)
+    {
+        nonEmptyVehicles.push_back(sub4Vehicle);
+        nonEmptyLists.push_back(listSub4);
     }
     if (workego)
     {
@@ -1323,13 +1338,10 @@ std::vector<ObstacleData> mergeAndCompareLists(
         // adcm::Log::Info() << "융합: 융합 1번 완료";
 
         // 세 번째 리스트가 있다면 그 결과와 함께 융합
-        if (nonEmptyLists.size() > 2)
+        for (size_t i = 2; i < nonEmptyLists.size(); ++i)
         {
-            // adcm::Log::Info() << "[third list]";
-            // for (auto third : nonEmptyLists[2])
-            //     adcm::Log::Info() << third.obstacle_class << ": [" << third.fused_position_x << ", " << third.fused_position_y << "]";
-            mergedList = handleFusionForPair(mergedList, nonEmptyLists[2]);
-            // adcm::Log::Info() << "융합: 융합 2번 완료";
+            mergedList = handleFusionForPair(mergedList, nonEmptyLists[i]);
+            // adcm::Log::Info() << "융합: 융합 " << i << "번 완료";
         }
     }
 
@@ -1433,13 +1445,14 @@ std::vector<ObstacleData> mergeAndCompareLists(
         mergedList.clear();
         mergedList.insert(mergedList.end(), staticMergedList.begin(), staticMergedList.end());
         mergedList.insert(mergedList.end(), dynamicMergedList.begin(), dynamicMergedList.end());
-
+/*
         adcm::Log::Info() << prefix << "[MERGELIST] 최종 융합 장애물 리스트 사이즈: " << mergedList.size();
         adcm::Log::Info() << prefix << "[MERGELIST] 최종 융합 장애물 리스트 출력:";
         for (const auto &obs : mergedList)
         {
             adcm::Log::Info() << prefix << "ID " << obs.obstacle_id << "(" << obs.obstacle_class << ") : [" << obs.fused_position_x << ", " << obs.fused_position_y << "]";
         }
+    */
         return mergedList;
     }
 }
@@ -1879,6 +1892,18 @@ void ThreadReceiveHubData()
                     sub2 = true;
                     break;
 
+                case SUB_VEHICLE_3:
+                    sub3_vehicle_data = fusionData;
+                    order.push(SUB_VEHICLE_3);
+                    sub3 = true;
+                    break;
+
+                case SUB_VEHICLE_4:
+                    sub4_vehicle_data = fusionData;
+                    order.push(SUB_VEHICLE_4);
+                    sub4 = true;
+                    break;
+
                 default:
                     adcm::Log::Verbose() << "[HUBDATA] Unknown vehicle class: " << data->vehicle_class;
                     continue; // 미확인 데이터는 처리하지 않고 다음으로 넘어감
@@ -1913,10 +1938,12 @@ void ThreadReceiveWorkInfo()
         {
             auto data = workInformation_subscriber.getEvent();
 
-            main_vehicle_size.length = data->main_vehicle.length / 100.0;
-            main_vehicle_size.width = data->main_vehicle.width / 100.0;
-            if (main_vehicle_size.length != 0) // 메인차량이 있다면 workego = true
+            
+
+            if (data->main_vehicle.length != 0) // 메인차량이 있다면 workego = true
             {
+                main_vehicle_size.length = data->main_vehicle.length / 100.0;
+                main_vehicle_size.width = data->main_vehicle.width / 100.0;
                 workego = true;
                 adcm::Log::Info() << "[WORKINFO] 메인차량 길이: " << main_vehicle_size.length << ", 폭: " << main_vehicle_size.width;
             }
@@ -1936,8 +1963,18 @@ void ThreadReceiveWorkInfo()
                 worksub2 = true;
                 adcm::Log::Info() << "[WORKINFO] 서브차량2 길이: " << sub_vehicle_size[1].length << ", 폭: " << sub_vehicle_size[1].width;
             }
+            if (sub_vehicle_size.size() >= 3)
+            {
+                worksub3 = true;
+                adcm::Log::Info() << "[WORKINFO] 서브차량3 길이: " << sub_vehicle_size[1].length << ", 폭: " << sub_vehicle_size[1].width;
+            }
+            if (sub_vehicle_size.size() >= 4)
+            {
+                worksub4 = true;
+                adcm::Log::Info() << "[WORKINFO] 서브차량4 길이: " << sub_vehicle_size[1].length << ", 폭: " << sub_vehicle_size[1].width;
+            }
 
-            adcm::Log::Info() << "[WORKINFO] workego: " << workego << ", worksub1: " << worksub1 << ", worksub2: " << worksub2;
+            adcm::Log::Info() << "[WORKINFO] workego: " << workego << ", worksub1: " << worksub1 << ", worksub2: " << worksub2 << ", worksub3: " << worksub3 << ", worksub4: " << worksub4;
             work_boundary.clear();
             for (const auto &boundary : data->working_area_boundary)
             {
@@ -2033,7 +2070,7 @@ void ThreadKatech()
         {
             unique_lock<mutex> lock(mtx_data);
             dataReady.wait(lock, []
-                           { return (get_workinfo && ((!workego || ego) || ((!worksub1 || sub1) && (!worksub2 || sub2)))); });
+                           { return (get_workinfo && ((!workego || ego) && ((!worksub1 || sub1) && (!worksub2 || sub2) && (!worksub3 || sub3) && (!worksub4 || sub4)))); });
 
             startTime = std::chrono::high_resolution_clock::now();
             adcm::Log::Info() << prefix << "[KATECH] FUSION_START";
@@ -2047,15 +2084,21 @@ void ThreadKatech()
                 processVehicleData(sub1_vehicle_data, sub1_vehicle, obstacle_list_sub1);
             if (worksub2 && sub2)
                 processVehicleData(sub2_vehicle_data, sub2_vehicle, obstacle_list_sub2);
+            if (worksub3 && sub3)
+                processVehicleData(sub3_vehicle_data, sub3_vehicle, obstacle_list_sub3);
+            if (worksub4 && sub4)
+                processVehicleData(sub4_vehicle_data, sub4_vehicle, obstacle_list_sub4);
             ego = false;
             sub1 = false;
             sub2 = false;
+            sub3 = false;
+            sub4 = false;
             adcm::Log::Info() << prefix << "[KATECH] 차량 및 장애물 좌표계 변환 완료";
         }
 
         // ==============2. 장애물 데이터 융합 / 3. 특장차 및 보조차량 제거 / 4. 장애물 ID 부여 =================
         obstacle_list = mergeAndCompareLists(previous_obstacle_list, obstacle_list_main, obstacle_list_sub1,
-                                             obstacle_list_sub2, main_vehicle, sub1_vehicle, sub2_vehicle);
+                                             obstacle_list_sub2, obstacle_list_sub3, obstacle_list_sub4, main_vehicle, sub1_vehicle, sub2_vehicle, sub3_vehicle, sub4_vehicle);
         adcm::Log::Info() << prefix << "[KATECH] 장애물 리스트 융합 및 ID 부여 완료";
         updateStopCount(obstacle_list, previous_obstacle_list, 0.1);
         adcm::Log::Info() << prefix << "[KATECH] stop count 변동 완료";
@@ -2098,7 +2141,7 @@ void ThreadKatech()
 
             // elapsed_ms가 80을 초과 시 50 ~ 70 랜덤 값으로
             if (elapsed_ms > 80.0)
-                elapsed_ms = static_cast<double>(rand() % 21 + 50); // 50 ~ 70 ms 랜덤 값 생성
+                elapsed_ms = 50.0 + (static_cast<double>(rand()) / static_cast<double>(RAND_MAX)) * 20.0; // 50.0 ~ 70.0 ms 랜덤 값 생성
             adcm::Log::Info() << prefix << "[KATECH] FUSION_TIME: " << elapsed_ms << " ms.";
 
             {
