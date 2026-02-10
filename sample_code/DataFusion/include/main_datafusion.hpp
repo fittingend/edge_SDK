@@ -12,6 +12,7 @@
 #include <string>
 #include <algorithm>
 #include <queue>
+#include <atomic>
 #include <unistd.h>
 #include <limits.h>
 #include <libgen.h>
@@ -91,6 +92,7 @@ mutex mtx;
 int map_2d_size = 0;
 int mapVer = 1; // 현재 맵이 몇 번째 맵인지 확인
 int sendVer = 1; // 전송 맵 버전 카운터
+std::atomic<std::uint64_t> last_hub_timestamp{0};
 
 enum VehicleClass
 {

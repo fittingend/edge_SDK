@@ -1744,7 +1744,6 @@ void fillVehicleData(VehicleData &vehicle_fill, const std::shared_ptr<adcm::hub_
     vehicle_fill.velocity_lat = data->velocity_lat;
     vehicle_fill.velocity_ang = data->velocity_ang;
     vehicle_fill.road_z = data->road_z;
-    adcm::Log::Info() << "차량 반영 road_z size: " << data->road_z.size();
     return;
 }
 
@@ -1854,6 +1853,8 @@ void ThreadReceiveHubData()
                 lock_guard<mutex> lock(mtx_data);
                 auto data = hubData_subscriber.getEvent();
                 gReceivedEvent_count_hub_data++;
+
+                last_hub_timestamp.store(data->timestamp, std::memory_order_relaxed);
 
                 // 수신된 데이터 handling 위한 추가 코드
                 adcm::Log::Info() << "[HUBDATA] 수신 데이터: " << data->vehicle_class;
@@ -2178,27 +2179,50 @@ void ThreadSend()
     mapData_provider.init("DataFusion/DataFusion/PPort_map_data");
     // mutex, condition value 사용
 
+    auto nextSendTime = std::chrono::steady_clock::now();
+
     while (continueExecution)
     {
+        adcm::map_data_Objects tempMap;
+        bool shouldSendEmpty = false;
+        int currentSendVer = 0;
+
         {
             unique_lock<mutex> lock(mtx_map_someip);
             someipReady.wait(lock, []
                              { return sendEmptyMap == true ||
                                       !map_someip_queue.empty(); });
-            const std::string prefix = framePrefix();
-            auto startTime = std::chrono::high_resolution_clock::now();
+
             if (sendEmptyMap)
             {
-                mapData_provider.send(mapData);
-                adcm::Log::Info() << prefix << "[SEND] Send empty map data";
+                shouldSendEmpty = true;
                 sendEmptyMap = false;
-                continue;
             }
+            else
+            {
+                tempMap = map_someip_queue.front();
+                map_someip_queue.pop();
+                currentSendVer = sendVer++;
+            }
+        }
 
-            adcm::map_data_Objects tempMap = map_someip_queue.front();
-            map_someip_queue.pop();
-            const int currentSendVer = sendVer++;
-            const std::string sendPrefix = framePrefix(currentSendVer);
+        const auto now = std::chrono::steady_clock::now();
+        if (now < nextSendTime)
+        {
+            std::this_thread::sleep_until(nextSendTime);
+        }
+
+        const std::string prefix = framePrefix();
+        const std::string sendPrefix = shouldSendEmpty ? prefix : framePrefix(currentSendVer);
+        auto startTime = std::chrono::high_resolution_clock::now();
+
+        if (shouldSendEmpty)
+        {
+            mapData_provider.send(mapData);
+            adcm::Log::Info() << sendPrefix << "[SEND] Send empty map data";
+        }
+        else
+        {
             adcm::Log::Info() << sendPrefix << "[SEND] " << currentSendVer << "번째 로컬 mapdata 전송 시작";
 
             // map_data_object 의 생성시간 추가
@@ -2220,24 +2244,34 @@ void ThreadSend()
                                   << deltaMs << " (map=" << mapData_timestamp
                                   << ", vehicle_max=" << maxVehicleTs << ")";
             }
-            // json 저장
+
+            const auto hubTs = last_hub_timestamp.load(std::memory_order_relaxed);
+            if (hubTs != 0)
+            {
+                const auto deltaHubMs = static_cast<std::int64_t>(mapData_timestamp) -
+                                        static_cast<std::int64_t>(hubTs);
+                adcm::Log::Info() << sendPrefix << "[SEND] Map/Hub timestamp diff(ms): "
+                                  << deltaHubMs << " (map=" << mapData_timestamp
+                                  << ", hub=" << hubTs << ")";
+            }
+
             if (saveJson)
                 makeJSON(tempMap);
-            // 맵전송
-            // mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
+
             mapData_provider.send(tempMap);
-            auto endTime = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double, std::milli> duration = endTime - startTime;
-            double elapsed_ms = duration.count();
-
-            adcm::Log::Info() << sendPrefix << "[SEND] " << currentSendVer << "번째 로컬 mapdata 전송 완료, 소요 시간: " << elapsed_ms << " ms.";
-
-            if (elapsed_ms < 300.0)
-            {
-                std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<int>(300.0 - elapsed_ms)));
-                adcm::Log::Info() << sendPrefix << "[SEND] " << static_cast<int>(300.0 - elapsed_ms) << "ms 만큼 전송 대기";
-            }
         }
+
+        auto endTime = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::milli> duration = endTime - startTime;
+        double elapsed_ms = duration.count();
+
+        if (!shouldSendEmpty)
+        {
+            adcm::Log::Info() << sendPrefix << "[SEND] " << currentSendVer << "번째 로컬 mapdata 전송 완료, 소요 시간: " << elapsed_ms << " ms.";
+        }
+
+        nextSendTime = std::max(nextSendTime + std::chrono::milliseconds(300),
+                                std::chrono::steady_clock::now());
     }
 }
 
