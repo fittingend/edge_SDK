@@ -15,8 +15,9 @@ public:
     bool useSSL;
     bool useNats=false;
     bool saveJson=false;
+    std::string listFilePath;
 
-    void setDefault(boost::property_tree::ptree &pt, std::string &serverAddress, int &serverPort, bool &useSSL, bool &useNats)
+    void setDefault(boost::property_tree::ptree &pt, std::string &serverAddress, int &serverPort, bool &useSSL, bool &useNats, std::string &listFilePath)
     {
         // 멤버 변수에 값 저장
         serverAddress = pt.get<std::string>("Network.NATSServerAddress", "https://nats.beyless.com"); // 기본값 설정
@@ -24,6 +25,7 @@ public:
         useSSL = pt.get<bool>("Network.UseSSL", false);                                               // 기본값 설정
         useNats = pt.get<bool>("Network.UseNats", false);
         saveJson = pt.get<bool>("Network.SaveJson", false);
+        listFilePath = pt.get<std::string>("Network.ListFilePath", "/opt/DataFusion/etc/lists.ini");
     }
 
     // INI 파일 읽기 및 멤버 변수 초기화
@@ -33,14 +35,14 @@ public:
         try
         {
             boost::property_tree::ini_parser::read_ini(filePath, pt);
-            setDefault(pt, serverAddress, serverPort, useSSL, useNats);
+            setDefault(pt, serverAddress, serverPort, useSSL, useNats, listFilePath);
 
             return true; // 성공
         }
         catch (const std::exception &ex)
         {
             adcm::Log::Info() << "Error reading INI file: " << ex.what();
-            setDefault(pt, serverAddress, serverPort, useSSL, useNats);
+            setDefault(pt, serverAddress, serverPort, useSSL, useNats, listFilePath);
 
             return false; // 실패
         }
@@ -54,5 +56,6 @@ public:
         adcm::Log::Info() << "Use SSL: " << (useSSL ? "true" : "false");
         adcm::Log::Info() << "Use NATS: " << (useNats ? "true" : "false");
         adcm::Log::Info() << "Save JSON: " << (saveJson ? "true" : "false");
+        adcm::Log::Info() << "List File Path: " << listFilePath;
     }
 };

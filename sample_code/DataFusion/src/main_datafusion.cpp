@@ -51,6 +51,10 @@
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
+#include <Poco/JSON/Parser.h>
+#include <Poco/JSON/Array.h>
+#include <Poco/JSON/Object.h>
+#include <Poco/Dynamic/Var.h>
 #include "main_datafusion.hpp"
 #include "occupancy_algorithm.hpp"
 #include "config.cpp"
@@ -114,6 +118,82 @@ void onMsg(natsConnection *nc, natsSubscription *sub, natsMsg *msg, void *closur
     // std::cout << words[0] << " Data Category : " << words[1] << std::endl;
 
     natsManager->NatsMsgDestroy(msg);
+}
+
+struct ListObstacleEntry
+{
+    std::uint16_t obstacle_id = 0;
+    std::uint8_t obstacle_class = 0;
+    double lon = 0.0;
+    double lat = 0.0;
+    std::uint16_t assigned_id = 0;
+};
+
+static std::vector<ListObstacleEntry> list_obstacles;
+static bool list_obstacles_loaded = false;
+static std::string list_obstacles_path;
+
+static inline std::uint64_t nowMilliseconds()
+{
+    auto now = std::chrono::system_clock::now();
+    return static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count());
+}
+
+static bool loadListObstacles(const std::string &filePath)
+{
+    list_obstacles.clear();
+    list_obstacles_loaded = false;
+    list_obstacles_path = filePath;
+
+    std::ifstream inFile(filePath);
+    if (!inFile.is_open())
+    {
+        adcm::Log::Info() << "List file not found: " << filePath;
+        return false;
+    }
+
+    std::stringstream buffer;
+    buffer << inFile.rdbuf();
+    const std::string jsonStr = buffer.str();
+    if (jsonStr.empty())
+    {
+        adcm::Log::Info() << "List file is empty: " << filePath;
+        return false;
+    }
+
+    try
+    {
+        Poco::JSON::Parser parser;
+        Poco::Dynamic::Var result = parser.parse(jsonStr);
+        Poco::JSON::Array::Ptr arr = result.extract<Poco::JSON::Array::Ptr>();
+
+        for (size_t i = 0; i < arr->size(); ++i)
+        {
+            Poco::JSON::Object::Ptr obj = arr->getObject(i);
+            if (!obj)
+                continue;
+
+            ListObstacleEntry entry;
+            entry.obstacle_class = static_cast<std::uint8_t>(obj->getValue<int>("obstacle_class"));
+            entry.obstacle_id = static_cast<std::uint16_t>(obj->getValue<int>("obstacle_id"));
+            entry.lon = obj->getValue<double>("lon");
+            entry.lat = obj->getValue<double>("lat");
+            list_obstacles.push_back(entry);
+        }
+    }
+    catch (const std::exception &ex)
+    {
+        adcm::Log::Info() << "Failed to parse list file: " << ex.what();
+        return false;
+    }
+
+    list_obstacles_loaded = !list_obstacles.empty();
+    adcm::Log::Info() << "List obstacles loaded: " << list_obstacles.size();
+    for(const auto &entry : list_obstacles)
+    adcm::Log::Info() << "  id=" << entry.obstacle_id << ", class=" << static_cast<int>(entry.obstacle_class)
+                     << ", lon=" << entry.lon << ", lat=" << entry.lat;
+    return list_obstacles_loaded;
 }
 
 // 신규 최적화 버전
@@ -525,6 +605,70 @@ void GPStoUTM(double lon, double lat, double &utmX, double &utmY)
     // 남반구 보정
     if (lat < 0)
         utmY += 10000000.0;
+}
+
+void appendListObstaclesToMergedList(std::vector<ObstacleData> &mergedList)
+{
+    const std::string prefix = framePrefix();
+    if (!list_obstacles_loaded)
+    {
+        adcm::Log::Info() << prefix << "[KATECH] List obstacles not loaded, skip append.";
+        return;
+    }
+
+    const double default_cuboid_x = 1.0;
+    const double default_cuboid_y = 1.0;
+    const double default_cuboid_z = 1.0;
+    const size_t before_count = mergedList.size();
+    size_t added_count = 0;
+    size_t skipped_count = 0;
+
+    for (auto &entry : list_obstacles)
+    {
+        if (entry.assigned_id == 0)
+        {
+            entry.assigned_id = id_manager.allocID();
+        }
+
+        double utm_x = 0.0;
+        double utm_y = 0.0;
+        GPStoUTM(entry.lon, entry.lat, utm_x, utm_y);
+
+        const double map_pos_x = (utm_x - origin_x) * M_TO_10CM_PRECISION;
+        const double map_pos_y = (utm_y - origin_y) * M_TO_10CM_PRECISION;
+
+        if (map_pos_x < 0 || map_pos_x >= map_x || map_pos_y < 0 || map_pos_y >= map_y)
+        {
+            adcm::Log::Info() << prefix << "[KATECH] List obstacle out of range, skip. id=" << entry.assigned_id;
+            skipped_count++;
+            continue;
+        }
+
+        ObstacleData obs;
+        obs.obstacle_id = entry.assigned_id;
+        obs.obstacle_class = entry.obstacle_class;
+        obs.timestamp = nowMilliseconds();
+        obs.stop_count = 0;
+        obs.fused_cuboid_x = default_cuboid_x;
+        obs.fused_cuboid_y = default_cuboid_y;
+        obs.fused_cuboid_z = default_cuboid_z;
+        obs.fused_heading_angle = 0.0;
+        obs.fused_position_x = map_pos_x;
+        obs.fused_position_y = map_pos_y;
+        obs.fused_position_z = 0.0;
+        obs.fused_velocity_x = 0.0;
+        obs.fused_velocity_y = 0.0;
+        obs.fused_velocity_z = 0.0;
+        obs.standard_deviation = 0.0;
+
+        mergedList.push_back(obs);
+        added_count++;
+    }
+
+    adcm::Log::Info() << prefix << "[KATECH] List obstacles append result: before=" << before_count
+                      << ", added=" << added_count
+                      << ", skipped=" << skipped_count
+                      << ", total_list=" << mergedList.size();
 }
 
 bool checkRange(const VehicleData &vehicle)
@@ -2104,9 +2248,10 @@ void ThreadKatech()
         updateStopCount(obstacle_list, previous_obstacle_list, 0.1);
         adcm::Log::Info() << prefix << "[KATECH] stop count 변동 완료";
 
-        order.pop();
-
         previous_obstacle_list = obstacle_list;
+        appendListObstaclesToMergedList(obstacle_list);
+
+        order.pop();
 
         // 차량이 맵 범위 내에 있는지 체크
         bool result = checkAllVehicleRange(vehicles);
@@ -2363,8 +2508,8 @@ int main(int argc, char *argv[])
                                                              ara::com::e2exf::ConfigurationFormat::JSON);
     adcm::Log::Info() << "DataFusion: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
-    // adcm::Log::Info() << "SDK release_251209_interface v2.5 for sa8195";
-    adcm::Log::Info() << "SDK release_251211_interface v2.5 for orin";
+    adcm::Log::Info() << "SDK release_251209_interface v2.5 for sa8195";
+    // adcm::Log::Info() << "SDK release_251211_interface v2.5 for orin";
     adcm::Log::Info() << "DataFusion Build " << BUILD_TIMESTAMP;
 
     // 파일 경로 얻
@@ -2387,6 +2532,11 @@ int main(int argc, char *argv[])
     {
         adcm::Log::Info() << "Failed to load configuration.";
         config.print();
+    }
+
+    if (!loadListObstacles(config.listFilePath))
+    {
+        adcm::Log::Info() << "List obstacle file not loaded.";
     }
 
     if (config.serverPort == 0)
