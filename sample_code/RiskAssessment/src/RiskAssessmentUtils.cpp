@@ -122,8 +122,10 @@ void printObstacleList(obstacleListVector obstacle_list)
     {
         adcm::Log::Info()
             << "ID=" << obs.obstacle_id
-            << ", Class=" << to_string(static_cast<ObstacleClass>(obs.obstacle_class))
-            << ", Pos=(" << obs.fused_position_x << ", " << obs.fused_position_y << ")";
+            << ", Class=" << obs.obstacle_class << " (" << to_string(static_cast<ObstacleClass>(obs.obstacle_class)) << ")"
+            << ", Pos=(" << obs.fused_position_x << ", " << obs.fused_position_y << ")"
+            << ", StopCount=" << obs.stop_count
+            << ", Height=" << obs.fused_cuboid_z;
     }
 }
 
@@ -318,8 +320,8 @@ bool calculateMinDistanceToPath(const adcm::obstacleListStruct& obstacle,
 
     if (foundValid) {
         out_distance = min_distance;
-        adcm::Log::Info() << "Min distance to path for Obstacle " << obstacle.obstacle_id 
-                          << " is " << out_distance;
+        //adcm::Log::Info() << "Min distance to path for Obstacle " << obstacle.obstacle_id 
+        //                  << " is " << out_distance;
         return true;
     }
 

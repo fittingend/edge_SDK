@@ -1,4 +1,9 @@
 #include "main_riskassessment.hpp"
+namespace {
+inline bool scenarioLogEnabled() { return gScenarioLogEnabled; }
+}
+
+#define SCENARIO_LOG_INFO() if (!scenarioLogEnabled()) ; else adcm::Log::Info()
 
 //=====시나리오 #1. 주행중 전역경로 근방 이동가능한 정지 장애물이 존재하는 위험 환경=====
 void evaluateScenario1(const obstacleListVector& obstacle_list, 
@@ -7,7 +12,7 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
                         const std::vector<double>& path_y,
                         adcm::risk_assessment_Objects& riskAssessment)
 {
-    adcm::Log::Info() << "============= KATECH: Scenario 1 START =============";
+    SCENARIO_LOG_INFO() << "============= KATECH: Scenario 1 START =============";
 
     // 단위: 거리 dm(0.1 m), 시간 ms
     constexpr double DIST_TO_EGO_MAX_DM  = 300.0; // 30 m 이내
@@ -28,14 +33,14 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
         if (!is_vehicle) continue;
         if (obs.stop_count < STOP_VALUE) continue;
 
-        adcm::Log::Info() << "[1-i] 차량 & 정지 상태: ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "[1-i] 차량 & 정지 상태: ID=" << obs.obstacle_id
                           << " | class=" << static_cast<int>(obs.obstacle_class)
                           << " | stop_count=" << obs.stop_count;
 
         // (ii) Ego 거리
         const double d_ego_dm = calculateDistance(obs, ego_vehicle);
         if (d_ego_dm > DIST_TO_EGO_MAX_DM) continue;
-        adcm::Log::Info() << "[1-ii] ego 거리 통과: ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "[1-ii] ego 거리 통과: ID=" << obs.obstacle_id
                     << " | Ego거리=" << (d_ego_dm/10.0) << " m";
 
         // (iii) 경로 거리
@@ -43,7 +48,7 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
         if (!calculateMinDistanceToPath(obs, path_x, path_y, d_path_dm)) continue;
         if (d_path_dm > DIST_TO_PATH_MAX_DM) 
         {
-            adcm::Log::Info() << "[1-iii 제외] ID=" << obs.obstacle_id
+            SCENARIO_LOG_INFO() << "[1-iii 제외] ID=" << obs.obstacle_id
                               << " | 경로거리=" << (d_path_dm/10.0) << " m (>10)";
             continue;
         }
@@ -53,18 +58,18 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
 
     // === 후보군 로그 출력 ===
     if (candidates.empty()) {
-        adcm::Log::Info() << "[시나리오1] 최종 후보 없음 → 종료";
-        adcm::Log::Info() << "============= KATECH: Scenario 1 DONE =============";
+        SCENARIO_LOG_INFO() << "[시나리오1] 최종 후보 없음 → 종료";
+        SCENARIO_LOG_INFO() << "============= KATECH: Scenario 1 DONE =============";
         return;
     }
 
-    adcm::Log::Info() << "[시나리오1] 최종 후보군 " << candidates.size() << "개:";
+    SCENARIO_LOG_INFO() << "[시나리오1] 최종 후보군 " << candidates.size() << "개:";
     for (const auto& obs : candidates) {
         double d_ego_dm  = calculateDistance(obs, ego_vehicle);
         double d_path_dm = 0.0;
         calculateMinDistanceToPath(obs, path_x, path_y, d_path_dm);
 
-        adcm::Log::Info() << "   - ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "   - ID=" << obs.obstacle_id
                           << " | class=" << static_cast<int>(obs.obstacle_class)
                           << " | stop_count=" << obs.stop_count
                           << " | Ego거리=" << (d_ego_dm/10.0) << " m"
@@ -86,14 +91,14 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
         r.hazard_class = SCENARIO_1;
         r.confidence   = confidence;
 
-        adcm::Log::Info() << "[시나리오1 TRIGGER] ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "[시나리오1 TRIGGER] ID=" << obs.obstacle_id
                           << " | s_ego=" << s_ego << ", s_path=" << s_path
                           << " | confidence=" << confidence;
 
         riskAssessment.riskAssessmentList.push_back(r);
     }
 
-    adcm::Log::Info() << "============= KATECH: Scenario 1 DONE =============";
+    SCENARIO_LOG_INFO() << "============= KATECH: Scenario 1 DONE =============";
 }
 
 //=====시나리오 #2. 주행중 사각영역 존재 환경 판단=====
@@ -103,7 +108,7 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
                        const std::vector<double>& path_y,
                        adcm::risk_assessment_Objects& riskAssessment)
 {
-    adcm::Log::Info() << "============= KATECH: Scenario 2 START =============";
+    SCENARIO_LOG_INFO() << "============= KATECH: Scenario 2 START =============";
 
     // 단위: 거리 dm(0.1m)
     constexpr double DIST_TO_EGO_MAX_DM  = 400.0; // 40 m 이내
@@ -119,13 +124,13 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
 
     for (const auto& obs : obstacle_list) {
         // ----------------------------------------------------
-        // (i) 조건: 차량이면서 정지 상태 OR 높이 1m 이상 정적 장애물
+        // (i) 조건: 차량이면서 정지 상태 OR 높이 2m 이상 정적 장애물
         bool cond_vehicle_stopped = (obs.obstacle_class >= 1 && obs.obstacle_class <= 19 && obs.stop_count >= STOP_VALUE);
-        bool cond_static_high     = (obs.obstacle_class >= 30 && obs.obstacle_class <= 49 && obs.fused_cuboid_z > 1.0);
+        bool cond_static_high     = (obs.obstacle_class >= 30 && obs.obstacle_class <= 49 && obs.fused_cuboid_z > HEIGHT_THRESH_M);
 
         if (!(cond_vehicle_stopped || cond_static_high)) continue;
 
-        adcm::Log::Info() << "[2-i] 통과: ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "[2-i] 통과: ID=" << obs.obstacle_id
                           << " | class=" << static_cast<int>(obs.obstacle_class)
                           << " | stop_count=" << obs.stop_count
                           << " | height=" << obs.fused_cuboid_z;
@@ -134,27 +139,27 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
         // (ii) Ego와의 거리 ≤ 40m
         const double d_ego_dm = calculateDistance(obs, ego_vehicle);
         if (d_ego_dm > DIST_TO_EGO_MAX_DM) {
-            // adcm::Log::Info() << "[2-ii 제외] ID=" << obs.obstacle_id
+            // SCENARIO_LOG_INFO() << "[2-ii 제외] ID=" << obs.obstacle_id
             //                   << " | Ego거리=" << (d_ego_dm/10.0) << " m (>40)";
             continue;
         }
-        adcm::Log::Info() << "[2-ii] 통과: ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "[2-ii] 통과: ID=" << obs.obstacle_id
                           << " | Ego거리=" << (d_ego_dm/10.0) << " m";
 
         // ----------------------------------------------------
         // (iii) 전역경로와의 거리 ≤ 10m
         double d_path_dm = 0.0;
         if (!calculateMinDistanceToPath(obs, path_x, path_y, d_path_dm)) {
-            // adcm::Log::Info() << "[2-iii 제외] ID=" << obs.obstacle_id
+            // SCENARIO_LOG_INFO() << "[2-iii 제외] ID=" << obs.obstacle_id
             //                   << " | 경로거리 계산 실패";
             continue;
         }
         if (d_path_dm > DIST_TO_PATH_MAX_DM) {
-            adcm::Log::Info() << "[2-iii 제외] ID=" << obs.obstacle_id
+            SCENARIO_LOG_INFO() << "[2-iii 제외] ID=" << obs.obstacle_id
                               << " | 경로거리=" << (d_path_dm/10.0) << " m (>10)";
             continue;
         }
-        // adcm::Log::Info() << "[2-iii] 통과: ID=" << obs.obstacle_id
+        // SCENARIO_LOG_INFO() << "[2-iii] 통과: ID=" << obs.obstacle_id
         //                   << " | 경로거리=" << (d_path_dm/10.0) << " m";
 
         // 세 조건 모두 만족 → 후보군 추가
@@ -163,12 +168,12 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
 
     // === 최종 후보군 로그 ===
     if (candidates.empty()) {
-        adcm::Log::Info() << "[시나리오2] 최종 후보 없음 → 종료";
-        adcm::Log::Info() << "============= KATECH: Scenario 2 DONE =============";
+        SCENARIO_LOG_INFO() << "[시나리오2] 최종 후보 없음 → 종료";
+        SCENARIO_LOG_INFO() << "============= KATECH: Scenario 2 DONE =============";
         return;
     }
 
-    adcm::Log::Info() << "[시나리오2] 최종 후보군 " << candidates.size() << "개";
+    SCENARIO_LOG_INFO() << "[시나리오2] 최종 후보군 " << candidates.size() << "개";
 
     // === 컨피던스 계산 및 결과 등록 ===
     for (const auto& obs : candidates) {
@@ -186,20 +191,20 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
         r.hazard_class = SCENARIO_2;
         r.confidence   = confidence;
 
-        adcm::Log::Info() << "[시나리오2 TRIGGER] ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "[시나리오2 TRIGGER] ID=" << obs.obstacle_id
                           << " | s_ego=" << s_ego << ", s_path=" << s_path
                           << " | confidence=" << confidence;
 
         riskAssessment.riskAssessmentList.push_back(r);
     }
 
-    adcm::Log::Info() << "============= KATECH: Scenario 2 DONE =============";
+    SCENARIO_LOG_INFO() << "============= KATECH: Scenario 2 DONE =============";
 }//===== 시나리오 #3. 주행중 경로 주변 동적 장애물 통행 환경 =====
 void evaluateScenario3(const obstacleListVector& obstacle_list, 
                        const adcm::vehicleListStruct& ego_vehicle, 
                        adcm::risk_assessment_Objects& riskAssessment)
 {
-    adcm::Log::Info() << "============= KATECH: Scenario 3 START =============";
+    SCENARIO_LOG_INFO() << "============= KATECH: Scenario 3 START =============";
 
     // 단위: 거리 dm(0.1 m), 시간 s
     constexpr double MIN_DIST_DM = 100.0;   // 10 m
@@ -221,7 +226,7 @@ void evaluateScenario3(const obstacleListVector& obstacle_list,
         const double d_ego_dm = calculateDistance(obs, ego_vehicle);
         if (d_ego_dm < MIN_DIST_DM || d_ego_dm > MAX_DIST_DM) continue;
 
-        adcm::Log::Info() << "[3-i] 통과: ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "[3-i] 통과: ID=" << obs.obstacle_id
                           << " | class=" << static_cast<int>(obs.obstacle_class)
                           << " | stop_count=" << obs.stop_count
                           << " | Ego거리=" << (d_ego_dm/10.0) << " m";
@@ -232,13 +237,13 @@ void evaluateScenario3(const obstacleListVector& obstacle_list,
         const bool dist_ok = (calculateMinDistanceLinear(obs, ego_vehicle, d_lin_dm) && d_lin_dm < MAX_DIST_DM);
 
         if (!ttc_ok || !dist_ok) {
-            adcm::Log::Info() << "[3-ii 제외] ID=" << obs.obstacle_id
+            SCENARIO_LOG_INFO() << "[3-ii 제외] ID=" << obs.obstacle_id
                               << " | TTC=" << ttc << " s (th=" << TTC_TH_S << ")"
                               << " | linDist=" << (d_lin_dm/10.0) << " m (max=" << (MAX_DIST_DM/10.0) << ")";
             continue;
         }
 
-        adcm::Log::Info() << "[3-ii] 통과: ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "[3-ii] 통과: ID=" << obs.obstacle_id
                           << " | TTC=" << ttc << " s"
                           << " | linDist=" << (d_lin_dm/10.0) << " m";
 
@@ -247,18 +252,18 @@ void evaluateScenario3(const obstacleListVector& obstacle_list,
 
     // === 최종 후보군 로그 (컨피던스 계산 전에 전부 출력) ===
     if (candidates.empty()) {
-        adcm::Log::Info() << "[시나리오3] 최종 후보 없음 → 종료";
-        adcm::Log::Info() << "============= KATECH: Scenario 3 DONE =============";
+        SCENARIO_LOG_INFO() << "[시나리오3] 최종 후보 없음 → 종료";
+        SCENARIO_LOG_INFO() << "============= KATECH: Scenario 3 DONE =============";
         return;
     }
 
-    adcm::Log::Info() << "[시나리오3] 최종 후보군 " << candidates.size() << "개:";
+    SCENARIO_LOG_INFO() << "[시나리오3] 최종 후보군 " << candidates.size() << "개:";
     for (const auto& obs : candidates) {
         double ttc = 0.0, d_lin_dm = 0.0;
         double d_ego_dm = calculateDistance(obs, ego_vehicle);
         bool ttcr = getTTC(obs, ego_vehicle, ttc);
         bool linr = calculateMinDistanceLinear(obs, ego_vehicle, d_lin_dm);
-        adcm::Log::Info() << "   - ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "   - ID=" << obs.obstacle_id
                           << " | class=" << static_cast<int>(obs.obstacle_class)
                           << " | Ego거리=" << (d_ego_dm/10.0) << " m"
                           << " | TTC=" << (ttcr ? ttc : -1.0) << " s"
@@ -282,7 +287,7 @@ void evaluateScenario3(const obstacleListVector& obstacle_list,
         r.hazard_class = SCENARIO_3;
         r.confidence   = confidence;
 
-        adcm::Log::Info() << "[시나리오3 TRIGGER] ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "[시나리오3 TRIGGER] ID=" << obs.obstacle_id
                           << " | s_ttc=" << s_ttc
                           << " | s_dist=" << s_dist
                           << " | confidence=" << confidence
@@ -291,7 +296,7 @@ void evaluateScenario3(const obstacleListVector& obstacle_list,
         riskAssessment.riskAssessmentList.push_back(r);
     }
 
-    adcm::Log::Info() << "============= KATECH: Scenario 3 DONE =============";
+    SCENARIO_LOG_INFO() << "============= KATECH: Scenario 3 DONE =============";
 }
 
 //===== 시나리오 #4. 정지중(ego=0 m/s) 주변 동적 객체 접근 위험 =====
@@ -299,7 +304,7 @@ void evaluateScenario4(const obstacleListVector& obstacle_list,
                        const adcm::vehicleListStruct& ego_vehicle,
                        adcm::risk_assessment_Objects& riskAssessment)
 {
-    adcm::Log::Info() << "============= KATECH: Scenario 4 START =============";
+    SCENARIO_LOG_INFO() << "============= KATECH: Scenario 4 START =============";
 
     // 좌표 단위: dm(0.1 m) 가정, 속도 단위: m/s
     constexpr double MIN_DIST_DM = 200.0;   // 20 m
@@ -314,8 +319,8 @@ void evaluateScenario4(const obstacleListVector& obstacle_list,
     // ① 자차 정지 조건
     const double ego_speed = std::hypot(ego_vehicle.velocity_x, ego_vehicle.velocity_y);
     if (ego_speed > STOP_SPEED_TH_MPS) {
-        adcm::Log::Info() << "[시나리오4] 자차 정지 상태 아님(" << ego_speed << " m/s) → 종료";
-        adcm::Log::Info() << "============= KATECH: Scenario 4 DONE =============";
+        SCENARIO_LOG_INFO() << "[시나리오4] 자차 정지 상태 아님(" << ego_speed << " m/s) → 종료";
+        SCENARIO_LOG_INFO() << "============= KATECH: Scenario 4 DONE =============";
         return;
     }
 
@@ -330,18 +335,18 @@ void evaluateScenario4(const obstacleListVector& obstacle_list,
         // Ego-장애물 직선거리 (dm)
         const double d_ego_dm = calculateDistance(obs, ego_vehicle);
         if (d_ego_dm < MIN_DIST_DM || d_ego_dm > MAX_DIST_DM) continue;
-        adcm::Log::Info() << "[4-i] 통과: ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "[4-i] 통과: ID=" << obs.obstacle_id
                           << " | class=" << static_cast<int>(obs.obstacle_class)
                           << " | Ego거리=" << (d_ego_dm/10.0) << " m";
 
         // ③ 선형 최소거리 ≤ 40 m 조건 (dm 단위 반환 가정)
         double d_min_dm = 0.0;
         if (!calculateMinDistanceLinear(obs, ego_vehicle, d_min_dm) || d_min_dm > MAX_DIST_DM) {
-            adcm::Log::Info() << "[4-ii 제외] ID=" << obs.obstacle_id
+            SCENARIO_LOG_INFO() << "[4-ii 제외] ID=" << obs.obstacle_id
                               << " | linMinDist=" << (d_min_dm/10.0) << " m (>40 또는 계산실패)";
             continue;
         }
-        adcm::Log::Info() << "[4-ii] 통과: ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "[4-ii] 통과: ID=" << obs.obstacle_id
                           << " | linMinDist=" << (d_min_dm/10.0) << " m";
 
         // 세 조건 모두 통과 → 후보군 편입
@@ -350,19 +355,19 @@ void evaluateScenario4(const obstacleListVector& obstacle_list,
 
     // === 최종 후보군 요약 출력 (컨피던스 계산 전) ===
     if (candidates.empty()) {
-        adcm::Log::Info() << "[시나리오4] 최종 후보 없음 → 종료";
-        adcm::Log::Info() << "============= KATECH: Scenario 4 DONE =============";
+        SCENARIO_LOG_INFO() << "[시나리오4] 최종 후보 없음 → 종료";
+        SCENARIO_LOG_INFO() << "============= KATECH: Scenario 4 DONE =============";
         return;
     }
 
-    adcm::Log::Info() << "[시나리오4] 최종 후보군 " << candidates.size() << "개:";
+    SCENARIO_LOG_INFO() << "[시나리오4] 최종 후보군 " << candidates.size() << "개:";
     for (const auto& obs : candidates) {
         double ttc = -1.0, d_min_dm = 0.0;
         (void)calculateMinDistanceLinear(obs, ego_vehicle, d_min_dm);
         const double d_ego_dm = calculateDistance(obs, ego_vehicle);
         const bool ttc_ok = getTTC(obs, ego_vehicle, ttc); // s 단위
 
-        adcm::Log::Info() << "   - ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "   - ID=" << obs.obstacle_id
                           << " | class=" << static_cast<int>(obs.obstacle_class)
                           << " | Ego거리=" << (d_ego_dm/10.0) << " m"
                           << " | linMinDist=" << (d_min_dm/10.0) << " m"
@@ -393,7 +398,7 @@ void evaluateScenario4(const obstacleListVector& obstacle_list,
         r.hazard_class = SCENARIO_4;
         r.confidence   = confidence;
 
-        adcm::Log::Info() << "[시나리오4 TRIGGER] ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "[시나리오4 TRIGGER] ID=" << obs.obstacle_id
                           << " | s_ttc=" << s_ttc
                           << " | s_minDist=" << s_mind
                           << " | confidence=" << confidence
@@ -402,7 +407,7 @@ void evaluateScenario4(const obstacleListVector& obstacle_list,
         riskAssessment.riskAssessmentList.push_back(r);
     }
 
-    adcm::Log::Info() << "============= KATECH: Scenario 4 DONE =============";
+    SCENARIO_LOG_INFO() << "============= KATECH: Scenario 4 DONE =============";
 }
 /**
  * @brief 시나리오 5: 보행자 밀집 및 신규 객체 출현 기반 위험 판단
@@ -432,7 +437,7 @@ namespace {
     inline void s5_reset_state() {
         s5_first_seen_vec.clear();
         s5_anchor_windows.clear();
-        Log::Info() << "[시나리오5] 상태 리셋 (first_seen, 앵커 윈도우 초기화)";
+        SCENARIO_LOG_INFO() << "[시나리오5] 상태 리셋 (first_seen, 앵커 윈도우 초기화)";
     }
 
     inline double s5_getFirstSeen(std::uint64_t id) {
@@ -456,7 +461,7 @@ namespace {
     inline void s5_addAnchor(std::uint64_t id, double start_ts) {
         if (s5_getAnchorStart(id) < 0.0) {
             s5_anchor_windows.push_back(std::make_pair(id, start_ts));
-            Log::Info() << "  · [앵커 생성] ID=" << id << " | start=" << start_ts << " ms";
+            SCENARIO_LOG_INFO() << "  · [앵커 생성] ID=" << id << " | start=" << start_ts << " ms";
         }
     }
     inline void s5_pruneAnchors(double now, double window_ms, double grace_ms) {
@@ -467,7 +472,7 @@ namespace {
                 if (kept != i) s5_anchor_windows[kept] = s5_anchor_windows[i];
                 ++kept;
             } else {
-                Log::Info() << "  · [앵커 만료] ID=" << s5_anchor_windows[i].first
+                SCENARIO_LOG_INFO() << "  · [앵커 만료] ID=" << s5_anchor_windows[i].first
                             << " | start=" << start << " ms | now=" << now << " ms";
             }
         }
@@ -487,7 +492,7 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
                        adcm::risk_assessment_Objects& riskAssessment)
 {
     using namespace adcm;
-    Log::Info() << "==================== [시나리오5 시작] ====================";
+    SCENARIO_LOG_INFO() << "==================== [시나리오5 시작] ====================";
 
     // 상수 (dm/ms)
     constexpr double EGO_MIN_DM          = 300.0;    // 40 m
@@ -499,11 +504,11 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
     constexpr double EPS                 = 1e-6;
 
    
-    Log::Info() << "==================== [시나리오5 시작] ====================";
+    SCENARIO_LOG_INFO() << "==================== [시나리오5 시작] ====================";
 
     if (obstacle_list.empty()) {
-        Log::Info() << "[시나리오5] 입력 장애물 없음 → 종료";
-        Log::Info() << "==================== [시나리오5 종료] ====================";
+        SCENARIO_LOG_INFO() << "[시나리오5] 입력 장애물 없음 → 종료";
+        SCENARIO_LOG_INFO() << "==================== [시나리오5 종료] ====================";
         return;
     }
 
@@ -515,7 +520,7 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
         frame_ts_min = std::min(frame_ts_min, ts);
         frame_ts_max = std::max(frame_ts_max, ts);
     }
-    Log::Info() << "[시나리오5] 프레임 수신: N=" << obstacle_list.size()
+    SCENARIO_LOG_INFO() << "[시나리오5] 프레임 수신: N=" << obstacle_list.size()
                 << " | ts=[" << frame_ts_min << "," << frame_ts_max << "] ms";
 
     // (1) 후보 추출
@@ -524,28 +529,28 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
         const auto& obs = obstacle_list[k];
 
         if (static_cast<ObstacleClass>(obs.obstacle_class) != ObstacleClass::PEDESTRIAN) {
-            //Log::Info() << "  └─[제외] ID=" << obs.obstacle_id << " | 보행자 아님";
+            //SCENARIO_LOG_INFO() << "  └─[제외] ID=" << obs.obstacle_id << " | 보행자 아님";
             continue;
         }
         double d_ego_dm = calculateDistance(obs, ego_vehicle);
         if (d_ego_dm < EGO_MIN_DM || d_ego_dm > EGO_MAX_DM) {
-            //Log::Info() << "  └─[제외] ID=" << obs.obstacle_id
+            //SCENARIO_LOG_INFO() << "  └─[제외] ID=" << obs.obstacle_id
             //            << " | Ego거리=" << (d_ego_dm/10.0) << " m (요구: 40~50 m)";
             continue;
         }
         double path_dist_dm = 0.0;
         if (!calculateMinDistanceToPath(obs, path_x, path_y, path_dist_dm)) {
-            //Log::Info() << "  └─[제외] ID=" << obs.obstacle_id << " | 경로거리 계산 실패";
+            //SCENARIO_LOG_INFO() << "  └─[제외] ID=" << obs.obstacle_id << " | 경로거리 계산 실패";
             continue;
         }
         if (path_dist_dm > DIST_TO_PATH_MAX_DM) {
-            //Log::Info() << "  └─[제외] ID=" << obs.obstacle_id
+            //SCENARIO_LOG_INFO() << "  └─[제외] ID=" << obs.obstacle_id
             //            << " | 경로거리=" << (path_dist_dm/10.0) << " m (요구: ≤10 m)";
             continue;
         }
 
         cand.push_back(obs);
-        Log::Info() << "  └─[후보] ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "  └─[후보] ID=" << obs.obstacle_id
                     << " | ts=" << obs.timestamp << " ms"
                     << " | Ego거리=" << (d_ego_dm/10.0) << " m"
                     << " | 경로거리=" << (path_dist_dm/10.0) << " m";
@@ -559,18 +564,18 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
     }
 
     if (cand.empty()) {
-        Log::Info() << "[시나리오5] 유효 후보 없음 → 종료";
-        Log::Info() << "==================== [시나리오5 종료] ====================";
+        SCENARIO_LOG_INFO() << "[시나리오5] 유효 후보 없음 → 종료";
+        SCENARIO_LOG_INFO() << "==================== [시나리오5 종료] ====================";
         return;
     }
 
     // (2) 만료된 앵커 제거
     s5_pruneAnchors(frame_ts_max, WINDOW_MS, FRAME_GRACE_MS);
-    Log::Info() << "[시나리오5] 활성 앵커 수=" << s5_anchor_windows.size();
+    SCENARIO_LOG_INFO() << "[시나리오5] 활성 앵커 수=" << s5_anchor_windows.size();
 
     if (s5_anchor_windows.empty()) {
-        Log::Info() << "[시나리오5] 활성 앵커 없음 → 종료";
-        Log::Info() << "==================== [시나리오5 종료] ====================";
+        SCENARIO_LOG_INFO() << "[시나리오5] 활성 앵커 없음 → 종료";
+        SCENARIO_LOG_INFO() << "==================== [시나리오5 종료] ====================";
         return;
     }
 
@@ -586,7 +591,7 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
         // 현재 프레임에 앵커 객체가 실제로 존재해야 거리 계산 가능
         const auto* anchor_ptr = s5_findInCand(cand, anchor_id);
         if (!anchor_ptr) {
-            Log::Info() << "  └─[스킵] 앵커 ID=" << anchor_id << " 가 현재 후보에 없음";
+            SCENARIO_LOG_INFO() << "  └─[스킵] 앵커 ID=" << anchor_id << " 가 현재 후보에 없음";
             continue;
         }
 
@@ -604,7 +609,7 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
                 (fs >  t0 + FRAME_GRACE_MS + EPS) && (fs <= t0 + WINDOW_MS + EPS);
 
             if (!(both_start_frame || newcomer_in_window)) {
-                 Log::Info() << "[무시] 앵커(ID=" << anchor_id
+                 SCENARIO_LOG_INFO() << "[무시] 앵커(ID=" << anchor_id
                 << ", start=" << t0 << "ms)"
                 << " vs 후보(ID=" << obj.obstacle_id
                 << ", first_seen=" << fs << "ms)"
@@ -615,12 +620,12 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
             }
 
             double dij_dm = calculateDistance(*anchor_ptr, obj);
-            Log::Info() << "    · [검사] 페어(" << anchor_id << "," << obj.obstacle_id
+            SCENARIO_LOG_INFO() << "    · [검사] 페어(" << anchor_id << "," << obj.obstacle_id
                         << ") | 유형=" << (both_start_frame? "동시등장":"앵커-뉴커머")
                         << " | 거리=" << (dij_dm/10.0) << " m";
 
             if (dij_dm <= MAX_PAIR_DIST_DM) {
-                //Log::Info() << "      -> [유효쌍] 거리 ≤ 20 m";
+                //SCENARIO_LOG_INFO() << "      -> [유효쌍] 거리 ≤ 20 m";
                 if (dij_dm < best_pair_dm) {
                     best_pair_dm = dij_dm;
                     best_a = *anchor_ptr;
@@ -632,8 +637,8 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
     }
 
     if (!triggered) {
-        Log::Info() << "[시나리오5] 현재 프레임: 유효(≤20m) 페어 없음";
-        Log::Info() << "==================== [시나리오5 종료] ====================";
+        SCENARIO_LOG_INFO() << "[시나리오5] 현재 프레임: 유효(≤20m) 페어 없음";
+        SCENARIO_LOG_INFO() << "==================== [시나리오5 종료] ====================";
         return;
     }
 
@@ -644,7 +649,7 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
     adcm::riskAssessmentStruct s5a{ .obstacle_id=best_a.obstacle_id, .hazard_class=SCENARIO_5, .confidence=conf };
     adcm::riskAssessmentStruct s5b{ .obstacle_id=best_b.obstacle_id, .hazard_class=SCENARIO_5, .confidence=conf };
 
-    Log::Info() << "[시나리오5 TRIGGER]"
+    SCENARIO_LOG_INFO() << "[시나리오5 TRIGGER]"
                 << " | 페어 IDs=(" << s5a.obstacle_id << "," << s5b.obstacle_id << ")"
                 << " | 거리=" << pair_m << " m"
                 << " | confidence=" << conf;
@@ -657,7 +662,7 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
     //  (B) 트리거 후에도 남은 앵커 유지 → 다중 트리거 허용 (원하시면 이 라인 제거)
     s5_reset_state();
 
-    Log::Info() << "==================== [시나리오5 종료] ====================";
+    SCENARIO_LOG_INFO() << "==================== [시나리오5 종료] ====================";
 }
 
 /**
@@ -681,7 +686,7 @@ namespace {
     inline void s6_reset_state() {
         s6_first_seen_vec.clear();
         s6_anchor_windows.clear();
-        Log::Info() << "[시나리오6] 상태 리셋";
+        SCENARIO_LOG_INFO() << "[시나리오6] 상태 리셋";
     }
 
     inline double s6_getFirstSeen(std::uint64_t id) {
@@ -702,7 +707,7 @@ namespace {
     inline void s6_addAnchor(std::uint64_t id, double start_ts) {
         if (s6_getAnchorStart(id) < 0.0) {
             s6_anchor_windows.emplace_back(id, start_ts);
-            Log::Info() << "  · [앵커 생성] 차량ID=" << id << " | start=" << start_ts;
+            SCENARIO_LOG_INFO() << "  · [앵커 생성] 차량ID=" << id << " | start=" << start_ts;
         }
     }
     inline void s6_pruneAnchors(double now, double window_ms) {
@@ -712,7 +717,7 @@ namespace {
                 if (i!=kept) s6_anchor_windows[kept]=s6_anchor_windows[i];
                 kept++;
             } else {
-                Log::Info() << "  · [만료] 앵커 차량ID="<< s6_anchor_windows[i].first;
+                SCENARIO_LOG_INFO() << "  · [만료] 앵커 차량ID="<< s6_anchor_windows[i].first;
             }
         }
         s6_anchor_windows.resize(kept);
@@ -729,7 +734,7 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
                        adcm::risk_assessment_Objects& riskAssessment)
 {
     using namespace adcm;
-    Log::Info() << "==================== [시나리오6 시작] ====================";
+    SCENARIO_LOG_INFO() << "==================== [시나리오6 시작] ====================";
 
     constexpr double EGO_MIN_DM          = 400.0;   // 50 m
     constexpr double EGO_MAX_DM          = 600.0;   // 60 m
@@ -740,7 +745,7 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
     constexpr double EPS                 = 1e-6;
 
     if (obstacle_list.empty()) {
-        Log::Info() << "[시나리오6] 입력 없음 → 종료";
+        SCENARIO_LOG_INFO() << "[시나리오6] 입력 없음 → 종료";
         return;
     }
 
@@ -752,7 +757,7 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
         frame_ts_min = std::min(frame_ts_min, ts);
         frame_ts_max = std::max(frame_ts_max, ts);
     }
-    Log::Info() << "[시나리오6] 프레임 N=" << obstacle_list.size()
+    SCENARIO_LOG_INFO() << "[시나리오6] 프레임 N=" << obstacle_list.size()
                 << " ts=[" << frame_ts_min << "," << frame_ts_max << "]";
 
     // (1) 후보 추출: 차량류 & 50~60m & 경로 15m
@@ -768,7 +773,7 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
         if (path_dist_dm > DIST_TO_PATH_MAX_DM) continue;
 
         cand.push_back(obs);
-        Log::Info() << "  └─[후보차량] ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "  └─[후보차량] ID=" << obs.obstacle_id
                     << " ts=" << obs.timestamp
                     << " Ego거리=" << d_ego_dm/10.0 << "m"
                     << " 경로거리=" << path_dist_dm/10.0 << "m";
@@ -780,15 +785,15 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
     }
 
     if (cand.empty()) {
-        Log::Info() << "[시나리오6] 후보차량 없음 → 종료";
+        SCENARIO_LOG_INFO() << "[시나리오6] 후보차량 없음 → 종료";
         return;
     }
 
     // (2) 앵커 윈도우 유지
     s6_pruneAnchors(frame_ts_max, WINDOW_MS);
-    Log::Info() << "[시나리오6] 활성 앵커 수=" << s6_anchor_windows.size();
+    SCENARIO_LOG_INFO() << "[시나리오6] 활성 앵커 수=" << s6_anchor_windows.size();
     if (s6_anchor_windows.empty()) {
-        Log::Info() << "[시나리오6] 활성 앵커 없음";
+        SCENARIO_LOG_INFO() << "[시나리오6] 활성 앵커 없음";
         return;
     }
 
@@ -797,13 +802,13 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
     double best_pair_dm=std::numeric_limits<double>::max();
     adcm::obstacleListStruct best_a{}, best_b{};
     
-    Log::Info() << "[시나리오6] 페어 탐지 시작: window=10s, 허용거리 ≤ 30 m";
+    SCENARIO_LOG_INFO() << "[시나리오6] 페어 탐지 시작: window=10s, 허용거리 ≤ 30 m";
 
     for (auto &anc : s6_anchor_windows) {
         auto anchor_id=anc.first; double t0=anc.second;
         auto* anchor_ptr=s6_findInCand(cand,anchor_id);
         if (!anchor_ptr) {
-            Log::Info() << "  └─[스킵] 앵커 차량 ID="<<anchor_id<<" 현재 프레임 후보에 없음";
+            SCENARIO_LOG_INFO() << "  └─[스킵] 앵커 차량 ID="<<anchor_id<<" 현재 프레임 후보에 없음";
             continue;
         }
         for (auto &obj:cand) {
@@ -815,7 +820,7 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
             bool newcomer=(fs>t0+FRAME_GRACE_MS+EPS && fs<=t0+WINDOW_MS+EPS);
 
             if (!(both_start||newcomer)) {
-                Log::Info() << "    · [무시] 앵커(ID="<<anchor_id<<", start="<<t0<<"ms)"
+                SCENARIO_LOG_INFO() << "    · [무시] 앵커(ID="<<anchor_id<<", start="<<t0<<"ms)"
                             << " vs 후보(ID="<<obj.obstacle_id<<", first_seen="<<fs<<"ms)"
                             << " -> 시간조건 불일치"
                             << " (동시등장="<<(both_start?"예":"아니오")
@@ -823,7 +828,7 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
                 continue;
             }
             double dij=calculateDistance(*anchor_ptr,obj);
-            Log::Info() << "    · [검사] 차량쌍(" << anchor_id << "," << obj.obstacle_id << ")"
+            SCENARIO_LOG_INFO() << "    · [검사] 차량쌍(" << anchor_id << "," << obj.obstacle_id << ")"
             << " | 유형=" << (both_start ? "동시등장" : "앵커-뉴커머")
             << " | 페어거리=" << (dij/10.0) << " m";
             if (dij<=MAX_PAIR_DIST_DM && dij<best_pair_dm){
@@ -835,7 +840,7 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
     }
 
     if (!triggered) {
-        Log::Info() << "[시나리오6] 유효 차량쌍 없음";
+        SCENARIO_LOG_INFO() << "[시나리오6] 유효 차량쌍 없음";
         return;
     }
 
@@ -859,7 +864,7 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
     s6.hazard_class = SCENARIO_6;
     s6.confidence   = confidence;
 
-    Log::Info() << "[시나리오6 TRIGGER]"
+    SCENARIO_LOG_INFO() << "[시나리오6 TRIGGER]"
                 << " | 페어 IDs=(" << best_a.obstacle_id << "," << best_b.obstacle_id << ")"
                 << " | 페어거리=" << pair_m << " m"
                 << " | Ego-가까운차 ID=" << chosen.obstacle_id
@@ -871,15 +876,15 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
 
     // 정책: 한 번 트리거 후 상태 초기화 (원하면 유지 정책으로 변경 가능)
     s6_reset_state();
-    Log::Info()<<"==================== [시나리오6 종료] ====================";
+    SCENARIO_LOG_INFO()<<"==================== [시나리오6 종료] ====================";
 }
 
-void evaluateScenario7(const std::vector<adcm::map_2dListVector>& map_2d,
-                       const std::vector<double>& path_x,
+void evaluateScenario7(const std::vector<double>& path_x,
                        const std::vector<double>& path_y,
+                       const std::vector<adcm::map_2dListVector>& map_2d,
                        adcm::risk_assessment_Objects& riskAssessment)
 {
-    adcm::Log::Info() << "============= KATECH: Scenario 7 START =============";
+    SCENARIO_LOG_INFO() << "============= KATECH: Scenario 7 START =============";
 
     auto isUnscanned = [&](uint8_t road_z) 
     {
@@ -924,7 +929,7 @@ void evaluateScenario7(const std::vector<adcm::map_2dListVector>& map_2d,
                 r.wgs84_xy_start.push_back(start);
                 r.wgs84_xy_end.push_back(end);
 
-                adcm::Log::Info() << "[시나리오7] Unscanned path detected: "
+                SCENARIO_LOG_INFO() << "[시나리오7] Unscanned path detected: "
                                   << "X=" << start.x << " Y=" << start.y
                                   << " road_z=" << static_cast<int>(map_2d[gridX][gridY].road_z);
 
@@ -937,7 +942,7 @@ void evaluateScenario7(const std::vector<adcm::map_2dListVector>& map_2d,
         }
     }
 
-    adcm::Log::Info() << "============= KATECH: Scenario 7 DONE =============";
+    SCENARIO_LOG_INFO() << "============= KATECH: Scenario 7 DONE =============";
 }
 
 void evaluateScenario8(const std::vector<double>& path_x, 
@@ -945,7 +950,7 @@ void evaluateScenario8(const std::vector<double>& path_x,
                        const std::vector<adcm::map_2dListVector>& map_2d, 
                        adcm::risk_assessment_Objects& riskAssessment)
 {
-    adcm::Log::Info() << "=============KATECH: scenario 8 START==============";
+    SCENARIO_LOG_INFO() << "=============KATECH: scenario 8 START==============";
 
     // 파라미터
     constexpr int SHIFT_DISTANCE = 50;            // 전역경로 근방 5m
@@ -974,9 +979,9 @@ void evaluateScenario8(const std::vector<double>& path_x,
         // Print the line equations
         if (isVertical) 
         {
-            // adcm::Log::Info()<< "Original line equation: x = " << x_start << "\n";
-            // adcm::Log::Info() << "Line shifted right: x = " << x_up << "\n";
-            // adcm::Log::Info() << "Line shifted left: x = " << x_down << "\n";
+            // SCENARIO_LOG_INFO()<< "Original line equation: x = " << x_start << "\n";
+            // SCENARIO_LOG_INFO() << "Line shifted right: x = " << x_up << "\n";
+            // SCENARIO_LOG_INFO() << "Line shifted left: x = " << x_down << "\n";
 
             p1 = {x_down, y_start};  // First line start point
             p2 = {x_down, y_end}; // First line end point
@@ -985,9 +990,9 @@ void evaluateScenario8(const std::vector<double>& path_x,
         } 
         else 
         {
-            // adcm::Log::Info() << "Original line equation: y = " << original_m << "x + " << original_c << "\n";
-            // adcm::Log::Info() << "Line shifted up: y = " << original_m << "x + " << up_c << "\n";
-            // adcm::Log::Info() << "Line shifted down: y = " << original_m << "x + " << down_c << "\n";
+            // SCENARIO_LOG_INFO() << "Original line equation: y = " << original_m << "x + " << original_c << "\n";
+            // SCENARIO_LOG_INFO() << "Line shifted up: y = " << original_m << "x + " << up_c << "\n";
+            // SCENARIO_LOG_INFO() << "Line shifted down: y = " << original_m << "x + " << down_c << "\n";
 
             // Points of the parallelogram (calculated for x = 0 and x = 10)
             p1 = {x_start, original_m * x_start + up_c};  // First line start point
@@ -1076,7 +1081,7 @@ void evaluateScenario8(const std::vector<double>& path_x,
         }
 
         if (risk_count >= RISK_THRESHOLD) {
-            adcm::Log::Info() << "Scenario 8 hazard detected at segment " << i;
+            SCENARIO_LOG_INFO() << "Scenario 8 hazard detected at segment " << i;
 
             adcm::riskAssessmentStruct out;
             out.wgs84_xy_start.push_back(adcm::globalPathPosition{ path_x[i],     path_y[i]     });
@@ -1084,7 +1089,7 @@ void evaluateScenario8(const std::vector<double>& path_x,
             out.hazard_class = SCENARIO_8;
             out.isHarzard = true;
 
-            adcm::Log::Info() << "Risk assessment generated for #8 at X: " 
+            SCENARIO_LOG_INFO() << "Risk assessment generated for #8 at X: " 
                                 << path_x[i] << ", Y: " << path_y[i];
 
             riskAssessment.riskAssessmentList.push_back(std::move(out));
@@ -1092,7 +1097,7 @@ void evaluateScenario8(const std::vector<double>& path_x,
         }
     }
 
-    adcm::Log::Info() << "=============KATECH: scenario 8 DONE==============";
+    SCENARIO_LOG_INFO() << "=============KATECH: scenario 8 DONE==============";
 
 }
 
@@ -1103,11 +1108,11 @@ void evaluateScenario9(const obstacleListVector& obstacle_list,
                        const std::vector<double>& path_y,
                        adcm::risk_assessment_Objects& riskAssessment)
 {
-    adcm::Log::Info() << "============= KATECH: Scenario 9 START =============";
+    SCENARIO_LOG_INFO() << "============= KATECH: Scenario 9 START =============";
 
     if (path_x.empty() || path_y.empty() || path_x.size() != path_y.size()) {
-        adcm::Log::Info() << "[시나리오9] 전역경로 비정상 → 종료";
-        adcm::Log::Info() << "============= KATECH: Scenario 9 DONE =============";
+        SCENARIO_LOG_INFO() << "[시나리오9] 전역경로 비정상 → 종료";
+        SCENARIO_LOG_INFO() << "============= KATECH: Scenario 9 DONE =============";
         return;
     }
 
@@ -1120,7 +1125,6 @@ void evaluateScenario9(const obstacleListVector& obstacle_list,
     constexpr double EGO_THRESH_DM  = 400.0;  // 40m
 
     // 단위: m
-    constexpr double HEIGHT_THRESH_M  = 1.0;    // 1m 이상이면 시야 가림
     constexpr double HEIGHT_MAX_M   = 5.0;    // 5m 이상이면 s_height=1
 
     // 가중치(합계 = 1.0): 목적지/ego/높이
@@ -1133,8 +1137,8 @@ void evaluateScenario9(const obstacleListVector& obstacle_list,
     const double ego_dy = (ego_vehicle.position_y - goal_y); //dm
     const double ego_to_goal_dm = std::sqrt(ego_dx*ego_dx + ego_dy*ego_dy);
     if (ego_to_goal_dm > GOAL_RADIUS_DM) {
-        adcm::Log::Info() << "[시나리오9] Ego 목적지 반경 밖(" << (ego_to_goal_dm/10.0) << " m) → 종료";
-        adcm::Log::Info() << "============= KATECH: Scenario 9 DONE =============";
+        SCENARIO_LOG_INFO() << "[시나리오9] Ego 목적지 반경 밖(" << (ego_to_goal_dm/10.0) << " m) → 종료";
+        SCENARIO_LOG_INFO() << "============= KATECH: Scenario 9 DONE =============";
         return;
     }
 
@@ -1142,7 +1146,7 @@ void evaluateScenario9(const obstacleListVector& obstacle_list,
     candidates.reserve(obstacle_list.size());
 
     for (const auto& obs : obstacle_list) {
-        // (i) 정차 차량 OR 높이 1m 이상 정적 장애물
+        // (i) 정차 차량 OR 높이 2m 이상 정적 장애물
         const bool cond_vehicle_stopped =
             (obs.obstacle_class >= 1 && obs.obstacle_class <= 19 && obs.stop_count >= STOP_VALUE);
         const bool cond_static_high =
@@ -1153,7 +1157,7 @@ void evaluateScenario9(const obstacleListVector& obstacle_list,
         const double d_goal_dm = distanceObsToPointDm(obs, goal_x, goal_y);
         if (d_goal_dm > GOAL_RADIUS_DM) continue;
 
-        adcm::Log::Info() << "[9 후보] ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "[9 후보] ID=" << obs.obstacle_id
                           << " | class=" << static_cast<int>(obs.obstacle_class)
                           << " | stop_count=" << obs.stop_count
                           << " | height=" << obs.fused_cuboid_z
@@ -1162,12 +1166,12 @@ void evaluateScenario9(const obstacleListVector& obstacle_list,
     }
 
     if (candidates.empty()) {
-        adcm::Log::Info() << "[시나리오9] 후보 없음 → 종료";
-        adcm::Log::Info() << "============= KATECH: Scenario 9 DONE =============";
+        SCENARIO_LOG_INFO() << "[시나리오9] 후보 없음 → 종료";
+        SCENARIO_LOG_INFO() << "============= KATECH: Scenario 9 DONE =============";
         return;
     }
 
-    adcm::Log::Info() << "[시나리오9] 최종 후보군 " << candidates.size() << "개";
+    SCENARIO_LOG_INFO() << "[시나리오9] 최종 후보군 " << candidates.size() << "개";
 
     for (const auto& obs : candidates) {
         // 목적지 근접도 (30m에서 0, 가까울수록 1)
@@ -1192,7 +1196,7 @@ void evaluateScenario9(const obstacleListVector& obstacle_list,
         r.hazard_class = SCENARIO_9;
         r.confidence   = confidence;
 
-        adcm::Log::Info() << "[시나리오9 TRIGGER] ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "[시나리오9 TRIGGER] ID=" << obs.obstacle_id
                           << " | 목적지 근접도=" << s_goal
                           << ", ego 근접도=" << s_ego
                           << ", 높이점수 =" << s_height
@@ -1201,7 +1205,7 @@ void evaluateScenario9(const obstacleListVector& obstacle_list,
         riskAssessment.riskAssessmentList.push_back(r);
     }
 
-    adcm::Log::Info() << "============= KATECH: Scenario 9 DONE =============";
+    SCENARIO_LOG_INFO() << "============= KATECH: Scenario 9 DONE =============";
 }
 
 //===== 시나리오 #10. 목적지 반경 30m 내 정지 동적 장애물 기반 위험 판단 =====
@@ -1211,11 +1215,11 @@ void evaluateScenario10(const obstacleListVector& obstacle_list,
                         const std::vector<double>& path_y,
                         adcm::risk_assessment_Objects& riskAssessment)
 {
-    adcm::Log::Info() << "============= KATECH: Scenario 10 START =============";
+    SCENARIO_LOG_INFO() << "============= KATECH: Scenario 10 START =============";
 
     if (path_x.empty() || path_y.empty() || path_x.size() != path_y.size()) {
-        adcm::Log::Info() << "[시나리오10] 전역경로 비정상 → 종료";
-        adcm::Log::Info() << "============= KATECH: Scenario 10 DONE =============";
+        SCENARIO_LOG_INFO() << "[시나리오10] 전역경로 비정상 → 종료";
+        SCENARIO_LOG_INFO() << "============= KATECH: Scenario 10 DONE =============";
         return;
     }
 
@@ -1237,8 +1241,8 @@ void evaluateScenario10(const obstacleListVector& obstacle_list,
     // Ego가 목적지 반경 30m 이내인지 확인
     double ego_to_goal_dm = distanceEgoToPointDm(ego_vehicle, goal_x, goal_y);
     if (ego_to_goal_dm > GOAL_RADIUS_DM) {
-        adcm::Log::Info() << "[시나리오10] Ego 목적지 반경 밖(" << (ego_to_goal_dm/10.0) << " m) → 종료";
-        adcm::Log::Info() << "============= KATECH: Scenario 10 DONE =============";
+        SCENARIO_LOG_INFO() << "[시나리오10] Ego 목적지 반경 밖(" << (ego_to_goal_dm/10.0) << " m) → 종료";
+        SCENARIO_LOG_INFO() << "============= KATECH: Scenario 10 DONE =============";
         return;
     }
 
@@ -1253,7 +1257,7 @@ void evaluateScenario10(const obstacleListVector& obstacle_list,
         const double d_goal_dm = distanceObsToPointDm(obs, goal_x, goal_y);
         if (d_goal_dm > GOAL_RADIUS_DM) continue;
 
-        adcm::Log::Info() << "[10 후보] ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "[10 후보] ID=" << obs.obstacle_id
                           << " | class=" << static_cast<int>(obs.obstacle_class)
                           << " | stop_count=" << obs.stop_count
                           << " | 목적지거리=" << (d_goal_dm/10.0) << " m";
@@ -1261,12 +1265,12 @@ void evaluateScenario10(const obstacleListVector& obstacle_list,
     }
 
     if (candidates.empty()) {
-        adcm::Log::Info() << "[시나리오10] 후보 없음 → 종료";
-        adcm::Log::Info() << "============= KATECH: Scenario 10 DONE =============";
+        SCENARIO_LOG_INFO() << "[시나리오10] 후보 없음 → 종료";
+        SCENARIO_LOG_INFO() << "============= KATECH: Scenario 10 DONE =============";
         return;
     }
 
-    adcm::Log::Info() << "[시나리오10] 최종 후보군 " << candidates.size() << "개";
+    SCENARIO_LOG_INFO() << "[시나리오10] 최종 후보군 " << candidates.size() << "개";
 
     for (const auto& obs : candidates) {
         // (1) 목적지 근접도
@@ -1290,7 +1294,7 @@ void evaluateScenario10(const obstacleListVector& obstacle_list,
         r.hazard_class = SCENARIO_10;
         r.confidence   = confidence;
 
-        adcm::Log::Info() << "[시나리오10 TRIGGER] ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "[시나리오10 TRIGGER] ID=" << obs.obstacle_id
                           << " | s_goal=" << s_goal
                           << ", s_ego=" << s_ego
                           << ", s_stop=" << s_stop
@@ -1299,5 +1303,5 @@ void evaluateScenario10(const obstacleListVector& obstacle_list,
         riskAssessment.riskAssessmentList.push_back(r);
     }
 
-    adcm::Log::Info() << "============= KATECH: Scenario 10 DONE =============";
+    SCENARIO_LOG_INFO() << "============= KATECH: Scenario 10 DONE =============";
 }

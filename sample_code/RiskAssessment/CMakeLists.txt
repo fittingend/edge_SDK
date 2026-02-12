@@ -202,8 +202,10 @@ set(OPENDDS_MAKE_TARGET ${APP_NAME}Generated)
 # Define source files
 set(APPLICATION_src
     src/main_riskassessment.cpp
+    src/config.cpp
     src/RiskAssessmentUtils.cpp 
     src/RiskScenarios.cpp
+    src/AI_model/AutoLabelWriter.cpp
     src/NATS/NatsConnManager.cpp
     src/NATS/NatsHandler.cpp
     ${${PROCESS_ARTIFACTS_MAKE_TARGET}_SOURCES}

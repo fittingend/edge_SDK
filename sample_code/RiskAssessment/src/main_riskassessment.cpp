@@ -47,7 +47,9 @@
 
 #include "main_riskassessment.hpp"
 #include "NATS/NatsHandler.hpp"
-#include "NATS/config.cpp"
+#include "AI_model/AutoLabelWriter.hpp"
+#include "config.hpp"
+#include <unistd.h>
 /**
   * 쓰레드간 관계
 [ThreadReceiveMapData]
@@ -70,7 +72,7 @@
 
 // ==========================전역변수=================================
 // Shared data
-std::vector<adcm::map_2dListVector> map_2d;
+std::vector<adcm::map_2dListVector> map_2d;/*  */
 std::vector<double> path_x, path_y;
 obstacleListVector obstacle_list;
 adcm::vehicleListStruct ego_vehicle, sub_vehicle_1, sub_vehicle_2, sub_vehicle_3, sub_vehicle_4;
@@ -79,6 +81,8 @@ uint64_t timestamp_map = 0;
 std::string nats_server_url;
 bool useNats = false;
 bool saveJson = false;
+bool gScenarioLogEnabled = false;
+std::unique_ptr<AutoLabelWriter> labelWriter;
 
 std::uint8_t type = 0; // 시뮬레이션 = 0, 실증 = 1
 
@@ -281,7 +285,7 @@ void ThreadReceiveBuildPath()
 
         if (buildPath_rxEvent)
         {
-            adcm::Log::Info() << "[EVENT] RiskAssessment Build Path received";
+            adcm::Log::Info() << "[EVENT] RiskAssessment ";
 
             while (!buildPath_subscriber.isEventQueueEmpty())
             {
@@ -372,42 +376,30 @@ void ThreadReceiveWorkInformation()
                 }
 
                 adcm::Log::Verbose() << " type : " << type;
+            
+                min_lon = work_boundary[0].lon;
+                min_lat = work_boundary[0].lat;
+                max_lon = work_boundary[0].lon;
+                max_lat = work_boundary[0].lat;
 
-                // if (!type) // 시뮬레이션이라면, (126.5482, 35.9398)의 utm좌표가 맵의 (0, 0)이 된다.
-                // {
-                //     origin_x = 278835;
-                //     origin_y = 3980050;
-                //     map_x = 2000;
-                //     map_y = 1000;
-                //     adcm::Log::Info() << "[WorkInfo] 시뮬레이션 테스트";
-                //     adcm::Log::Info() << "맵 사이즈: (" << map_x << ", " << map_y << ")";
-                // }
-                // else // 실증이라면, boundary 좌표의 가장 작은 지점 min_x, min_y의 utm좌표가 맵의 (0, 0)이 된다.
-                // {
-                    min_lon = work_boundary[0].lon;
-                    min_lat = work_boundary[0].lat;
-                    max_lon = work_boundary[0].lon;
-                    max_lat = work_boundary[0].lat;
-
-                    for (int i = 1; i < work_boundary.size(); i++)
-                    {
-                        min_lon = work_boundary[i].lon < min_lon ? work_boundary[i].lon : min_lon;
-                        min_lat = work_boundary[i].lat < min_lat ? work_boundary[i].lat : min_lat;
-                        max_lon = work_boundary[i].lon > max_lon ? work_boundary[i].lon : max_lon;
-                        max_lat = work_boundary[i].lat > max_lat ? work_boundary[i].lat : max_lat;
-                    }
-                    adcm::Log::Info() << "[WorkInfo] 실증 테스트";
-                    adcm::Log::Info() << "map의 min(lon, lat) 값: (" << min_lon << ", " << min_lat << "), max(lon, lat) 값 : (" << max_lon << ", " << max_lat << ")";
-                    GPStoUTM(min_lon, min_lat, min_utm_x, min_utm_y);
-                    GPStoUTM(max_lon, max_lat, max_utm_x, max_utm_y);
-                    adcm::Log::Info() << "map의 minutm(x, y) 값: (" << min_utm_x << ", " << min_utm_y << "), maxutm(x, y) 값 : (" << max_utm_x << ", " << max_utm_y << ")";
-                    map_x = (max_utm_x - min_utm_x) * 10;
-                    map_y = (max_utm_y - min_utm_y) * 10;
-                    adcm::Log::Info() << "맵 사이즈: (" << map_x << ", " << map_y << ")";
-                    origin_x = min_utm_x;
-                    origin_y = min_utm_y;
-                //}
-            }
+                for (int i = 1; i < work_boundary.size(); i++)
+                {
+                    min_lon = work_boundary[i].lon < min_lon ? work_boundary[i].lon : min_lon;
+                    min_lat = work_boundary[i].lat < min_lat ? work_boundary[i].lat : min_lat;
+                    max_lon = work_boundary[i].lon > max_lon ? work_boundary[i].lon : max_lon;
+                    max_lat = work_boundary[i].lat > max_lat ? work_boundary[i].lat : max_lat;
+                }
+                adcm::Log::Info() << "[WorkInfo] 실증 테스트";
+                adcm::Log::Info() << "map의 min(lon, lat) 값: (" << min_lon << ", " << min_lat << "), max(lon, lat) 값 : (" << max_lon << ", " << max_lat << ")";
+                GPStoUTM(min_lon, min_lat, min_utm_x, min_utm_y);
+                GPStoUTM(max_lon, max_lat, max_utm_x, max_utm_y);
+                adcm::Log::Info() << "map의 minutm(x, y) 값: (" << min_utm_x << ", " << min_utm_y << "), maxutm(x, y) 값 : (" << max_utm_x << ", " << max_utm_y << ")";
+                map_x = (max_utm_x - min_utm_x) * 10;
+                map_y = (max_utm_y - min_utm_y) * 10;
+                adcm::Log::Info() << "맵 사이즈: (" << map_x << ", " << map_y << ")";
+                origin_x = min_utm_x;
+                origin_y = min_utm_y;
+        }
         }
     }
 }
@@ -447,13 +439,35 @@ void ThreadRASS()
             evaluateScenario4(obstacle_list, ego_vehicle, riskAssessment);
             evaluateScenario5(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
             evaluateScenario6(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
-            //evaluateScenario7(path_x, path_y, map_2d, riskAssessment);
+            evaluateScenario7(path_x, path_y, map_2d, riskAssessment);
             //evaluateScenario8(path_x, path_y, map_2d, riskAssessment);
             evaluateScenario9(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
             evaluateScenario10(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
         }
 
         adcm::Log::Info() << "build riskAssessment data - size " << riskAssessment.riskAssessmentList.size();
+        for (size_t i = 0; i < riskAssessment.riskAssessmentList.size(); ++i)
+        {
+            const auto& r = riskAssessment.riskAssessmentList[i];
+            adcm::Log::Info() << "riskAssessment[" << i
+                              << "] id=" << r.obstacle_id
+                              << " hazard_class=" << static_cast<int>(r.hazard_class)
+                              << " isHazard=" << (r.isHarzard ? "true" : "false")
+                              << " conf=" << r.confidence
+                              << " start_n=" << r.wgs84_xy_start.size()
+                              << " end_n=" << r.wgs84_xy_end.size();
+
+            for (size_t s = 0; s < r.wgs84_xy_start.size(); ++s)
+            {
+                adcm::Log::Info() << "  start[" << s << "]=(" << r.wgs84_xy_start[s].x
+                                  << ", " << r.wgs84_xy_start[s].y << ")";
+            }
+            for (size_t e = 0; e < r.wgs84_xy_end.size(); ++e)
+            {
+                adcm::Log::Info() << "  end[" << e << "]=(" << r.wgs84_xy_end[e].x
+                                  << ", " << r.wgs84_xy_end[e].y << ")";
+            }
+        }
 
         if (!riskAssessment.riskAssessmentList.empty())
         {
@@ -496,13 +510,13 @@ void ThreadSend()
         adcm::Log::Info() << "[" << ++rassVer << "차] 위험판단 전송 시작, timestamp: " << riskAssessment_timestamp;
 
         // [3] 전송 시작
-        auto t_start_send = std::chrono::high_resolution_clock::now();
+        //auto t_start_send = std::chrono::high_resolution_clock::now();
         riskAssessment_provider.send(riskAssessment);
-        auto t_end_send = std::chrono::high_resolution_clock::now();
-        adcm::Log::Info() << "→ 위험판단 전송 완료";
+        // auto t_end_send = std::chrono::high_resolution_clock::now();
+        // adcm::Log::Info() << "→ 위험판단 전송 완료";
 
-        auto send_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end_send - t_start_send).count();
-        adcm::Log::Info() << "→ 위험판단 전송 소요 시간: " << send_duration_ms << " ms";
+        // auto send_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end_send - t_start_send).count();
+        // adcm::Log::Info() << "→ 위험판단 전송 소요 시간: " << send_duration_ms << " ms";
 
         if (useNats)
         {
@@ -519,9 +533,21 @@ void ThreadSend()
         {
             SaveAsJson(riskAssessment);
         }
-        auto t_end_total = std::chrono::high_resolution_clock::now();
-        auto total_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end_total - t_start_total).count();
-        adcm::Log::Info() << "→ 전체 전송 처리 시간: " << total_duration_ms << " ms";
+
+        if(labelWriter)
+        {
+            labelWriter->writeFrame(
+                riskAssessment.timestamp,
+                obstacle_list,
+                ego_vehicle,
+                path_x,
+                path_y,
+                riskAssessment
+            );
+        }
+        //auto t_end_total = std::chrono::high_resolution_clock::now();
+        //auto total_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end_total - t_start_total).count();
+        //adcm::Log::Info() << "→ 전체 전송 처리 시간: " << total_duration_ms << " ms";
 
         // [4] 전송 완료 후 위험 판단 데이터 초기화
         riskAssessment.riskAssessmentList.clear();
@@ -636,8 +662,20 @@ int main(int argc, char *argv[])
         useNats = true;
     if (config.saveJson)
         saveJson = true;
+    gScenarioLogEnabled = config.scenarioLog;
 
     adcm::Log::Info() << (useNats ? "NATS ON" : "NATS OFF");
+
+    if (config.labelWrite) {
+        const std::string default_label_path = "auto_labels.csv";
+        labelWriter = std::make_unique<AutoLabelWriter>(config, default_label_path);
+        const std::string label_path =
+            config.labelOutputPath.empty() ? default_label_path : config.labelOutputPath;
+        adcm::Log::Info() << "AutoLabelWriter ENABLED (" << label_path << ")";
+    } else {
+        adcm::Log::Info() << "AutoLabelWriter DISABLED";
+    }
+
     thread_list.push_back(std::thread(ThreadReceiveMapData));
     thread_list.push_back(std::thread(ThreadReceiveBuildPath));
     thread_list.push_back(std::thread(ThreadReceiveWorkInformation));

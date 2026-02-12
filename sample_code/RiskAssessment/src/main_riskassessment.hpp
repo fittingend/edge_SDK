@@ -37,11 +37,14 @@
 #define M_TO_10CM_PRECISION 10 
 #define WHEEL_DIAMETER_M 0.71
 #define MAP_ANGLE -86
+#define HEIGHT_THRESH_M 2.0    // 사각지대 값 -> 2m 이상이면 시야 가림
 
 extern uint64_t timestamp_map; 
 extern std::string nats_server_url;
 extern bool useNats;
 extern bool saveJson;
+// RiskScenarios debug log toggle
+extern bool gScenarioLogEnabled;
 
 // 맵 x, y 방향 사이즈
 extern std::uint16_t map_x;
