@@ -31,7 +31,7 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
         // (i) 동적 장애물 & 정지 상태
         const bool is_vehicle = (obs.obstacle_class >= 1 && obs.obstacle_class <= 21);
         if (!is_vehicle) continue;
-        if (obs.stop_count < STOP_VALUE) continue;
+        //if (obs.stop_count < STOP_VALUE) continue;
 
         SCENARIO_LOG_INFO() << "[1-i] 차량 & 정지 상태: ID=" << obs.obstacle_id
                           << " | class=" << static_cast<int>(obs.obstacle_class)

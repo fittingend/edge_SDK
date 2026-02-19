@@ -439,7 +439,7 @@ void ThreadRASS()
             evaluateScenario4(obstacle_list, ego_vehicle, riskAssessment);
             evaluateScenario5(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
             evaluateScenario6(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
-            evaluateScenario7(path_x, path_y, map_2d, riskAssessment);
+            //evaluateScenario7(path_x, path_y, map_2d, riskAssessment);
             //evaluateScenario8(path_x, path_y, map_2d, riskAssessment);
             evaluateScenario9(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
             evaluateScenario10(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
@@ -449,7 +449,8 @@ void ThreadRASS()
         for (size_t i = 0; i < riskAssessment.riskAssessmentList.size(); ++i)
         {
             const auto& r = riskAssessment.riskAssessmentList[i];
-            adcm::Log::Info() << "riskAssessment[" << i
+            adcm::Log::Info() << (r.confidence > 0.7 ? "TRIGGER!!! ==========" : "")
+                              << "riskAssessment[" << i
                               << "] id=" << r.obstacle_id
                               << " hazard_class=" << static_cast<int>(r.hazard_class)
                               << " isHazard=" << (r.isHarzard ? "true" : "false")
