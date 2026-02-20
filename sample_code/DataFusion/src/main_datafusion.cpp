@@ -1231,6 +1231,9 @@ public:
         // 매칭되지 않은 기존 정적 장애물 처리 (유지)
         if (mode != TrackMode::DynamicOnly)
         {
+            const double nearDupDist2 = 1.0 * 1.0;
+            size_t loggedKeepDup = 0;
+            constexpr size_t kMaxKeepDupLogs = 3;
             for (const auto &pair : staticObstacles)
             {
                 const auto id = pair.first;
@@ -1256,6 +1259,23 @@ public:
                         ObstacleData trackedObstacle = history.obstacle;
                         trackedObstacle.fused_position_x = avgX;
                         trackedObstacle.fused_position_y = avgY;
+                        for (const auto &existing : trackedList)
+                        {
+                            if (existing.obstacle_class != trackedObstacle.obstacle_class)
+                                continue;
+                            const double dx = existing.fused_position_x - trackedObstacle.fused_position_x;
+                            const double dy = existing.fused_position_y - trackedObstacle.fused_position_y;
+                            if ((dx * dx + dy * dy) <= nearDupDist2 && loggedKeepDup < kMaxKeepDupLogs)
+                            {
+                                adcm::Log::Info() << prefix << "[TRACK] static keep dup";
+                                adcm::Log::Info() << prefix << "[TRACK] existing id=" << existing.obstacle_id
+                                                  << " pos=(" << existing.fused_position_x << ", " << existing.fused_position_y << ")";
+                                adcm::Log::Info() << prefix << "[TRACK] keep id=" << trackedObstacle.obstacle_id
+                                                  << " pos=(" << trackedObstacle.fused_position_x << ", " << trackedObstacle.fused_position_y << ")";
+                                loggedKeepDup += 1;
+                                break;
+                            }
+                        }
                         trackedList.push_back(trackedObstacle);
                     }
                     else
@@ -1264,6 +1284,23 @@ public:
                         adcm::Log::Info() << prefix << "[TRACK] static keep id=" << id
                                           << " historySize=0";
                         */
+                        for (const auto &existing : trackedList)
+                        {
+                            if (existing.obstacle_class != history.obstacle.obstacle_class)
+                                continue;
+                            const double dx = existing.fused_position_x - history.obstacle.fused_position_x;
+                            const double dy = existing.fused_position_y - history.obstacle.fused_position_y;
+                            if ((dx * dx + dy * dy) <= nearDupDist2 && loggedKeepDup < kMaxKeepDupLogs)
+                            {
+                                adcm::Log::Info() << prefix << "[TRACK] static keep dup";
+                                adcm::Log::Info() << prefix << "[TRACK] existing id=" << existing.obstacle_id
+                                                  << " pos=(" << existing.fused_position_x << ", " << existing.fused_position_y << ")";
+                                adcm::Log::Info() << prefix << "[TRACK] keep id=" << history.obstacle.obstacle_id
+                                                  << " pos=(" << history.obstacle.fused_position_x << ", " << history.obstacle.fused_position_y << ")";
+                                loggedKeepDup += 1;
+                                break;
+                            }
+                        }
                         trackedList.push_back(history.obstacle);
                     }
                 }
@@ -1398,6 +1435,8 @@ void processFusion(
     const std::vector<int> &assignment,
     ObstacleTracker::TrackMode mode)
 {
+    const std::string prefix = framePrefix();
+    logDuplicateSummary(prefix + "[FUSION] presList in", presList, 1.0);
     std::vector<ObstacleData> newList;
 
     // 1. 매칭된 장애물 처리
@@ -1466,6 +1505,7 @@ void processFusion(
         newList,
         mode);
     presList = trackedList;
+    logDuplicateSummary(prefix + "[FUSION] tracked out", presList, 1.0);
 }
 
 // 장애물 리스트에서 특장차, 보조 차량 데이터를 제외
@@ -1954,10 +1994,10 @@ std::vector<adcm::roadListStruct> ConvertRoadZToRoadList(const VehicleData &vehi
     double car_y = vehicle.position_y;
     double theta = vehicle.heading_angle * M_PI / 180.0;
 
-    double cell_size = 0.1; // 10 cm 단위
-    double start_x = 3.0;   // 전방 3m 제외
-    double end_x = 10.0;    // 전방 최대 10m
-    double box_width = 4.0; // 좌측 2m ~ 우측 2m
+    double cell_size = 1.0; // 10 cm 단위
+    double start_x = 30.0;  // 전방 3m 제외 (10cm 단위)
+    double end_x = 100.0;   // 전방 최대 10m (10cm 단위)
+    double box_width = 40.0; // 좌측 2m ~ 우측 2m (10cm 단위)
 
     size_t num_rows = 70; // 전방 거리: (10m-3m)/0.1 = 70
     size_t num_cols = 40; // 좌우 거리: 4m/0.1 = 40
