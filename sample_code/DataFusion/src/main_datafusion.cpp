@@ -616,6 +616,8 @@ void appendListObstaclesToMergedList(std::vector<ObstacleData> &mergedList)
         return;
     }
 
+    constexpr std::uint16_t kListIdBase = 60000;
+    constexpr std::uint16_t kListIdMax = 64999;
     const double default_cuboid_x = 1.0;
     const double default_cuboid_y = 1.0;
     const double default_cuboid_z = 1.0;
@@ -627,7 +629,15 @@ void appendListObstaclesToMergedList(std::vector<ObstacleData> &mergedList)
     {
         if (entry.assigned_id == 0)
         {
-            entry.assigned_id = id_manager.allocID();
+            const std::uint32_t derived_id = static_cast<std::uint32_t>(kListIdBase) + entry.obstacle_id;
+            if (derived_id > kListIdMax)
+            {
+                adcm::Log::Info() << prefix << "[KATECH] List obstacle id out of range, skip. base_id="
+                                  << entry.obstacle_id << ", derived_id=" << derived_id;
+                skipped_count++;
+                continue;
+            }
+            entry.assigned_id = static_cast<std::uint16_t>(derived_id);
         }
 
         double utm_x = 0.0;
@@ -671,66 +681,98 @@ void appendListObstaclesToMergedList(std::vector<ObstacleData> &mergedList)
                       << ", total_list=" << mergedList.size();
 }
 
-static void logDuplicateSummary(const std::string &tag,
-                                const std::vector<ObstacleData> &list,
-                                double distThreshold)
+
+static std::vector<ObstacleData> normalizeById(const std::vector<ObstacleData> &list)
 {
-    std::unordered_map<std::uint16_t, int> idCounts;
-    idCounts.reserve(list.size());
+    std::unordered_map<std::uint16_t, size_t> indexById;
+    std::vector<ObstacleData> result;
+    result.reserve(list.size());
 
     for (const auto &obs : list)
     {
-        idCounts[obs.obstacle_id] += 1;
+        const auto it = indexById.find(obs.obstacle_id);
+        if (it == indexById.end())
+        {
+            indexById.emplace(obs.obstacle_id, result.size());
+            result.push_back(obs);
+            continue;
+        }
+        // Overwrite with current obstacle when ID duplicates occur.
+        result[it->second] = obs;
     }
 
-    size_t duplicateIdTotal = 0;
-    for (const auto &entry : idCounts)
+    return result;
+}
+
+static std::vector<ObstacleData> removeNearDuplicates(const std::vector<ObstacleData> &list,
+                                                      const std::vector<ObstacleData> &prevList,
+                                                      double distThreshold)
+{
+    std::unordered_set<std::uint16_t> prevIds;
+    prevIds.reserve(prevList.size());
+    for (const auto &obs : prevList)
     {
-        if (entry.second > 1)
-        {
-            duplicateIdTotal += static_cast<size_t>(entry.second);
-        }
+        prevIds.insert(obs.obstacle_id);
     }
 
     const double dist2Threshold = distThreshold * distThreshold;
-    size_t nearDuplicatePairs = 0;
-    size_t loggedPairs = 0;
-    constexpr size_t kMaxPairLogs = 5;
+    std::vector<ObstacleData> result;
+    result.reserve(list.size());
 
-    for (size_t i = 0; i < list.size(); ++i)
+    for (const auto &obs : list)
     {
-        for (size_t j = i + 1; j < list.size(); ++j)
+        int existingIndex = -1;
+        for (size_t i = 0; i < result.size(); ++i)
         {
-            if (list[i].obstacle_class != list[j].obstacle_class)
+            if (result[i].obstacle_class != obs.obstacle_class)
                 continue;
-
-            const double dx = list[i].fused_position_x - list[j].fused_position_x;
-            const double dy = list[i].fused_position_y - list[j].fused_position_y;
-            const double dist2 = dx * dx + dy * dy;
-
-            if (dist2 <= dist2Threshold)
+            const double dx = result[i].fused_position_x - obs.fused_position_x;
+            const double dy = result[i].fused_position_y - obs.fused_position_y;
+            if ((dx * dx + dy * dy) <= dist2Threshold)
             {
-                nearDuplicatePairs += 1;
-                if (loggedPairs < kMaxPairLogs && list[i].obstacle_id != list[j].obstacle_id)
-                {
-                    adcm::Log::Info() << tag << " near-dup class=" << static_cast<int>(list[i].obstacle_class)
-                                      << " idA=" << list[i].obstacle_id
-                                      << " idB=" << list[j].obstacle_id
-                                      << " posA=(" << list[i].fused_position_x << ", " << list[i].fused_position_y << ")"
-                                      << " posB=(" << list[j].fused_position_x << ", " << list[j].fused_position_y << ")"
-                                      << " dist2=" << dist2;
-                    loggedPairs += 1;
-                }
+                existingIndex = static_cast<int>(i);
+                break;
             }
+        }
+
+        if (existingIndex < 0)
+        {
+            result.push_back(obs);
+            continue;
+        }
+
+        const auto &existing = result[existingIndex];
+        if (obs.obstacle_id == existing.obstacle_id)
+        {
+            continue;
+        }
+
+        const bool currentInPrev = prevIds.find(obs.obstacle_id) != prevIds.end();
+        const bool existingInPrev = prevIds.find(existing.obstacle_id) != prevIds.end();
+
+        if (currentInPrev && existingInPrev)
+        {
+            result.push_back(obs);
+            continue;
+        }
+
+        bool keepCurrent = false;
+        if (currentInPrev != existingInPrev)
+        {
+            keepCurrent = currentInPrev;
+        }
+        else
+        {
+            keepCurrent = obs.obstacle_id < existing.obstacle_id;
+        }
+
+        if (keepCurrent)
+        {
+            result[existingIndex] = obs;
         }
     }
 
-    if (duplicateIdTotal > 0 || nearDuplicatePairs > 0)
-    {
-        adcm::Log::Info() << tag << " dupIdTotal=" << duplicateIdTotal
-                          << " nearDupPairs=" << nearDuplicatePairs
-                          << " distThreshold=" << distThreshold;
-    }
+    return result;
 }
 
 bool checkRange(const VehicleData &vehicle)
@@ -1045,18 +1087,10 @@ public:
         std::vector<ObstacleData> trackedList;
         std::unordered_set<std::uint16_t> matchedDynamicIds;
         std::unordered_set<std::uint16_t> matchedStaticIds;
-        const std::string prefix = framePrefix();
-
         // 하나의 리스트에서 정적/동적 장애물 분기 처리
         for (const auto &currentObstacle : newList)
         {
             const bool isStatic = isStaticObstacle(currentObstacle.obstacle_class);
-/*
-            adcm::Log::Info() << prefix << "[TRACK] input id=" << currentObstacle.obstacle_id
-                              << " class=" << static_cast<int>(currentObstacle.obstacle_class)
-                              << " pos=(" << currentObstacle.fused_position_x << ", " << currentObstacle.fused_position_y << ")"
-                              << " type=" << (isStatic ? "static" : "dynamic");
-*/
             if (isStatic)
             {
                 if (mode == TrackMode::DynamicOnly)
@@ -1086,12 +1120,7 @@ public:
 
                 if (matched && bestMatchId != 0)
                 {
-                    /*
-                    adcm::Log::Info() << prefix << "[TRACK] static match bestId=" << bestMatchId
-                                      << " bestDist=" << bestDistance
-                                      << " thresh=" << STATIC_DISTANCE_THRESHOLD;
-                    */
-                                      auto &history = staticObstacles[bestMatchId];
+                    auto &history = staticObstacles[bestMatchId];
 
                     history.positionHistory.push_back({currentObstacle.fused_position_x, currentObstacle.fused_position_y});
                     if (history.positionHistory.size() > POSITION_HISTORY_SIZE)
@@ -1120,10 +1149,6 @@ public:
                 }
                 else
                 {
-                    /*
-                    adcm::Log::Info() << prefix << "[TRACK] static no-match bestDist=" << bestDistance
-                                      << " thresh=" << STATIC_DISTANCE_THRESHOLD;
-                    */
                     ObstacleData trackedObstacle = currentObstacle;
                     if (trackedObstacle.obstacle_id == 0)
                     {
@@ -1164,12 +1189,7 @@ public:
 
                 if (matched && bestMatchId != 0)
                 {
-                    /*
-                    adcm::Log::Info() << prefix << "[TRACK] dynamic match bestId=" << bestMatchId
-                                      << " bestDist=" << bestDistance
-                                      << " thresh=" << DISTANCE_THRESHOLD;
-                    */
-                                      auto &tracked = dynamicObstacles[bestMatchId];
+                    auto &tracked = dynamicObstacles[bestMatchId];
                     ObstacleData trackedObstacle = currentObstacle;
                     trackedObstacle.obstacle_id = tracked.obstacle.obstacle_id;
                     trackedList.push_back(trackedObstacle);
@@ -1180,10 +1200,6 @@ public:
                 }
                 else
                 {
-                    /*
-                    adcm::Log::Info() << prefix << "[TRACK] dynamic no-match bestDist=" << bestDistance
-                                      << " thresh=" << DISTANCE_THRESHOLD;
-                    */
                     ObstacleData trackedObstacle = currentObstacle;
                     if (trackedObstacle.obstacle_id == 0)
                     {
@@ -1207,21 +1223,12 @@ public:
                     it->second.unmatchedFrames += 1;
                     if (it->second.unmatchedFrames >= MAX_UNMATCHED_FRAMES)
                     {
-                        /*
-                        adcm::Log::Info() << prefix << "[TRACK] dynamic drop id=" << it->first
-                                          << " unmatchedFrames=" << it->second.unmatchedFrames;
-                        */
-                                          it = dynamicObstacles.erase(it);
+                        it = dynamicObstacles.erase(it);
                         continue;
                     }
                     else
                     {
-                        /*
-                        adcm::Log::Info() << prefix << "[TRACK] dynamic keep id=" << it->first
-                                          << " unmatchedFrames=" << it->second.unmatchedFrames
-                                          << " pos=(" << it->second.obstacle.fused_position_x << ", " << it->second.obstacle.fused_position_y << ")";
-                        */
-                                          trackedList.push_back(it->second.obstacle);
+                        trackedList.push_back(it->second.obstacle);
                     }
                 }
                 ++it;
@@ -1232,8 +1239,7 @@ public:
         if (mode != TrackMode::DynamicOnly)
         {
             const double nearDupDist2 = 1.0 * 1.0;
-            size_t loggedKeepDup = 0;
-            constexpr size_t kMaxKeepDupLogs = 3;
+            std::vector<std::uint16_t> staticEraseIds;
             for (const auto &pair : staticObstacles)
             {
                 const auto id = pair.first;
@@ -1242,11 +1248,7 @@ public:
                 {
                     if (!history.positionHistory.empty())
                     {
-                        /*
-                        adcm::Log::Info() << prefix << "[TRACK] static keep id=" << id
-                                          << " historySize=" << history.positionHistory.size();
-                        */
-                                          double avgX = 0.0;
+                        double avgX = 0.0;
                         double avgY = 0.0;
                         for (const auto &pos : history.positionHistory)
                         {
@@ -1259,51 +1261,81 @@ public:
                         ObstacleData trackedObstacle = history.obstacle;
                         trackedObstacle.fused_position_x = avgX;
                         trackedObstacle.fused_position_y = avgY;
+                        bool replacedById = false;
+                        for (auto &existing : trackedList)
+                        {
+                            if (existing.obstacle_id == trackedObstacle.obstacle_id)
+                            {
+                                existing = trackedObstacle;
+                                replacedById = true;
+                                break;
+                            }
+                        }
+                        if (replacedById)
+                        {
+                            continue;
+                        }
+                        bool hasNearDup = false;
                         for (const auto &existing : trackedList)
                         {
                             if (existing.obstacle_class != trackedObstacle.obstacle_class)
                                 continue;
                             const double dx = existing.fused_position_x - trackedObstacle.fused_position_x;
                             const double dy = existing.fused_position_y - trackedObstacle.fused_position_y;
-                            if ((dx * dx + dy * dy) <= nearDupDist2 && loggedKeepDup < kMaxKeepDupLogs)
+                            if ((dx * dx + dy * dy) <= nearDupDist2)
                             {
-                                adcm::Log::Info() << prefix << "[TRACK] static keep dup";
-                                adcm::Log::Info() << prefix << "[TRACK] existing id=" << existing.obstacle_id
-                                                  << " pos=(" << existing.fused_position_x << ", " << existing.fused_position_y << ")";
-                                adcm::Log::Info() << prefix << "[TRACK] keep id=" << trackedObstacle.obstacle_id
-                                                  << " pos=(" << trackedObstacle.fused_position_x << ", " << trackedObstacle.fused_position_y << ")";
-                                loggedKeepDup += 1;
+                                hasNearDup = true;
                                 break;
                             }
+                        }
+                        if (hasNearDup)
+                        {
+                            staticEraseIds.push_back(id);
+                            continue;
                         }
                         trackedList.push_back(trackedObstacle);
                     }
                     else
                     {
-                        /*
-                        adcm::Log::Info() << prefix << "[TRACK] static keep id=" << id
-                                          << " historySize=0";
-                        */
+                        bool hasNearDup = false;
+                        bool replacedById = false;
+                        for (auto &existing : trackedList)
+                        {
+                            if (existing.obstacle_id == history.obstacle.obstacle_id)
+                            {
+                                existing = history.obstacle;
+                                replacedById = true;
+                                break;
+                            }
+                        }
+                        if (replacedById)
+                        {
+                            continue;
+                        }
                         for (const auto &existing : trackedList)
                         {
                             if (existing.obstacle_class != history.obstacle.obstacle_class)
                                 continue;
                             const double dx = existing.fused_position_x - history.obstacle.fused_position_x;
                             const double dy = existing.fused_position_y - history.obstacle.fused_position_y;
-                            if ((dx * dx + dy * dy) <= nearDupDist2 && loggedKeepDup < kMaxKeepDupLogs)
+                            if ((dx * dx + dy * dy) <= nearDupDist2)
                             {
-                                adcm::Log::Info() << prefix << "[TRACK] static keep dup";
-                                adcm::Log::Info() << prefix << "[TRACK] existing id=" << existing.obstacle_id
-                                                  << " pos=(" << existing.fused_position_x << ", " << existing.fused_position_y << ")";
-                                adcm::Log::Info() << prefix << "[TRACK] keep id=" << history.obstacle.obstacle_id
-                                                  << " pos=(" << history.obstacle.fused_position_x << ", " << history.obstacle.fused_position_y << ")";
-                                loggedKeepDup += 1;
+                                hasNearDup = true;
                                 break;
                             }
+                        }
+                        if (hasNearDup)
+                        {
+                            staticEraseIds.push_back(id);
+                            continue;
                         }
                         trackedList.push_back(history.obstacle);
                     }
                 }
+            }
+            for (const auto id : staticEraseIds)
+            {
+                staticObstacles.erase(id);
             }
         }
 
@@ -1375,6 +1407,7 @@ std::vector<int> solveAssignment(const std::vector<std::vector<double>> &costMat
             }
         }
     }
+
     return assignment;
 }
 
@@ -1385,6 +1418,7 @@ void processFusionForVehiclePair(
     const std::vector<int> &assignment)
 {
     std::vector<ObstacleData> newList;
+
 
     // 1. 매칭된 장애물 처리
     for (size_t i = 0; i < assignment.size(); ++i)
@@ -1435,8 +1469,6 @@ void processFusion(
     const std::vector<int> &assignment,
     ObstacleTracker::TrackMode mode)
 {
-    const std::string prefix = framePrefix();
-    logDuplicateSummary(prefix + "[FUSION] presList in", presList, 1.0);
     std::vector<ObstacleData> newList;
 
     // 1. 매칭된 장애물 처리
@@ -1504,8 +1536,7 @@ void processFusion(
     const auto trackedList = obstacleTracker.track(
         newList,
         mode);
-    presList = trackedList;
-    logDuplicateSummary(prefix + "[FUSION] tracked out", presList, 1.0);
+    presList = normalizeById(trackedList);
 }
 
 // 장애물 리스트에서 특장차, 보조 차량 데이터를 제외
@@ -1611,8 +1642,6 @@ std::vector<ObstacleData> mergeAndCompareLists(
         }
     }
 
-    logDuplicateSummary(prefix + "[MERGELIST] after vehicle fusion", mergedList, 1.0);
-
     if (mergedList.empty())
     {
         if (previousFusionList.empty())
@@ -1624,7 +1653,6 @@ std::vector<ObstacleData> mergeAndCompareLists(
         {
             adcm::Log::Info() << prefix << "ID " << obs.obstacle_id << "(" << obs.obstacle_class << ") : [" << obs.fused_position_x << ", " << obs.fused_position_y << "]";
         }
-        logDuplicateSummary(prefix + "[MERGELIST] use previous list", previousFusionList, 1.0);
         return previousFusionList;
     }
     else
@@ -1638,7 +1666,6 @@ std::vector<ObstacleData> mergeAndCompareLists(
                 adcm::Log::Info() << prefix << "[MERGELIST] 새로운 장애물 " << obstacle.obstacle_class << " ID 할당 " << newId << " : [" << obstacle.fused_position_x << ", " << obstacle.fused_position_y << "]";
             }
             adcm::Log::Info() << prefix << "[MERGELIST] 새로운 장애물 리스트 생성: " << id_manager.getNum();
-            logDuplicateSummary(prefix + "[MERGELIST] first frame list", mergedList, 1.0);
             return mergedList;
         }
 
@@ -1716,13 +1743,14 @@ std::vector<ObstacleData> mergeAndCompareLists(
         mergedList.insert(mergedList.end(), staticMergedList.begin(), staticMergedList.end());
         mergedList.insert(mergedList.end(), dynamicMergedList.begin(), dynamicMergedList.end());
 
+        mergedList = removeNearDuplicates(mergedList, previousFusionList, 1.0);
+
         adcm::Log::Info() << prefix << "[MERGELIST] 최종 융합 장애물 리스트 사이즈: " << mergedList.size();
         adcm::Log::Info() << prefix << "[MERGELIST] 최종 융합 장애물 리스트 출력:";
         for (const auto &obs : mergedList)
         {
             adcm::Log::Info() << prefix << "ID " << obs.obstacle_id << "(" << obs.obstacle_class << ") : [" << obs.fused_position_x << ", " << obs.fused_position_y << "]";
         }
-        logDuplicateSummary(prefix + "[MERGELIST] final list", mergedList, 1.0);
         return mergedList;
     }
 }
@@ -1865,23 +1893,6 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
     {
         if (vehicle->vehicle_class != 0)
         {
-            {
-                std::unordered_map<std::uint8_t, std::size_t> rz_counts;
-                rz_counts.reserve(32);
-                for (const auto &rz : vehicle->road_z)
-                {
-                    rz_counts[rz] += 1;
-                }
-
-                adcm::Log::Info() << prefix << "[ROADZ] vehicle=" << vehicle->vehicle_class
-                                 << " size=" << vehicle->road_z.size();
-                for (const auto &entry : rz_counts)
-                {
-                    adcm::Log::Info() << prefix << "[ROADZ] value=" << static_cast<int>(entry.first)
-                                     << " count=" << entry.second;
-                }
-            }
-
             mapData.vehicle_list.push_back(ConvertToVehicleListStruct(*vehicle, mapData.map_2d));
             if (vehicle->road_z.size() > 1) // 시뮬레이션에선 road_z size가 1이므로 예외 처리
             {
@@ -1950,16 +1961,6 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
             }
         }
         mapData.road_list = std::move(merged_road_list);
-    }
-
-    if (!mapData.road_list.empty())
-    {
-        adcm::Log::Info() << prefix << "[ROAD_LIST] per-index counts";
-        for (const auto &road : mapData.road_list)
-        {
-            adcm::Log::Info() << prefix << "[ROAD_LIST] index=" << static_cast<int>(road.road_index)
-                             << " count=" << road.map_2d_location.size();
-        }
     }
 
     adcm::Log::Info() << prefix << "mapData 장애물 반영 완료 개수: " << mapData.obstacle_list.size();
@@ -2665,8 +2666,8 @@ int main(int argc, char *argv[])
                                                              ara::com::e2exf::ConfigurationFormat::JSON);
     adcm::Log::Info() << "DataFusion: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
-    adcm::Log::Info() << "SDK release_251209_interface v2.5 for sa8195";
-    // adcm::Log::Info() << "SDK release_251211_interface v2.5 for orin";
+    // adcm::Log::Info() << "SDK release_251209_interface v2.5 for sa8195";
+    adcm::Log::Info() << "SDK release_251211_interface v2.5 for orin";
     adcm::Log::Info() << "DataFusion Build " << BUILD_TIMESTAMP;
 
     // 파일 경로 얻
