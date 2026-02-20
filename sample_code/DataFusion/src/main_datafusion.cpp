@@ -732,9 +732,11 @@ void gpsToMapcoordinate(VehicleData &vehicle)
     vehicle.velocity_y = vehicle.velocity_lat;
 
     const std::string prefix = framePrefix();
+    /*
     adcm::Log::Info() << prefix << "[GPSTOMAP] 차량 " << vehicle.vehicle_class << " 좌표변환 before (" << position_x << " , " << position_y << " , " << vehicle.velocity_long << " , " << vehicle.velocity_lat << ")";
     adcm::Log::Info() << prefix << "[GPSTOMAP] 차량 " << vehicle.vehicle_class << " 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.heading_angle << ")";
-}
+    */
+    }
 
 void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData vehicle)
 {
@@ -742,7 +744,7 @@ void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleDa
     double velocity_ang = vehicle.velocity_ang;
 
     const std::string prefix = framePrefix();
-    adcm::Log::Info() << prefix << "[RELATIVETOMAP] " << vehicle.vehicle_class << " 차량 위치, heading_angle: (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.heading_angle << ")";
+    // adcm::Log::Info() << prefix << "[RELATIVETOMAP] " << vehicle.vehicle_class << " 차량 위치, heading_angle: (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.heading_angle << ")";
     for (auto iter = obstacle_list.begin(); iter != obstacle_list.end();)
     {
         double obstacle_position_x = iter->fused_position_x;
@@ -750,7 +752,7 @@ void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleDa
         double obstacle_velocity_x = iter->fused_velocity_x; // 시뮬 로그 속도의 단위는 m/s인데, 결과 값의 단위는 미정
         double obstacle_velocity_y = iter->fused_velocity_y;
 
-        adcm::Log::Info() << prefix << "[RELATIVETOMAP] 장애물 class " << iter->obstacle_class << " 좌표변환 before (" << iter->fused_position_x << ", " << iter->fused_position_y << ")";
+        // adcm::Log::Info() << prefix << "[RELATIVETOMAP] 장애물 class " << iter->obstacle_class << " 좌표변환 before (" << iter->fused_position_x << ", " << iter->fused_position_y << ")";
 
         // 새로 정리한 차량 heading_angle 기준 (정북: 0도, 반시계방향, 오른손 좌표계)
         iter->fused_position_x = vehicle.position_x + ((obstacle_position_x)*sin(theta) * (-1) + (obstacle_position_y)*cos(theta) * (-1)) * M_TO_10CM_PRECISION;
@@ -766,13 +768,15 @@ void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleDa
         if (iter->fused_position_x < 0 || iter->fused_position_x >= map_x ||
             iter->fused_position_y < 0 || iter->fused_position_y >= map_y)
         {
+        /*
             adcm::Log::Info() << prefix << "[RELATIVETOMAP] 맵 범위 밖 장애물 제거: class=" << iter->obstacle_class
                               << ", pos=(" << iter->fused_position_x << ", " << iter->fused_position_y << ")";
-            iter = obstacle_list.erase(iter);
+        */
+        iter = obstacle_list.erase(iter);
             continue;
         }
 
-        adcm::Log::Info() << prefix << "[RELATIVETOMAP] 장애물 class " << iter->obstacle_class << " 좌표변환 after (" << iter->fused_position_x << ", " << iter->fused_position_y << ")";
+        // sadcm::Log::Info() << prefix << "[RELATIVETOMAP] 장애물 class " << iter->obstacle_class << " 좌표변환 after (" << iter->fused_position_x << ", " << iter->fused_position_y << ")";
         ++iter;
     }
 }
@@ -985,12 +989,12 @@ public:
         for (const auto &currentObstacle : newList)
         {
             const bool isStatic = isStaticObstacle(currentObstacle.obstacle_class);
-
+/*
             adcm::Log::Info() << prefix << "[TRACK] input id=" << currentObstacle.obstacle_id
                               << " class=" << static_cast<int>(currentObstacle.obstacle_class)
                               << " pos=(" << currentObstacle.fused_position_x << ", " << currentObstacle.fused_position_y << ")"
                               << " type=" << (isStatic ? "static" : "dynamic");
-
+*/
             if (isStatic)
             {
                 if (mode == TrackMode::DynamicOnly)
@@ -1020,10 +1024,12 @@ public:
 
                 if (matched && bestMatchId != 0)
                 {
+                    /*
                     adcm::Log::Info() << prefix << "[TRACK] static match bestId=" << bestMatchId
                                       << " bestDist=" << bestDistance
                                       << " thresh=" << STATIC_DISTANCE_THRESHOLD;
-                    auto &history = staticObstacles[bestMatchId];
+                    */
+                                      auto &history = staticObstacles[bestMatchId];
 
                     history.positionHistory.push_back({currentObstacle.fused_position_x, currentObstacle.fused_position_y});
                     if (history.positionHistory.size() > POSITION_HISTORY_SIZE)
@@ -1052,8 +1058,10 @@ public:
                 }
                 else
                 {
+                    /*
                     adcm::Log::Info() << prefix << "[TRACK] static no-match bestDist=" << bestDistance
                                       << " thresh=" << STATIC_DISTANCE_THRESHOLD;
+                    */
                     ObstacleData trackedObstacle = currentObstacle;
                     if (trackedObstacle.obstacle_id == 0)
                     {
@@ -1094,10 +1102,12 @@ public:
 
                 if (matched && bestMatchId != 0)
                 {
+                    /*
                     adcm::Log::Info() << prefix << "[TRACK] dynamic match bestId=" << bestMatchId
                                       << " bestDist=" << bestDistance
                                       << " thresh=" << DISTANCE_THRESHOLD;
-                    auto &tracked = dynamicObstacles[bestMatchId];
+                    */
+                                      auto &tracked = dynamicObstacles[bestMatchId];
                     ObstacleData trackedObstacle = currentObstacle;
                     trackedObstacle.obstacle_id = tracked.obstacle.obstacle_id;
                     trackedList.push_back(trackedObstacle);
@@ -1108,8 +1118,10 @@ public:
                 }
                 else
                 {
+                    /*
                     adcm::Log::Info() << prefix << "[TRACK] dynamic no-match bestDist=" << bestDistance
                                       << " thresh=" << DISTANCE_THRESHOLD;
+                    */
                     ObstacleData trackedObstacle = currentObstacle;
                     if (trackedObstacle.obstacle_id == 0)
                     {
@@ -1133,17 +1145,21 @@ public:
                     it->second.unmatchedFrames += 1;
                     if (it->second.unmatchedFrames >= MAX_UNMATCHED_FRAMES)
                     {
+                        /*
                         adcm::Log::Info() << prefix << "[TRACK] dynamic drop id=" << it->first
                                           << " unmatchedFrames=" << it->second.unmatchedFrames;
-                        it = dynamicObstacles.erase(it);
+                        */
+                                          it = dynamicObstacles.erase(it);
                         continue;
                     }
                     else
                     {
+                        /*
                         adcm::Log::Info() << prefix << "[TRACK] dynamic keep id=" << it->first
                                           << " unmatchedFrames=" << it->second.unmatchedFrames
                                           << " pos=(" << it->second.obstacle.fused_position_x << ", " << it->second.obstacle.fused_position_y << ")";
-                        trackedList.push_back(it->second.obstacle);
+                        */
+                                          trackedList.push_back(it->second.obstacle);
                     }
                 }
                 ++it;
@@ -1161,9 +1177,11 @@ public:
                 {
                     if (!history.positionHistory.empty())
                     {
+                        /*
                         adcm::Log::Info() << prefix << "[TRACK] static keep id=" << id
                                           << " historySize=" << history.positionHistory.size();
-                        double avgX = 0.0;
+                        */
+                                          double avgX = 0.0;
                         double avgY = 0.0;
                         for (const auto &pos : history.positionHistory)
                         {
@@ -1180,8 +1198,10 @@ public:
                     }
                     else
                     {
+                        /*
                         adcm::Log::Info() << prefix << "[TRACK] static keep id=" << id
                                           << " historySize=0";
+                        */
                         trackedList.push_back(history.obstacle);
                     }
                 }
@@ -1589,14 +1609,14 @@ std::vector<ObstacleData> mergeAndCompareLists(
         mergedList.clear();
         mergedList.insert(mergedList.end(), staticMergedList.begin(), staticMergedList.end());
         mergedList.insert(mergedList.end(), dynamicMergedList.begin(), dynamicMergedList.end());
-/*
+
         adcm::Log::Info() << prefix << "[MERGELIST] 최종 융합 장애물 리스트 사이즈: " << mergedList.size();
         adcm::Log::Info() << prefix << "[MERGELIST] 최종 융합 장애물 리스트 출력:";
         for (const auto &obs : mergedList)
         {
             adcm::Log::Info() << prefix << "ID " << obs.obstacle_id << "(" << obs.obstacle_class << ") : [" << obs.fused_position_x << ", " << obs.fused_position_y << "]";
         }
-    */
+    
         return mergedList;
     }
 }
@@ -2006,7 +2026,7 @@ void ThreadReceiveHubData()
                 FusionData fusionData;
                 fillVehicleData(fusionData.vehicle, data);
                 fillObstacleList(fusionData.obstacle_list, data);
-
+/*
                 if (data->road_z.size() != 0)
                 {
                     adcm::Log::Info() << "[HUBDATA] road_z size: " << data->road_z.size();
@@ -2016,7 +2036,7 @@ void ThreadReceiveHubData()
                 else
                     adcm::Log::Info() << "[HUBDATA] road_z empty";
                 // road_index에 반영 필요
-
+*/
                 switch (data->vehicle_class)
                 {
                 case EGO_VEHICLE:
