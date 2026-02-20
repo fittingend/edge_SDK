@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <string>
+#include <cstdint>
 
 #define OBSTACLE_MAX 65000
 
@@ -16,6 +17,6 @@ public:
 
 private:
     std::uint16_t id_Counter;
-    std::uint8_t id_Notused[OBSTACLE_MAX];
+    std::uint16_t id_Notused[OBSTACLE_MAX];
 };
 #endif

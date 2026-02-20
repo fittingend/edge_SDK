@@ -671,6 +671,68 @@ void appendListObstaclesToMergedList(std::vector<ObstacleData> &mergedList)
                       << ", total_list=" << mergedList.size();
 }
 
+static void logDuplicateSummary(const std::string &tag,
+                                const std::vector<ObstacleData> &list,
+                                double distThreshold)
+{
+    std::unordered_map<std::uint16_t, int> idCounts;
+    idCounts.reserve(list.size());
+
+    for (const auto &obs : list)
+    {
+        idCounts[obs.obstacle_id] += 1;
+    }
+
+    size_t duplicateIdTotal = 0;
+    for (const auto &entry : idCounts)
+    {
+        if (entry.second > 1)
+        {
+            duplicateIdTotal += static_cast<size_t>(entry.second);
+        }
+    }
+
+    const double dist2Threshold = distThreshold * distThreshold;
+    size_t nearDuplicatePairs = 0;
+    size_t loggedPairs = 0;
+    constexpr size_t kMaxPairLogs = 5;
+
+    for (size_t i = 0; i < list.size(); ++i)
+    {
+        for (size_t j = i + 1; j < list.size(); ++j)
+        {
+            if (list[i].obstacle_class != list[j].obstacle_class)
+                continue;
+
+            const double dx = list[i].fused_position_x - list[j].fused_position_x;
+            const double dy = list[i].fused_position_y - list[j].fused_position_y;
+            const double dist2 = dx * dx + dy * dy;
+
+            if (dist2 <= dist2Threshold)
+            {
+                nearDuplicatePairs += 1;
+                if (loggedPairs < kMaxPairLogs && list[i].obstacle_id != list[j].obstacle_id)
+                {
+                    adcm::Log::Info() << tag << " near-dup class=" << static_cast<int>(list[i].obstacle_class)
+                                      << " idA=" << list[i].obstacle_id
+                                      << " idB=" << list[j].obstacle_id
+                                      << " posA=(" << list[i].fused_position_x << ", " << list[i].fused_position_y << ")"
+                                      << " posB=(" << list[j].fused_position_x << ", " << list[j].fused_position_y << ")"
+                                      << " dist2=" << dist2;
+                    loggedPairs += 1;
+                }
+            }
+        }
+    }
+
+    if (duplicateIdTotal > 0 || nearDuplicatePairs > 0)
+    {
+        adcm::Log::Info() << tag << " dupIdTotal=" << duplicateIdTotal
+                          << " nearDupPairs=" << nearDuplicatePairs
+                          << " distThreshold=" << distThreshold;
+    }
+}
+
 bool checkRange(const VehicleData &vehicle)
 {
     if (vehicle.position_x >= 0 && vehicle.position_x < map_x &&
@@ -1509,6 +1571,8 @@ std::vector<ObstacleData> mergeAndCompareLists(
         }
     }
 
+    logDuplicateSummary(prefix + "[MERGELIST] after vehicle fusion", mergedList, 1.0);
+
     if (mergedList.empty())
     {
         if (previousFusionList.empty())
@@ -1520,6 +1584,7 @@ std::vector<ObstacleData> mergeAndCompareLists(
         {
             adcm::Log::Info() << prefix << "ID " << obs.obstacle_id << "(" << obs.obstacle_class << ") : [" << obs.fused_position_x << ", " << obs.fused_position_y << "]";
         }
+        logDuplicateSummary(prefix + "[MERGELIST] use previous list", previousFusionList, 1.0);
         return previousFusionList;
     }
     else
@@ -1533,6 +1598,7 @@ std::vector<ObstacleData> mergeAndCompareLists(
                 adcm::Log::Info() << prefix << "[MERGELIST] 새로운 장애물 " << obstacle.obstacle_class << " ID 할당 " << newId << " : [" << obstacle.fused_position_x << ", " << obstacle.fused_position_y << "]";
             }
             adcm::Log::Info() << prefix << "[MERGELIST] 새로운 장애물 리스트 생성: " << id_manager.getNum();
+            logDuplicateSummary(prefix + "[MERGELIST] first frame list", mergedList, 1.0);
             return mergedList;
         }
 
@@ -1616,7 +1682,7 @@ std::vector<ObstacleData> mergeAndCompareLists(
         {
             adcm::Log::Info() << prefix << "ID " << obs.obstacle_id << "(" << obs.obstacle_class << ") : [" << obs.fused_position_x << ", " << obs.fused_position_y << "]";
         }
-    
+        logDuplicateSummary(prefix + "[MERGELIST] final list", mergedList, 1.0);
         return mergedList;
     }
 }
@@ -1759,6 +1825,23 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
     {
         if (vehicle->vehicle_class != 0)
         {
+            {
+                std::unordered_map<std::uint8_t, std::size_t> rz_counts;
+                rz_counts.reserve(32);
+                for (const auto &rz : vehicle->road_z)
+                {
+                    rz_counts[rz] += 1;
+                }
+
+                adcm::Log::Info() << prefix << "[ROADZ] vehicle=" << vehicle->vehicle_class
+                                 << " size=" << vehicle->road_z.size();
+                for (const auto &entry : rz_counts)
+                {
+                    adcm::Log::Info() << prefix << "[ROADZ] value=" << static_cast<int>(entry.first)
+                                     << " count=" << entry.second;
+                }
+            }
+
             mapData.vehicle_list.push_back(ConvertToVehicleListStruct(*vehicle, mapData.map_2d));
             if (vehicle->road_z.size() > 1) // 시뮬레이션에선 road_z size가 1이므로 예외 처리
             {
@@ -1829,6 +1912,16 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
         mapData.road_list = std::move(merged_road_list);
     }
 
+    if (!mapData.road_list.empty())
+    {
+        adcm::Log::Info() << prefix << "[ROAD_LIST] per-index counts";
+        for (const auto &road : mapData.road_list)
+        {
+            adcm::Log::Info() << prefix << "[ROAD_LIST] index=" << static_cast<int>(road.road_index)
+                             << " count=" << road.map_2d_location.size();
+        }
+    }
+
     adcm::Log::Info() << prefix << "mapData 장애물 반영 완료 개수: " << mapData.obstacle_list.size();
     adcm::Log::Info() << prefix << "mapData 차량 반영 완료 개수: " << mapData.vehicle_list.size();
     adcm::Log::Info() << prefix << "mapData road_list 반영 완료 개수: " << mapData.road_list.size();
@@ -1872,6 +1965,10 @@ std::vector<adcm::roadListStruct> ConvertRoadZToRoadList(const VehicleData &vehi
     for (size_t i = 0; i < vehicle.road_z.size(); ++i)
     {
         uint8_t rz = vehicle.road_z[i];
+        if (rz == 255)
+        {
+            continue; // Sensor default (unrecognized); skip
+        }
         int idx_struct = (rz <= 22) ? rz : 23;
 
         size_t col = i / num_rows; // 0 ~ 39

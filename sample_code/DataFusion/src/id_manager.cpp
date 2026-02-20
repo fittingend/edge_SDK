@@ -6,7 +6,7 @@ IDManager::IDManager()
     id_Counter = OBSTACLE_MAX;
     for (int i = 0; i < OBSTACLE_MAX; i++)
     {
-        id_Notused[i] = OBSTACLE_MAX - i;
+        id_Notused[i] = static_cast<std::uint16_t>(OBSTACLE_MAX - i);
     }
 }
 
