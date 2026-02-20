@@ -121,6 +121,38 @@ struct BoundaryData
     double lon;
     double lat;
 };
+enum class RoadIndex : uint8_t {
+    LE_NEG_50   = 0,    //   z ≤ -50cm
+    NEG_50_45   = 1,    // -50 < z ≤ -45
+    NEG_45_40   = 2,    // -45 < z ≤ -40
+    NEG_40_35   = 3,    // -40 < z ≤ -35
+    NEG_35_30   = 4,    // -35 < z ≤ -30
+    NEG_30_25   = 5,    // -30 < z ≤ -25
+    NEG_25_20   = 6,    // -25 < z ≤ -20
+    NEG_20_15   = 7,    // -20 < z ≤ -15
+    NEG_15_10   = 8,    // -15 < z ≤ -10
+    NEG_10_5    = 9,    // -10 < z ≤ -5
+    NEG_5_0     = 10,   //  -5 < z ≤ 0
+    POS_0_5     = 11,   //   0 < z ≤ 5
+    POS_5_10    = 12,   //   5 < z ≤ 10
+    POS_10_15   = 13,   //  10 < z ≤ 15
+    POS_15_20   = 14,   //  15 < z ≤ 20
+    POS_20_25   = 15,   //  20 < z ≤ 25
+    POS_25_30   = 16,   //  25 < z ≤ 30
+    POS_30_35   = 17,   //  30 < z ≤ 35
+    POS_35_40   = 18,   //  35 < z ≤ 40
+    POS_40_45   = 19,   //  40 < z ≤ 45
+    POS_45_50   = 20,   //  45 < z ≤ 50
+    POS_50_55   = 21,   //  50 < z ≤ 55
+    GE_POS_55   = 22,   //  55 < z 
+    EXCLUDED    = 23    // 작업영역외 지역
+};
+
+// road_z 높이 매핑 (작업영역외 포함)
+enum class IndexToValue : uint8_t {
+    EXCLUDED = 0xFF, // 기본값 및 작업영역외 지역
+    UNSCANNED = 0xFE, // 스캔되지 않은 지역
+};
 // ==== 전역 변수 ====
 //extern std::vector<adcm::map_2dListVector> map_2d;
 //extern obstacleListVector obstacle_list_temp;
@@ -222,6 +254,7 @@ void calculateShiftedLines(int &x_start, int &x_end, int &y_start, int &y_end, i
 void printObstacleList(obstacleListVector obstacle_list);
 bool isOutOfWork(uint8_t z);
 bool zToCm(uint8_t z, double& out_cm);
+
 
 // 문자열 변환 함수 선언
 const char* to_string(ObstacleClass cls);

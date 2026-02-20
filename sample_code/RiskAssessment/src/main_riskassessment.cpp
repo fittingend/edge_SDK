@@ -72,7 +72,7 @@
 
 // ==========================전역변수=================================
 // Shared data
-std::vector<adcm::map_2dListVector> map_2d;/*  */
+std::vector<adcm::map_2dListVector> map_2d;
 std::vector<double> path_x, path_y;
 obstacleListVector obstacle_list;
 adcm::vehicleListStruct ego_vehicle, sub_vehicle_1, sub_vehicle_2, sub_vehicle_3, sub_vehicle_4;
@@ -96,8 +96,8 @@ double min_lon, min_lat, max_lon, max_lat;
 double min_utm_x, min_utm_y, max_utm_x, max_utm_y;
 
 // 맵 x, y 방향 사이즈
-std::uint16_t map_x = 2000;
-std::uint16_t map_y = 1000;
+std::uint16_t map_x = 0;
+std::uint16_t map_y = 0;
 // 맵(0,0)지점의 utm좌표
 double origin_x = 0;
 double origin_y = 0;
@@ -150,7 +150,7 @@ void ThreadReceiveMapData()
                     continue;
                 }
 
-                adcm::Log::Info() << "[DEBUG] data->map_2d.size() = " << (data->map_2d.size()) * (data->map_2d[0].size());
+                //adcm::Log::Info() << "[DEBUG] data->map_2d.size() = " << (data->map_2d.size()) * (data->map_2d[0].size());
 
                 // 안전성 체크 후 assign
                 // map_2d = data->map_2d; // outdated interface (현재 삭제됨)
@@ -209,45 +209,29 @@ void ThreadReceiveMapData()
                 }
 
                 if (!road_list.empty()) {
-                    adcm::Log::Verbose() << "=== road_list ===";
-
-                    // road_list 정보 로그 출력
-                    for (const auto& road : road_list) {
-                        adcm::Log::Verbose() << "road_index : " << road.road_index;
-                        adcm::Log::Verbose() << "Timestamp  : " << road.Timestamp;
-
-                        if (road.map_2d_location.empty()) {
-                            adcm::Log::Verbose() << "road_list map_2d_location Vector empty!!!";
-                        }
-                    }
-
-                    // road_list[0..N-2] -> road_index assign
+                    // road_list[0..N-2] -> road_index assign (RoadZHeight)
                     if (road_list.size() > 1) {
-                        for (size_t i = 0; i < road_list.size() - 1; i++) {
-                            for (const auto& loc : road_list[i].map_2d_location) {
+                        for (uint8_t v = static_cast<uint8_t>(RoadIndex::LE_NEG_50);
+                             static_cast<size_t>(v) < road_list.size() &&
+                             v <= static_cast<uint8_t>(RoadIndex::EXCLUDED);
+                             ++v) {
+                            RoadIndex i = static_cast<RoadIndex>(v);
+                            const auto& road = road_list[static_cast<size_t>(v)];
+                            size_t assigned_count = 0;
+                            for (const auto& loc : road.map_2d_location) {
                                 int x = loc.x;
                                 int y = loc.y;
                                 if (x >= 0 && x < static_cast<int>(map_2d.size()) &&
                                     y >= 0 && y < static_cast<int>(map_2d[x].size())) {
                                     map_2d[x][y].road_z = static_cast<uint8_t>(i);
+                                    ++assigned_count;
                                 }
                             }
+                            adcm::Log::Info() << "road_list[" << static_cast<int>(i) << "]" << " assigned: " << assigned_count;
                         }
                     }
-
-                    // 마지막 요소 -> road_z = 0xFF
-                    const auto& last = road_list.back();
-                    for (const auto& loc : last.map_2d_location) {
-                        int x = loc.x;
-                        int y = loc.y;
-                        if (x >= 0 && x < static_cast<int>(map_2d.size()) &&
-                            y >= 0 && y < static_cast<int>(map_2d[x].size())) {
-                            map_2d[x][y].road_z = 0xFF;
-                        }
-                    }
-
                 } else {
-                    adcm::Log::Verbose() << "road_list Vector empty!!!";
+                    adcm::Log::Info() << "road_list Vector empty!!!";
                 }
 
                 // 데이터 사용 가능 플래그 + 알림
@@ -399,7 +383,19 @@ void ThreadReceiveWorkInformation()
                 adcm::Log::Info() << "맵 사이즈: (" << map_x << ", " << map_y << ")";
                 origin_x = min_utm_x;
                 origin_y = min_utm_y;
-        }
+                
+                map_2d.clear();
+                map_2d.resize(map_x, adcm::map_2dListVector(map_y));
+                for (int i = 0; i < map_x; i++)
+                {
+                    for (int j = 0; j < map_y; j++)
+                    {
+                        map_2d[i][j].road_z = static_cast<uint8_t>(IndexToValue::UNSCANNED); // 초기값은 UNSCANNED로 설정
+                    }
+                }
+                adcm::Log::Info() << "map_2d initialized with size (" << map_2d.size() << ", " << map_2d[0].size() << ") and road_z set to UNSCANNED";
+
+            }
         }
     }
 }
@@ -439,8 +435,8 @@ void ThreadRASS()
             evaluateScenario4(obstacle_list, ego_vehicle, riskAssessment);
             evaluateScenario5(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
             evaluateScenario6(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
-            //evaluateScenario7(path_x, path_y, map_2d, riskAssessment);
-            //evaluateScenario8(path_x, path_y, map_2d, riskAssessment);
+            evaluateScenario7(path_x, path_y, map_2d, riskAssessment);
+            evaluateScenario8(path_x, path_y, map_2d, riskAssessment);
             evaluateScenario9(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
             evaluateScenario10(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
         }

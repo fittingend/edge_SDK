@@ -727,6 +727,7 @@ namespace {
         return nullptr;
     }
 }
+
 void evaluateScenario6(const obstacleListVector& obstacle_list,
                        const adcm::vehicleListStruct& ego_vehicle,
                        const std::vector<double>& path_x,
@@ -878,7 +879,14 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
     s6_reset_state();
     SCENARIO_LOG_INFO()<<"==================== [시나리오6 종료] ====================";
 }
-
+/**
+ * @brief 시나리오 7: 주행 경로상 스캔되지 않은 구간 존재
+ * 
+ * 전역경로의 각 구간에 대해, Bresenham's line algorithm으로 해당 구간을 따라 그리드 셀을 스캔한다.
+ * 이때 road_z가 스캔 완료 범위(0~22)가 아니면 "unscanned"로 판단하여 위험으로 기록한다.
+ * 현재 정책상 OUT_OF_WORK(0xFF)도 unscanned로 포함된다.
+ * 위험 판단 시 해당 구간의 시작과 끝 좌표를 평가 목록에 추가한다.
+ */
 void evaluateScenario7(const std::vector<double>& path_x,
                        const std::vector<double>& path_y,
                        const std::vector<adcm::map_2dListVector>& map_2d,
@@ -886,10 +894,19 @@ void evaluateScenario7(const std::vector<double>& path_x,
 {
     SCENARIO_LOG_INFO() << "============= KATECH: Scenario 7 START =============";
 
-    auto isUnscanned = [&](uint8_t road_z) 
+    auto isUnscanned = [&](uint8_t road_z)
     {
-        return !(road_z <= 10);  // 0~10 범위가 아니면 전부 unscanned 이므로 true 를 return
+        return road_z == static_cast<uint8_t>(IndexToValue::EXCLUDED) ||
+               road_z == static_cast<uint8_t>(IndexToValue::UNSCANNED);
+        // 0 ~ 22 : SCAN 완료
+        // 0xFF : 작업영역 외/기본값
+        // 0xFE : 스캔되지 않은 지역
     };
+
+    adcm::riskAssessmentStruct r{};
+    bool has_unscanned = false;
+    r.hazard_class = SCENARIO_7;
+    r.isHarzard = true;
 
     for (size_t count = 0; count + 1 < path_x.size(); count++)
     {
@@ -898,7 +915,7 @@ void evaluateScenario7(const std::vector<double>& path_x,
         int y_start = static_cast<int>(path_y[count]);
         int y_end   = static_cast<int>(path_y[count + 1]);
 
-        // Bresenham's line algorithm
+        // Bresenham's line algorithm으로 경로 구간을 그리드 셀 단위로 추적
         bool steep = (std::abs(y_end - y_start) > std::abs(x_end - x_start));
         if (steep) { std::swap(x_start, y_start); std::swap(x_end, y_end); }
         if (x_start > x_end) { std::swap(x_start, x_end); std::swap(y_start, y_end); }
@@ -920,20 +937,16 @@ void evaluateScenario7(const std::vector<double>& path_x,
 
             if (isUnscanned(map_2d[gridX][gridY].road_z))
             {
-                adcm::riskAssessmentStruct r{};
-                r.hazard_class = SCENARIO_7;
-                r.isHarzard = true;
-
                 adcm::globalPathPosition start{path_x[count], path_y[count]};
                 adcm::globalPathPosition end{path_x[count+1], path_y[count+1]};
                 r.wgs84_xy_start.push_back(start);
                 r.wgs84_xy_end.push_back(end);
+                has_unscanned = true;
 
                 SCENARIO_LOG_INFO() << "[시나리오7] Unscanned path detected: "
                                   << "X=" << start.x << " Y=" << start.y
                                   << " road_z=" << static_cast<int>(map_2d[gridX][gridY].road_z);
 
-                riskAssessment.riskAssessmentList.push_back(r);
                 break; // 한 구간당 한 번만 리스크 등록
             }
 
@@ -942,9 +955,165 @@ void evaluateScenario7(const std::vector<double>& path_x,
         }
     }
 
+    if (has_unscanned)
+    {
+        SCENARIO_LOG_INFO() << "[시나리오7] Total unscanned segments: "
+                            << r.wgs84_xy_start.size();
+        riskAssessment.riskAssessmentList.push_back(r);
+    }
+
     SCENARIO_LOG_INFO() << "============= KATECH: Scenario 7 DONE =============";
 }
 
+void evaluateScenario8(const std::vector<double>& path_x, 
+                       const std::vector<double>& path_y, 
+                       const std::vector<adcm::map_2dListVector>& map_2d, 
+                       adcm::risk_assessment_Objects& riskAssessment)
+{
+    SCENARIO_LOG_INFO() << "=============KATECH: scenario 8 START==============";
+
+    // =========================
+    // Scenario 8: 급경사(주행 불가 수준) 검출
+    // - road_z: RoadZHeight enum (0~22 valid, 0xFF OUT)
+    // - ROI: 전역경로 주변 SHIFT_DISTANCE 내 스캔
+    // - 판정: slope >= 0.8 (80% 경사)인 급격한 높이 변화가 ROI 내에서 일정 횟수 이상 발견되면 Hazard
+    // =========================
+
+    // 파라미터
+    constexpr int    SHIFT_DISTANCE   = 30;     // 전역경로 근방 5m (10cm/cell 가정)
+    constexpr int    STEP             = 10;      // 5셀 = 50cm 간격에서 높이 변화 측정
+    constexpr double CELL_SIZE_CM     = 10.0;   // 1셀 = 10cm
+    constexpr double BIN_CM           = 5.0;    // road_z 1단계(bin) = 5cm
+    constexpr double SLOPE_HARD       = 0.9;    // 80% 경사 이상이면 위험(주행 안정성 저해/불가 수준)
+    constexpr int    RISK_HIT_THRESH  = 3;      // ROI 내 급경사 발견 횟수 임계(노이즈 방지)
+
+    // slope = dz_cm / dist_cm
+    // dz_cm = |bin1 - bin0| * BIN_CM
+    // dist_cm = STEP * CELL_SIZE_CM
+    // slope >= SLOPE_HARD  <=> |bin1 - bin0| >= SLOPE_HARD * dist_cm / BIN_CM
+    constexpr int BIN_DIFF_THRESHOLD =
+        static_cast<int>(std::ceil(SLOPE_HARD * (STEP * CELL_SIZE_CM) / BIN_CM)); // 예: 0.8*50/5=8
+
+    Point2D p1{}, p2{}, p3{}, p4{};
+    const int width  = static_cast<int>(map_2d.size());
+    const int height = width ? static_cast<int>(map_2d[0].size()) : 0;
+
+    auto isValidZ = [&](uint8_t z) -> bool {
+        return z <= static_cast<uint8_t>(RoadIndex::GE_POS_55); // 0~22
+    };
+
+    adcm::riskAssessmentStruct out{};
+    bool has_uneven = false;
+    out.hazard_class = SCENARIO_8;
+    out.isHarzard = true;
+
+    for (size_t i = 0; i + 1 < path_x.size(); ++i) {
+
+        int x_start = static_cast<int>(std::floor(path_x[i]));
+        int x_end   = static_cast<int>(std::floor(path_x[i + 1]));
+        int y_start = static_cast<int>(std::floor(path_y[i]));
+        int y_end   = static_cast<int>(std::floor(path_y[i + 1]));
+
+        double original_m = 0, original_c = 0, up_c = 0, down_c = 0, x_up = 0, x_down = 0;
+        bool isVertical = false;
+
+        calculateShiftedLines(x_start, x_end, y_start, y_end, SHIFT_DISTANCE,
+                              original_m, original_c, up_c, down_c, isVertical, x_up, x_down);
+
+        // ROI(평행사변형) 4점 구성
+        if (isVertical) {
+            p1 = {x_down, y_start};
+            p2 = {x_down, y_end};
+            p3 = {x_up,   y_start};
+            p4 = {x_up,   y_end};
+        } else {
+            p1 = {x_start, original_m * x_start + up_c};
+            p2 = {x_end,   original_m * x_end   + up_c};
+            p3 = {x_start, original_m * x_start + down_c};
+            p4 = {x_end,   original_m * x_end   + down_c};
+        }
+
+        // 바운딩 박스 (double → int 인덱스)
+        int minX = std::max(0,        static_cast<int>(std::floor(std::min({p1.x, p2.x, p3.x, p4.x}))));
+        int maxX = std::min(width-1,  static_cast<int>(std::ceil (std::max({p1.x, p2.x, p3.x, p4.x}))));
+        int minY = std::max(0,        static_cast<int>(std::floor(std::min({p1.y, p2.y, p3.y, p4.y}))));
+        int maxY = std::min(height-1, static_cast<int>(std::ceil (std::max({p1.y, p2.y, p3.y, p4.y}))));
+
+        int hit = 0;
+
+        // === 급경사 스캔 시작 ===
+        for (int x = minX; x <= maxX && hit < RISK_HIT_THRESH; ++x) {
+            for (int y = minY; y <= maxY && hit < RISK_HIT_THRESH; ++y) {
+
+                const uint8_t z0_u = map_2d[x][y].road_z;
+                if (!isValidZ(z0_u)) continue;
+
+                const int z0 = static_cast<int>(z0_u);
+
+                // +X 방향 (x + STEP, y)
+                if (x + STEP <= maxX) {
+                    const uint8_t z1_u = map_2d[x + STEP][y].road_z;
+                    if (isValidZ(z1_u)) {
+                        const int dz_bin = std::abs(static_cast<int>(z1_u) - z0);
+                        if (dz_bin >= BIN_DIFF_THRESHOLD) {
+                            ++hit;
+                            // 필요 시 디버깅 로그
+                            SCENARIO_LOG_INFO() << "Steep slope hit(+X): seg=" << i
+                                                << " at (" << x << "," << y << ") dz_bin=" << dz_bin;
+                        }
+                    }
+                }
+
+                // +Y 방향 (x, y + STEP)
+                if (y + STEP <= maxY) {
+                    const uint8_t z1_u = map_2d[x][y + STEP].road_z;
+                    if (isValidZ(z1_u)) {
+                        const int dz_bin = std::abs(static_cast<int>(z1_u) - z0);
+                        if (dz_bin >= BIN_DIFF_THRESHOLD) {
+                            ++hit;
+                            SCENARIO_LOG_INFO() << "Steep slope hit(+Y): seg=" << i
+                                                << " at (" << x << "," << y << ") dz_bin=" << dz_bin;
+                        }
+                    }
+                }
+
+                // (선택) 대각선: 더 강하게 잡고 싶으면 활성화
+                if (x + STEP <= maxX && y + STEP <= maxY) {
+                    const uint8_t z1_u = map_2d[x + STEP][y + STEP].road_z;
+                    if (isValidZ(z1_u)) {
+                        const int dz_bin = std::abs(static_cast<int>(z1_u) - z0);
+                        if (dz_bin >= BIN_DIFF_THRESHOLD) {
+                            ++hit;
+                            SCENARIO_LOG_INFO() << "Steep slope hit(DIAG): seg=" << i
+                                                << " at (" << x << "," << y << ") dz_bin=" << dz_bin;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (hit >= RISK_HIT_THRESH) {
+            SCENARIO_LOG_INFO() << "Scenario 8 steep-slope hazard detected at segment " << i
+                                << " (hit=" << hit << ", bin_diff_th=" << BIN_DIFF_THRESHOLD << ")";
+
+            out.wgs84_xy_start.push_back(adcm::globalPathPosition{ path_x[i],     path_y[i]     });
+            out.wgs84_xy_end.push_back  (adcm::globalPathPosition{ path_x[i + 1], path_y[i + 1] });
+            has_uneven = true;
+            // break; // 필요 시 첫 검출 후 종료
+        }
+    }
+
+    if (has_uneven)
+    {
+        SCENARIO_LOG_INFO() << "Scenario 8 total hazard segments: " << out.wgs84_xy_start.size();
+        riskAssessment.riskAssessmentList.push_back(std::move(out));
+    }
+
+    SCENARIO_LOG_INFO() << "=============KATECH: scenario 8 DONE==============";
+}
+
+
+/*
 void evaluateScenario8(const std::vector<double>& path_x, 
                        const std::vector<double>& path_y, 
                        const std::vector<adcm::map_2dListVector>& map_2d, 
@@ -1100,7 +1269,7 @@ void evaluateScenario8(const std::vector<double>& path_x,
     SCENARIO_LOG_INFO() << "=============KATECH: scenario 8 DONE==============";
 
 }
-
+*/
 //===== 시나리오 #9. 목적지 반경 30m 내 사각영역 유발 위험 판단 (정차 차량 포함 높이 weight) =====
 void evaluateScenario9(const obstacleListVector& obstacle_list,
                        const adcm::vehicleListStruct& ego_vehicle,
