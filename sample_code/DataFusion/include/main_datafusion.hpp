@@ -62,6 +62,7 @@ double min_utm_x, min_utm_y, max_utm_x, max_utm_y;
 bool useNats = false;
 bool saveJson = false;
 
+std::uint64_t nats_map_timestamp = 0; // nats로 전송할 맵생성 타임스탬프
 IDManager id_manager; // 장애물 ID 부여 및 반환
 bool ego = false;
 bool sub1 = false;

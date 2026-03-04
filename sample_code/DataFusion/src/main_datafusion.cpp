@@ -132,6 +132,10 @@ struct ListObstacleEntry
 static std::vector<ListObstacleEntry> list_obstacles;
 static bool list_obstacles_loaded = false;
 static std::string list_obstacles_path;
+static bool cfgB255Enabled = false;
+static std::vector<BoundaryData> cfgB255Pts;
+static bool b255SendPending = false;
+static std::unordered_set<std::uint64_t> b255AddedCells;
 
 static inline std::uint64_t nowMilliseconds()
 {
@@ -190,9 +194,9 @@ static bool loadListObstacles(const std::string &filePath)
 
     list_obstacles_loaded = !list_obstacles.empty();
     adcm::Log::Info() << "List obstacles loaded: " << list_obstacles.size();
-    for(const auto &entry : list_obstacles)
-    adcm::Log::Info() << "  id=" << entry.obstacle_id << ", class=" << static_cast<int>(entry.obstacle_class)
-                     << ", lon=" << entry.lon << ", lat=" << entry.lat;
+    for (const auto &entry : list_obstacles)
+        adcm::Log::Info() << "  id=" << entry.obstacle_id << ", class=" << static_cast<int>(entry.obstacle_class)
+                          << ", lon=" << entry.lon << ", lat=" << entry.lat;
     return list_obstacles_loaded;
 }
 
@@ -517,19 +521,23 @@ void NatsStart()
     }
 }
 
-void NatsSend(const adcm::map_data_Objects &mapData)
+void NatsSend(const std::uint64_t &nats_map_timestamp)
 {
-    static int mapData_count = 0;
     if (s == NATS_OK)
     {
-        const char *pubSubject = "mapDataObjects.create";
+        const char *pubSubject = "mapData.map";
         natsManager->ClearJsonData();
+        /*
         adcm::Log::Info() << "NATS conversion start!";
         // std::string mapDataStr = convertMapDataToJsonString(mapData);
         Poco::JSON::Object::Ptr mapObj = buildMapDataJson(mapData);
         adcm::Log::Info() << "NATS conversion done!";
         natsManager->addJsonData("mapData", mapObj);
         adcm::Log::Info() << "NATS make Json Data!";
+        */
+        natsManager->addJsonData("mapDataTimestamp", nats_map_timestamp);
+        adcm::Log::Info() << "NATS make timestamp Json Data! value=" << nats_map_timestamp;
+
         natsManager->NatsPublishJson(pubSubject);
         adcm::Log::Info() << "NATS publish Json!"; // publish가 오래 걸림
     }
@@ -541,9 +549,9 @@ void NatsSend(const adcm::map_data_Objects &mapData)
             natsManager = std::make_shared<adcm::etc::NatsConnManager>(nats_server_url.c_str(), subject, onMsg, asyncCb, adcm::etc::NatsConnManager::Mode::Default);
             s = natsManager->NatsExecute();
         }
-        catch (std::exception e)
+        catch (const std::exception &e)
         {
-            std::cout << "Nats reConnection error" << std::endl;
+            std::cout << "Nats reConnection error: " << e.what() << std::endl;
         }
     }
 }
@@ -616,8 +624,6 @@ void appendListObstaclesToMergedList(std::vector<ObstacleData> &mergedList)
         return;
     }
 
-    constexpr std::uint16_t kListIdBase = 60000;
-    constexpr std::uint16_t kListIdMax = 64999;
     const double default_cuboid_x = 1.0;
     const double default_cuboid_y = 1.0;
     const double default_cuboid_z = 1.0;
@@ -629,15 +635,7 @@ void appendListObstaclesToMergedList(std::vector<ObstacleData> &mergedList)
     {
         if (entry.assigned_id == 0)
         {
-            const std::uint32_t derived_id = static_cast<std::uint32_t>(kListIdBase) + entry.obstacle_id;
-            if (derived_id > kListIdMax)
-            {
-                adcm::Log::Info() << prefix << "[KATECH] List obstacle id out of range, skip. base_id="
-                                  << entry.obstacle_id << ", derived_id=" << derived_id;
-                skipped_count++;
-                continue;
-            }
-            entry.assigned_id = static_cast<std::uint16_t>(derived_id);
+            entry.assigned_id = id_manager.allocID();
         }
 
         double utm_x = 0.0;
@@ -681,98 +679,66 @@ void appendListObstaclesToMergedList(std::vector<ObstacleData> &mergedList)
                       << ", total_list=" << mergedList.size();
 }
 
-
-static std::vector<ObstacleData> normalizeById(const std::vector<ObstacleData> &list)
+static void logDuplicateSummary(const std::string &tag,
+                                const std::vector<ObstacleData> &list,
+                                double distThreshold)
 {
-    std::unordered_map<std::uint16_t, size_t> indexById;
-    std::vector<ObstacleData> result;
-    result.reserve(list.size());
+    std::unordered_map<std::uint16_t, int> idCounts;
+    idCounts.reserve(list.size());
 
     for (const auto &obs : list)
     {
-        const auto it = indexById.find(obs.obstacle_id);
-        if (it == indexById.end())
-        {
-            indexById.emplace(obs.obstacle_id, result.size());
-            result.push_back(obs);
-            continue;
-        }
-        // Overwrite with current obstacle when ID duplicates occur.
-        result[it->second] = obs;
+        idCounts[obs.obstacle_id] += 1;
     }
 
-    return result;
-}
-
-static std::vector<ObstacleData> removeNearDuplicates(const std::vector<ObstacleData> &list,
-                                                      const std::vector<ObstacleData> &prevList,
-                                                      double distThreshold)
-{
-    std::unordered_set<std::uint16_t> prevIds;
-    prevIds.reserve(prevList.size());
-    for (const auto &obs : prevList)
+    size_t duplicateIdTotal = 0;
+    for (const auto &entry : idCounts)
     {
-        prevIds.insert(obs.obstacle_id);
+        if (entry.second > 1)
+        {
+            duplicateIdTotal += static_cast<size_t>(entry.second);
+        }
     }
 
     const double dist2Threshold = distThreshold * distThreshold;
-    std::vector<ObstacleData> result;
-    result.reserve(list.size());
+    size_t nearDuplicatePairs = 0;
+    size_t loggedPairs = 0;
+    constexpr size_t kMaxPairLogs = 5;
 
-    for (const auto &obs : list)
+    for (size_t i = 0; i < list.size(); ++i)
     {
-        int existingIndex = -1;
-        for (size_t i = 0; i < result.size(); ++i)
+        for (size_t j = i + 1; j < list.size(); ++j)
         {
-            if (result[i].obstacle_class != obs.obstacle_class)
+            if (list[i].obstacle_class != list[j].obstacle_class)
                 continue;
-            const double dx = result[i].fused_position_x - obs.fused_position_x;
-            const double dy = result[i].fused_position_y - obs.fused_position_y;
-            if ((dx * dx + dy * dy) <= dist2Threshold)
+
+            const double dx = list[i].fused_position_x - list[j].fused_position_x;
+            const double dy = list[i].fused_position_y - list[j].fused_position_y;
+            const double dist2 = dx * dx + dy * dy;
+
+            if (dist2 <= dist2Threshold)
             {
-                existingIndex = static_cast<int>(i);
-                break;
+                nearDuplicatePairs += 1;
+                if (loggedPairs < kMaxPairLogs && list[i].obstacle_id != list[j].obstacle_id)
+                {
+                    adcm::Log::Info() << tag << " near-dup class=" << static_cast<int>(list[i].obstacle_class)
+                                      << " idA=" << list[i].obstacle_id
+                                      << " idB=" << list[j].obstacle_id
+                                      << " posA=(" << list[i].fused_position_x << ", " << list[i].fused_position_y << ")"
+                                      << " posB=(" << list[j].fused_position_x << ", " << list[j].fused_position_y << ")"
+                                      << " dist2=" << dist2;
+                    loggedPairs += 1;
+                }
             }
-        }
-
-        if (existingIndex < 0)
-        {
-            result.push_back(obs);
-            continue;
-        }
-
-        const auto &existing = result[existingIndex];
-        if (obs.obstacle_id == existing.obstacle_id)
-        {
-            continue;
-        }
-
-        const bool currentInPrev = prevIds.find(obs.obstacle_id) != prevIds.end();
-        const bool existingInPrev = prevIds.find(existing.obstacle_id) != prevIds.end();
-
-        if (currentInPrev && existingInPrev)
-        {
-            result.push_back(obs);
-            continue;
-        }
-
-        bool keepCurrent = false;
-        if (currentInPrev != existingInPrev)
-        {
-            keepCurrent = currentInPrev;
-        }
-        else
-        {
-            keepCurrent = obs.obstacle_id < existing.obstacle_id;
-        }
-
-        if (keepCurrent)
-        {
-            result[existingIndex] = obs;
         }
     }
 
-    return result;
+    if (duplicateIdTotal > 0 || nearDuplicatePairs > 0)
+    {
+        adcm::Log::Info() << tag << " dupIdTotal=" << duplicateIdTotal
+                          << " nearDupPairs=" << nearDuplicatePairs
+                          << " distThreshold=" << distThreshold;
+    }
 }
 
 bool checkRange(const VehicleData &vehicle)
@@ -840,7 +806,7 @@ void gpsToMapcoordinate(VehicleData &vehicle)
     adcm::Log::Info() << prefix << "[GPSTOMAP] 차량 " << vehicle.vehicle_class << " 좌표변환 before (" << position_x << " , " << position_y << " , " << vehicle.velocity_long << " , " << vehicle.velocity_lat << ")";
     adcm::Log::Info() << prefix << "[GPSTOMAP] 차량 " << vehicle.vehicle_class << " 좌표변환 after (" << vehicle.position_x << " , " << vehicle.position_y << " , " << vehicle.heading_angle << ")";
     */
-    }
+}
 
 void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleData vehicle)
 {
@@ -872,11 +838,11 @@ void relativeToMapcoordinate(std::vector<ObstacleData> &obstacle_list, VehicleDa
         if (iter->fused_position_x < 0 || iter->fused_position_x >= map_x ||
             iter->fused_position_y < 0 || iter->fused_position_y >= map_y)
         {
-        /*
-            adcm::Log::Info() << prefix << "[RELATIVETOMAP] 맵 범위 밖 장애물 제거: class=" << iter->obstacle_class
-                              << ", pos=(" << iter->fused_position_x << ", " << iter->fused_position_y << ")";
-        */
-        iter = obstacle_list.erase(iter);
+            /*
+                adcm::Log::Info() << prefix << "[RELATIVETOMAP] 맵 범위 밖 장애물 제거: class=" << iter->obstacle_class
+                                  << ", pos=(" << iter->fused_position_x << ", " << iter->fused_position_y << ")";
+            */
+            iter = obstacle_list.erase(iter);
             continue;
         }
 
@@ -1008,26 +974,26 @@ void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered)
 
         std::uint16_t obstacle_id = iter->obstacle_id;
         std::uint8_t obstacle_class = iter->obstacle_class;
-/*
-        adcm::Log::Info() << prefix << "[OCCUPANCY] obstacle " << obstacle_id << "(" << obstacle_class << ") "
-                          << "center=" << obstacle_position_x << "," << obstacle_position_y
-                          << " size(m)=" << iter->fused_cuboid_x << "x" << iter->fused_cuboid_y
-                          << " heading(deg)=" << iter->fused_heading_angle;
+        /*
+                adcm::Log::Info() << prefix << "[OCCUPANCY] obstacle " << obstacle_id << "(" << obstacle_class << ") "
+                                  << "center=" << obstacle_position_x << "," << obstacle_position_y
+                                  << " size(m)=" << iter->fused_cuboid_x << "x" << iter->fused_cuboid_y
+                                  << " heading(deg)=" << iter->fused_heading_angle;
 
-        adcm::Log::Info() << prefix << "[OCCUPANCY] obstacle " << obstacle_id << "(" << obstacle_class << ")"
-                          << " corners LU=" << LU.x << "," << LU.y
-                          << " RU=" << RU.x << "," << RU.y
-                          << " RL=" << RL.x << "," << RL.y
-                          << " LL=" << LL.x << "," << LL.y;
+                adcm::Log::Info() << prefix << "[OCCUPANCY] obstacle " << obstacle_id << "(" << obstacle_class << ")"
+                                  << " corners LU=" << LU.x << "," << LU.y
+                                  << " RU=" << RU.x << "," << RU.y
+                                  << " RL=" << RL.x << "," << RL.y
+                                  << " LL=" << LL.x << "," << LL.y;
 
-        adcm::Log::Info() << prefix << "[OCCUPANCY] obstacle " << obstacle_id << "(" << obstacle_class << ") "
-                          << "map_2d_location total = " << iter->map_2d_location.size();
-        for (const auto &pt : iter->map_2d_location)
-        {
-            adcm::Log::Info() << prefix << "[OCCUPANCY] obstacle " << obstacle_id << "(" << obstacle_class << ") : index ("
-                              << static_cast<int>(pt.x) << ", " << static_cast<int>(pt.y) << ")";
-        }
-                              */
+                adcm::Log::Info() << prefix << "[OCCUPANCY] obstacle " << obstacle_id << "(" << obstacle_class << ") "
+                                  << "map_2d_location total = " << iter->map_2d_location.size();
+                for (const auto &pt : iter->map_2d_location)
+                {
+                    adcm::Log::Info() << prefix << "[OCCUPANCY] obstacle " << obstacle_id << "(" << obstacle_class << ") : index ("
+                                      << static_cast<int>(pt.x) << ", " << static_cast<int>(pt.y) << ")";
+                }
+                                      */
     }
 }
 
@@ -1087,10 +1053,18 @@ public:
         std::vector<ObstacleData> trackedList;
         std::unordered_set<std::uint16_t> matchedDynamicIds;
         std::unordered_set<std::uint16_t> matchedStaticIds;
+        const std::string prefix = framePrefix();
+
         // 하나의 리스트에서 정적/동적 장애물 분기 처리
         for (const auto &currentObstacle : newList)
         {
             const bool isStatic = isStaticObstacle(currentObstacle.obstacle_class);
+            /*
+                        adcm::Log::Info() << prefix << "[TRACK] input id=" << currentObstacle.obstacle_id
+                                          << " class=" << static_cast<int>(currentObstacle.obstacle_class)
+                                          << " pos=(" << currentObstacle.fused_position_x << ", " << currentObstacle.fused_position_y << ")"
+                                          << " type=" << (isStatic ? "static" : "dynamic");
+            */
             if (isStatic)
             {
                 if (mode == TrackMode::DynamicOnly)
@@ -1120,6 +1094,11 @@ public:
 
                 if (matched && bestMatchId != 0)
                 {
+                    /*
+                    adcm::Log::Info() << prefix << "[TRACK] static match bestId=" << bestMatchId
+                                      << " bestDist=" << bestDistance
+                                      << " thresh=" << STATIC_DISTANCE_THRESHOLD;
+                    */
                     auto &history = staticObstacles[bestMatchId];
 
                     history.positionHistory.push_back({currentObstacle.fused_position_x, currentObstacle.fused_position_y});
@@ -1149,6 +1128,10 @@ public:
                 }
                 else
                 {
+                    /*
+                    adcm::Log::Info() << prefix << "[TRACK] static no-match bestDist=" << bestDistance
+                                      << " thresh=" << STATIC_DISTANCE_THRESHOLD;
+                    */
                     ObstacleData trackedObstacle = currentObstacle;
                     if (trackedObstacle.obstacle_id == 0)
                     {
@@ -1189,6 +1172,11 @@ public:
 
                 if (matched && bestMatchId != 0)
                 {
+                    /*
+                    adcm::Log::Info() << prefix << "[TRACK] dynamic match bestId=" << bestMatchId
+                                      << " bestDist=" << bestDistance
+                                      << " thresh=" << DISTANCE_THRESHOLD;
+                    */
                     auto &tracked = dynamicObstacles[bestMatchId];
                     ObstacleData trackedObstacle = currentObstacle;
                     trackedObstacle.obstacle_id = tracked.obstacle.obstacle_id;
@@ -1200,6 +1188,10 @@ public:
                 }
                 else
                 {
+                    /*
+                    adcm::Log::Info() << prefix << "[TRACK] dynamic no-match bestDist=" << bestDistance
+                                      << " thresh=" << DISTANCE_THRESHOLD;
+                    */
                     ObstacleData trackedObstacle = currentObstacle;
                     if (trackedObstacle.obstacle_id == 0)
                     {
@@ -1223,11 +1215,20 @@ public:
                     it->second.unmatchedFrames += 1;
                     if (it->second.unmatchedFrames >= MAX_UNMATCHED_FRAMES)
                     {
+                        /*
+                        adcm::Log::Info() << prefix << "[TRACK] dynamic drop id=" << it->first
+                                          << " unmatchedFrames=" << it->second.unmatchedFrames;
+                        */
                         it = dynamicObstacles.erase(it);
                         continue;
                     }
                     else
                     {
+                        /*
+                        adcm::Log::Info() << prefix << "[TRACK] dynamic keep id=" << it->first
+                                          << " unmatchedFrames=" << it->second.unmatchedFrames
+                                          << " pos=(" << it->second.obstacle.fused_position_x << ", " << it->second.obstacle.fused_position_y << ")";
+                        */
                         trackedList.push_back(it->second.obstacle);
                     }
                 }
@@ -1239,6 +1240,8 @@ public:
         if (mode != TrackMode::DynamicOnly)
         {
             const double nearDupDist2 = 1.0 * 1.0;
+            size_t loggedKeepDup = 0;
+            constexpr size_t kMaxKeepDupLogs = 3;
             std::vector<std::uint16_t> staticEraseIds;
             for (const auto &pair : staticObstacles)
             {
@@ -1248,6 +1251,10 @@ public:
                 {
                     if (!history.positionHistory.empty())
                     {
+                        /*
+                        adcm::Log::Info() << prefix << "[TRACK] static keep id=" << id
+                                          << " historySize=" << history.positionHistory.size();
+                        */
                         double avgX = 0.0;
                         double avgY = 0.0;
                         for (const auto &pos : history.positionHistory)
@@ -1261,20 +1268,6 @@ public:
                         ObstacleData trackedObstacle = history.obstacle;
                         trackedObstacle.fused_position_x = avgX;
                         trackedObstacle.fused_position_y = avgY;
-                        bool replacedById = false;
-                        for (auto &existing : trackedList)
-                        {
-                            if (existing.obstacle_id == trackedObstacle.obstacle_id)
-                            {
-                                existing = trackedObstacle;
-                                replacedById = true;
-                                break;
-                            }
-                        }
-                        if (replacedById)
-                        {
-                            continue;
-                        }
                         bool hasNearDup = false;
                         for (const auto &existing : trackedList)
                         {
@@ -1284,6 +1277,15 @@ public:
                             const double dy = existing.fused_position_y - trackedObstacle.fused_position_y;
                             if ((dx * dx + dy * dy) <= nearDupDist2)
                             {
+                                if (loggedKeepDup < kMaxKeepDupLogs)
+                                {
+                                    adcm::Log::Info() << prefix << "[TRACK] static keep dup";
+                                    adcm::Log::Info() << prefix << "[TRACK] existing id=" << existing.obstacle_id
+                                                      << " pos=(" << existing.fused_position_x << ", " << existing.fused_position_y << ")";
+                                    adcm::Log::Info() << prefix << "[TRACK] keep id=" << trackedObstacle.obstacle_id
+                                                      << " pos=(" << trackedObstacle.fused_position_x << ", " << trackedObstacle.fused_position_y << ")";
+                                    loggedKeepDup += 1;
+                                }
                                 hasNearDup = true;
                                 break;
                             }
@@ -1297,21 +1299,11 @@ public:
                     }
                     else
                     {
+                        /*
+                        adcm::Log::Info() << prefix << "[TRACK] static keep id=" << id
+                                          << " historySize=0";
+                        */
                         bool hasNearDup = false;
-                        bool replacedById = false;
-                        for (auto &existing : trackedList)
-                        {
-                            if (existing.obstacle_id == history.obstacle.obstacle_id)
-                            {
-                                existing = history.obstacle;
-                                replacedById = true;
-                                break;
-                            }
-                        }
-                        if (replacedById)
-                        {
-                            continue;
-                        }
                         for (const auto &existing : trackedList)
                         {
                             if (existing.obstacle_class != history.obstacle.obstacle_class)
@@ -1320,6 +1312,15 @@ public:
                             const double dy = existing.fused_position_y - history.obstacle.fused_position_y;
                             if ((dx * dx + dy * dy) <= nearDupDist2)
                             {
+                                if (loggedKeepDup < kMaxKeepDupLogs)
+                                {
+                                    adcm::Log::Info() << prefix << "[TRACK] static keep dup";
+                                    adcm::Log::Info() << prefix << "[TRACK] existing id=" << existing.obstacle_id
+                                                      << " pos=(" << existing.fused_position_x << ", " << existing.fused_position_y << ")";
+                                    adcm::Log::Info() << prefix << "[TRACK] keep id=" << history.obstacle.obstacle_id
+                                                      << " pos=(" << history.obstacle.fused_position_x << ", " << history.obstacle.fused_position_y << ")";
+                                    loggedKeepDup += 1;
+                                }
                                 hasNearDup = true;
                                 break;
                             }
@@ -1407,7 +1408,6 @@ std::vector<int> solveAssignment(const std::vector<std::vector<double>> &costMat
             }
         }
     }
-
     return assignment;
 }
 
@@ -1418,7 +1418,6 @@ void processFusionForVehiclePair(
     const std::vector<int> &assignment)
 {
     std::vector<ObstacleData> newList;
-
 
     // 1. 매칭된 장애물 처리
     for (size_t i = 0; i < assignment.size(); ++i)
@@ -1469,6 +1468,8 @@ void processFusion(
     const std::vector<int> &assignment,
     ObstacleTracker::TrackMode mode)
 {
+    const std::string prefix = framePrefix();
+    logDuplicateSummary(prefix + "[FUSION] presList in", presList, 1.0);
     std::vector<ObstacleData> newList;
 
     // 1. 매칭된 장애물 처리
@@ -1536,7 +1537,8 @@ void processFusion(
     const auto trackedList = obstacleTracker.track(
         newList,
         mode);
-    presList = normalizeById(trackedList);
+    presList = trackedList;
+    logDuplicateSummary(prefix + "[FUSION] tracked out", presList, 1.0);
 }
 
 // 장애물 리스트에서 특장차, 보조 차량 데이터를 제외
@@ -1642,6 +1644,8 @@ std::vector<ObstacleData> mergeAndCompareLists(
         }
     }
 
+    logDuplicateSummary(prefix + "[MERGELIST] after vehicle fusion", mergedList, 1.0);
+
     if (mergedList.empty())
     {
         if (previousFusionList.empty())
@@ -1653,6 +1657,7 @@ std::vector<ObstacleData> mergeAndCompareLists(
         {
             adcm::Log::Info() << prefix << "ID " << obs.obstacle_id << "(" << obs.obstacle_class << ") : [" << obs.fused_position_x << ", " << obs.fused_position_y << "]";
         }
+        logDuplicateSummary(prefix + "[MERGELIST] use previous list", previousFusionList, 1.0);
         return previousFusionList;
     }
     else
@@ -1666,6 +1671,7 @@ std::vector<ObstacleData> mergeAndCompareLists(
                 adcm::Log::Info() << prefix << "[MERGELIST] 새로운 장애물 " << obstacle.obstacle_class << " ID 할당 " << newId << " : [" << obstacle.fused_position_x << ", " << obstacle.fused_position_y << "]";
             }
             adcm::Log::Info() << prefix << "[MERGELIST] 새로운 장애물 리스트 생성: " << id_manager.getNum();
+            logDuplicateSummary(prefix + "[MERGELIST] first frame list", mergedList, 1.0);
             return mergedList;
         }
 
@@ -1743,14 +1749,13 @@ std::vector<ObstacleData> mergeAndCompareLists(
         mergedList.insert(mergedList.end(), staticMergedList.begin(), staticMergedList.end());
         mergedList.insert(mergedList.end(), dynamicMergedList.begin(), dynamicMergedList.end());
 
-        mergedList = removeNearDuplicates(mergedList, previousFusionList, 1.0);
-
         adcm::Log::Info() << prefix << "[MERGELIST] 최종 융합 장애물 리스트 사이즈: " << mergedList.size();
         adcm::Log::Info() << prefix << "[MERGELIST] 최종 융합 장애물 리스트 출력:";
         for (const auto &obs : mergedList)
         {
             adcm::Log::Info() << prefix << "ID " << obs.obstacle_id << "(" << obs.obstacle_class << ") : [" << obs.fused_position_x << ", " << obs.fused_position_y << "]";
         }
+        logDuplicateSummary(prefix + "[MERGELIST] final list", mergedList, 1.0);
         return mergedList;
     }
 }
@@ -1893,6 +1898,23 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
     {
         if (vehicle->vehicle_class != 0)
         {
+            {
+                std::unordered_map<std::uint8_t, std::size_t> rz_counts;
+                rz_counts.reserve(32);
+                for (const auto &rz : vehicle->road_z)
+                {
+                    rz_counts[rz] += 1;
+                }
+
+                adcm::Log::Info() << prefix << "[ROADZ] vehicle=" << vehicle->vehicle_class
+                                  << " size=" << vehicle->road_z.size();
+                for (const auto &entry : rz_counts)
+                {
+                    adcm::Log::Info() << prefix << "[ROADZ] value=" << static_cast<int>(entry.first)
+                                      << " count=" << entry.second;
+                }
+            }
+
             mapData.vehicle_list.push_back(ConvertToVehicleListStruct(*vehicle, mapData.map_2d));
             if (vehicle->road_z.size() > 1) // 시뮬레이션에선 road_z size가 1이므로 예외 처리
             {
@@ -1963,6 +1985,16 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
         mapData.road_list = std::move(merged_road_list);
     }
 
+    if (!mapData.road_list.empty())
+    {
+        adcm::Log::Info() << prefix << "[ROAD_LIST] per-index counts";
+        for (const auto &road : mapData.road_list)
+        {
+            adcm::Log::Info() << prefix << "[ROAD_LIST] index=" << static_cast<int>(road.road_index)
+                              << " count=" << road.map_2d_location.size();
+        }
+    }
+
     adcm::Log::Info() << prefix << "mapData 장애물 반영 완료 개수: " << mapData.obstacle_list.size();
     adcm::Log::Info() << prefix << "mapData 차량 반영 완료 개수: " << mapData.vehicle_list.size();
     adcm::Log::Info() << prefix << "mapData road_list 반영 완료 개수: " << mapData.road_list.size();
@@ -1995,9 +2027,9 @@ std::vector<adcm::roadListStruct> ConvertRoadZToRoadList(const VehicleData &vehi
     double car_y = vehicle.position_y;
     double theta = vehicle.heading_angle * M_PI / 180.0;
 
-    double cell_size = 1.0; // 10 cm 단위
-    double start_x = 30.0;  // 전방 3m 제외 (10cm 단위)
-    double end_x = 100.0;   // 전방 최대 10m (10cm 단위)
+    double cell_size = 1.0;  // 10 cm 단위
+    double start_x = 30.0;   // 전방 3m 제외 (10cm 단위)
+    double end_x = 100.0;    // 전방 최대 10m (10cm 단위)
     double box_width = 40.0; // 좌측 2m ~ 우측 2m (10cm 단위)
 
     size_t num_rows = 70; // 전방 거리: (10m-3m)/0.1 = 70
@@ -2073,6 +2105,179 @@ void fillObstacleList(std::vector<ObstacleData> &obstacle_list_fill, const std::
     return;
 }
 
+static bool isPointInsidePolygon(const Point2D &point, const std::vector<Point2D> &polygon)
+{
+    if (polygon.size() < 3)
+        return false;
+
+    bool inside = false;
+    for (size_t i = 0, j = polygon.size() - 1; i < polygon.size(); j = i++)
+    {
+        const bool intersects = ((polygon[i].y > point.y) != (polygon[j].y > point.y)) &&
+                                (point.x < (polygon[j].x - polygon[i].x) *
+                                                   (point.y - polygon[i].y) / (polygon[j].y - polygon[i].y) +
+                                               polygon[i].x);
+        if (intersects)
+            inside = !inside;
+    }
+    return inside;
+}
+
+static void appendCfgB255ToRoad255(std::vector<adcm::roadListStruct> &road_list)
+{
+    if (!cfgB255Enabled)
+        return;
+
+    if (!b255SendPending)
+        return;
+
+    if (cfgB255Pts.size() != 4)
+    {
+        adcm::Log::Info() << "[BOUNDARY255] invalid point count: " << cfgB255Pts.size();
+        return;
+    }
+
+    if (road_list.size() < 24)
+        return;
+
+    std::vector<Point2D> polygon;
+    polygon.reserve(cfgB255Pts.size());
+    for (const auto &boundaryPoint : cfgB255Pts)
+    {
+        double utm_x = 0.0;
+        double utm_y = 0.0;
+        GPStoUTM(boundaryPoint.lon, boundaryPoint.lat, utm_x, utm_y);
+        polygon.push_back({(utm_x - origin_x) * M_TO_10CM_PRECISION,
+                           (utm_y - origin_y) * M_TO_10CM_PRECISION});
+    }
+
+    auto packCell = [](int x, int y) -> std::uint64_t
+    {
+        return (static_cast<std::uint64_t>(static_cast<std::uint32_t>(x)) << 32) |
+               static_cast<std::uint32_t>(y);
+    };
+
+    b255AddedCells.clear();
+
+    std::unordered_set<std::uint64_t> existingCells;
+    existingCells.reserve(road_list[23].map_2d_location.size() + 1024);
+    for (const auto &cell : road_list[23].map_2d_location)
+    {
+        existingCells.insert(packCell(static_cast<int>(cell.x), static_cast<int>(cell.y)));
+    }
+
+    std::size_t appendedCount = 0;
+    for (int x = 0; x < map_x; ++x)
+    {
+        for (int y = 0; y < map_y; ++y)
+        {
+            const Point2D point = {static_cast<double>(x), static_cast<double>(y)};
+            if (!isPointInsidePolygon(point, polygon))
+                continue;
+
+            const auto key = packCell(x, y);
+            if (existingCells.find(key) != existingCells.end())
+                continue;
+
+            adcm::map2dIndex idx = {static_cast<double>(x), static_cast<double>(y)};
+            road_list[23].map_2d_location.push_back(idx);
+            existingCells.insert(key);
+            b255AddedCells.insert(key);
+            appendedCount += 1;
+        }
+    }
+
+    adcm::Log::Info() << "[BOUNDARY255] appended inside configured boundary cells: " << appendedCount;
+}
+
+static void resetCfgB255AfterEmptySend()
+{
+    if (!b255SendPending)
+        return;
+
+    std::size_t removedCount = 0;
+    std::size_t clearedRoadListSize = 0;
+    {
+        lock_guard<mutex> lock(mtx_map_someip);
+        if (mapData.road_list.size() >= 24 && !b255AddedCells.empty())
+        {
+            auto packCell = [](int x, int y) -> std::uint64_t
+            {
+                return (static_cast<std::uint64_t>(static_cast<std::uint32_t>(x)) << 32) |
+                       static_cast<std::uint32_t>(y);
+            };
+
+            auto &road255 = mapData.road_list[23].map_2d_location;
+            const auto oldSize = road255.size();
+            road255.erase(std::remove_if(road255.begin(), road255.end(),
+                                         [&](const adcm::map2dIndex &cell)
+                                         {
+                                             const auto key = packCell(static_cast<int>(cell.x), static_cast<int>(cell.y));
+                                             return b255AddedCells.find(key) != b255AddedCells.end();
+                                         }),
+                          road255.end());
+            removedCount = oldSize - road255.size();
+        }
+
+        clearedRoadListSize = mapData.road_list.size();
+        mapData.road_list.clear();
+    }
+
+    adcm::Log::Info() << "[BOUNDARY255] reset after first map send, removed cells: " << removedCount;
+    adcm::Log::Info() << "[BOUNDARY255] road_list cleared after first map send, previous size: " << clearedRoadListSize;
+    b255AddedCells.clear();
+    b255SendPending = false;
+}
+
+static void logEmptyMapRoadList(const std::string &prefix, const adcm::map_data_Objects &mapObj)
+{
+    adcm::Log::Info() << prefix << "[SEND][EMPTY] road_list size=" << mapObj.road_list.size();
+    if (mapObj.road_list.empty())
+    {
+        adcm::Log::Info() << prefix << "[SEND][EMPTY] road_list is empty";
+        return;
+    }
+
+    std::size_t totalCells = 0;
+    std::size_t nonEmptyRoadCount = 0;
+
+    for (const auto &road : mapObj.road_list)
+    {
+        const auto count = road.map_2d_location.size();
+        totalCells += count;
+        if (count > 0)
+        {
+            nonEmptyRoadCount += 1;
+            adcm::Log::Info() << prefix
+                              << "[SEND][EMPTY] road_index=" << static_cast<int>(road.road_index)
+                              << " count=" << count
+                              << " ts=" << road.Timestamp;
+        }
+    }
+
+    adcm::Log::Info() << prefix
+                      << "[SEND][EMPTY] non_empty_road_count=" << nonEmptyRoadCount
+                      << " total_cells=" << totalCells;
+
+    const auto it255 = std::find_if(mapObj.road_list.begin(), mapObj.road_list.end(),
+                                    [](const adcm::roadListStruct &road)
+                                    { return road.road_index == 255; });
+
+    if (it255 == mapObj.road_list.end())
+    {
+        adcm::Log::Info() << prefix << "[SEND][EMPTY] road_index=255 not found";
+        return;
+    }
+
+    adcm::Log::Info() << prefix << "[SEND][EMPTY] road_index=255 cell_count=" << it255->map_2d_location.size();
+    const std::size_t sampleCount = std::min<std::size_t>(5, it255->map_2d_location.size());
+    for (std::size_t i = 0; i < sampleCount; ++i)
+    {
+        const auto &cell = it255->map_2d_location[i];
+        adcm::Log::Info() << prefix << "[SEND][EMPTY] road255 sample[" << i << "]=(" << cell.x << ", " << cell.y << ")";
+    }
+}
+
 // boundary 외부 영역을 road_index 255로 설정하는 함수
 void processWorkingAreaBoundary(const std::vector<BoundaryData> &work_boundary)
 {
@@ -2128,6 +2333,8 @@ void processWorkingAreaBoundary(const std::vector<BoundaryData> &work_boundary)
         }
     }
 
+    appendCfgB255ToRoad255(road_list);
+
     // road_list를 mapData에 적용
     {
         lock_guard<mutex> lock(mtx_map_someip);
@@ -2164,17 +2371,17 @@ void ThreadReceiveHubData()
                 FusionData fusionData;
                 fillVehicleData(fusionData.vehicle, data);
                 fillObstacleList(fusionData.obstacle_list, data);
-/*
-                if (data->road_z.size() != 0)
-                {
-                    adcm::Log::Info() << "[HUBDATA] road_z size: " << data->road_z.size();
-                    // for (int i = 0; i < data->road_z.size(); i++)
-                    //     adcm::Log::Info() << i << "번째 road_z: " << data->road_z[i];
-                }
-                else
-                    adcm::Log::Info() << "[HUBDATA] road_z empty";
-                // road_index에 반영 필요
-*/
+                /*
+                                if (data->road_z.size() != 0)
+                                {
+                                    adcm::Log::Info() << "[HUBDATA] road_z size: " << data->road_z.size();
+                                    // for (int i = 0; i < data->road_z.size(); i++)
+                                    //     adcm::Log::Info() << i << "번째 road_z: " << data->road_z[i];
+                                }
+                                else
+                                    adcm::Log::Info() << "[HUBDATA] road_z empty";
+                                // road_index에 반영 필요
+                */
                 switch (data->vehicle_class)
                 {
                 case EGO_VEHICLE:
@@ -2241,8 +2448,6 @@ void ThreadReceiveWorkInfo()
         {
             auto data = workInformation_subscriber.getEvent();
 
-            
-
             if (data->main_vehicle.length != 0) // 메인차량이 있다면 workego = true
             {
                 main_vehicle_size.length = data->main_vehicle.length / 100.0;
@@ -2308,6 +2513,10 @@ void ThreadReceiveWorkInfo()
             adcm::Log::Info() << "[WORKINFO] MAP_SIZE: (" << map_x << ", " << map_y << ")";
             origin_x = min_utm_x;
             origin_y = min_utm_y;
+
+            b255SendPending =
+                (cfgB255Enabled && cfgB255Pts.size() == 4);
+            b255AddedCells.clear();
 
             processWorkingAreaBoundary(work_boundary);
         }
@@ -2448,6 +2657,12 @@ void ThreadKatech()
                 elapsed_ms = 50.0 + (static_cast<double>(rand()) / static_cast<double>(RAND_MAX)) * 20.0; // 50.0 ~ 70.0 ms 랜덤 값 생성
             adcm::Log::Info() << prefix << "[KATECH] FUSION_TIME: " << elapsed_ms << " ms.";
 
+            // nats_map_timestamp = getCurrentUTCMilliseconds();
+            {
+                lock_guard<mutex> nats_lock(mtx_map_nats);
+                nats_map_timestamp = getCurrentUTCMilliseconds();
+            }
+
             {
                 lock_guard<mutex> map_lock(mtx_map_someip);
                 map_someip_queue.push(mapData);
@@ -2456,10 +2671,12 @@ void ThreadKatech()
 
             if (useNats)
             {
+                /*
                 {
                     lock_guard<mutex> map_lock(mtx_map_nats);
                     map_nats_queue.push(mapData);
                 }
+                */
                 natsReady.notify_one();
             }
 
@@ -2521,8 +2738,16 @@ void ThreadSend()
 
         if (shouldSendEmpty)
         {
-            mapData_provider.send(mapData);
+            adcm::map_data_Objects emptyMapSnapshot;
+            {
+                lock_guard<mutex> lock(mtx_map_someip);
+                emptyMapSnapshot = mapData;
+            }
+
+            logEmptyMapRoadList(sendPrefix, emptyMapSnapshot);
+            mapData_provider.send(emptyMapSnapshot);
             adcm::Log::Info() << sendPrefix << "[SEND] Send empty map data";
+            resetCfgB255AfterEmptySend();
         }
         else
         {
@@ -2584,25 +2809,40 @@ void ThreadNATS()
 
     while (continueExecution)
     {
+        std::uint64_t timestampToSend = 0;
         {
             unique_lock<mutex> lock(mtx_map_nats);
+            /*
             natsReady.wait(lock, []
                            { return sendEmptyMap == true ||
                                     !map_nats_queue.empty(); });
 
             adcm::map_data_Objects tempMap = map_nats_queue.front();
             map_nats_queue.pop();
+            */
+            natsReady.wait(lock, []
+                           { return nats_map_timestamp != 0; });
 
-            // 맵전송
-            // mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
-            auto startTime = std::chrono::high_resolution_clock::now();
-            adcm::Log::Info() << "[NATS] NATS 전송 시작";
-            // mapData.map_2d.clear(); // json 데이터 경량화를 위해 map_2d 삭제
-            NatsSend(mapData);
-            auto endTime = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double, std::milli> duration = endTime - startTime;
-            adcm::Log::Info() << "[NATS] NATS 전송 완료, 소요 시간: " << duration.count() << " ms.";
+            timestampToSend = nats_map_timestamp;
+            nats_map_timestamp = 0;
         }
+        /*
+                    // 맵생성시각 전송
+                    auto startTime = std::chrono::high_resolution_clock::now();
+                    adcm::Log::Info() << "[NATS] NATS 전송 시작";
+                    NatsSend(nats_map_timestamp);
+                    auto endTime = std::chrono::high_resolution_clock::now();
+                    std::chrono::duration<double, std::milli> duration = endTime - startTime;
+                    adcm::Log::Info() << "[NATS] NATS 전송 완료, 소요 시간: " << duration.count() << " ms.";
+        */
+        // 맵생성시각 전송
+        auto startTime = std::chrono::high_resolution_clock::now();
+        adcm::Log::Info() << "[NATS] NATS 전송 시작";
+        // NatsSend(nats_map_timestamp);
+        NatsSend(timestampToSend);
+        auto endTime = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::milli> duration = endTime - startTime;
+        adcm::Log::Info() << "[NATS] NATS 전송 완료, 소요 시간: " << duration.count() << " ms.";
     }
 }
 
@@ -2666,8 +2906,8 @@ int main(int argc, char *argv[])
                                                              ara::com::e2exf::ConfigurationFormat::JSON);
     adcm::Log::Info() << "DataFusion: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
-    // adcm::Log::Info() << "SDK release_251209_interface v2.5 for sa8195";
-    adcm::Log::Info() << "SDK release_251211_interface v2.5 for orin";
+    adcm::Log::Info() << "SDK release_251209_interface v2.5 for sa8195";
+    // adcm::Log::Info() << "SDK release_251211_interface v2.5 for orin";
     adcm::Log::Info() << "DataFusion Build " << BUILD_TIMESTAMP;
 
     // 파일 경로 얻
@@ -2690,6 +2930,21 @@ int main(int argc, char *argv[])
     {
         adcm::Log::Info() << "Failed to load configuration.";
         config.print();
+    }
+
+    cfgB255Enabled = config.boundary255Enabled;
+    cfgB255Pts.clear();
+    if (cfgB255Enabled)
+    {
+        cfgB255Pts.push_back({config.b255P1Lon, config.b255P1Lat});
+        cfgB255Pts.push_back({config.b255P2Lon, config.b255P2Lat});
+        cfgB255Pts.push_back({config.b255P3Lon, config.b255P3Lat});
+        cfgB255Pts.push_back({config.b255P4Lon, config.b255P4Lat});
+        adcm::Log::Info() << "[BOUNDARY255] enabled from config. point count=" << cfgB255Pts.size();
+    }
+    else
+    {
+        adcm::Log::Info() << "[BOUNDARY255] disabled from config.";
     }
 
     if (!loadListObstacles(config.listFilePath))
@@ -2760,7 +3015,10 @@ int main(int argc, char *argv[])
         {
             adcm::Log::Error() << "Could not open directory: " << path;
         }
+    }
 
+    if (useNats)
+    {
         thread_list.push_back(std::thread(ThreadNATS));
     }
 
