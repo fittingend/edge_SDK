@@ -50,6 +50,7 @@
 #include "AI_model/AutoLabelWriter.hpp"
 #include "config.hpp"
 #include <unistd.h>
+#include <sstream>
 /**
   * 쓰레드간 관계
 [ThreadReceiveMapData]
@@ -84,6 +85,33 @@ bool saveJson = false;
 bool gScenarioLogEnabled = false;
 std::unique_ptr<AutoLabelWriter> labelWriter;
 Config config;
+std::atomic<uint64_t> gRiskLogSeq{0};
+
+namespace {
+std::string formatObstacleBriefById(std::uint64_t id)
+{
+    for (const auto& obs : obstacle_list) {
+        if (obs.obstacle_id == id) {
+            std::ostringstream oss;
+            oss << " 장애물 id=" << obs.obstacle_id
+                << " 장애물 class=" << static_cast<int>(obs.obstacle_class)
+                << " (" << to_string(static_cast<ObstacleClass>(obs.obstacle_class)) << ")"
+                << " pos=(" << obs.fused_position_x << ", " << obs.fused_position_y << ")";
+            return oss.str();
+        }
+    }
+    std::ostringstream oss;
+    oss << "id=" << id;
+    return oss.str();
+}
+
+std::string riskLogPrefix(uint64_t seq)
+{
+    std::ostringstream oss;
+    oss << "[R" << seq << "] ";
+    return oss.str();
+}
+}
 
 std::uint8_t type = 0; // 시뮬레이션 = 0, 실증 = 1
 
@@ -228,7 +256,7 @@ void ThreadReceiveMapData()
                                     ++assigned_count;
                                 }
                             }
-                            adcm::Log::Info() << "road_list[" << static_cast<int>(i) << "]" << " assigned: " << assigned_count;
+                            //adcm::Log::Info() << "road_list[" << static_cast<int>(i) << "]" << " assigned: " << assigned_count;
                         }
                     }
                 } else {
@@ -442,27 +470,34 @@ void ThreadRASS()
             evaluateScenario10(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
         }
 
-        adcm::Log::Info() << "build riskAssessment data - size " << riskAssessment.riskAssessmentList.size();
+        uint64_t riskSeq = 0;
+        if (!riskAssessment.riskAssessmentList.empty()) {
+            riskSeq = ++gRiskLogSeq;
+        }
+
+        adcm::Log::Info() << riskLogPrefix(riskSeq)
+                          << "[KATECH]위험판단 생성 완료- size " << riskAssessment.riskAssessmentList.size();
         for (size_t i = 0; i < riskAssessment.riskAssessmentList.size(); ++i)
         {
             const auto& r = riskAssessment.riskAssessmentList[i];
-            adcm::Log::Info() << (r.confidence > 0.7 ? "TRIGGER!!! ==========" : "")
+            adcm::Log::Info() << riskLogPrefix(riskSeq)
+                              << (r.confidence > 0.7 ? "TRIGGER!!! ==========" : "")
                               << "riskAssessment[" << i
-                              << "] id=" << r.obstacle_id
-                              << " hazard_class=" << static_cast<int>(r.hazard_class)
-                              << " isHazard=" << (r.isHarzard ? "true" : "false")
-                              << " conf=" << r.confidence
-                              << " start_n=" << r.wgs84_xy_start.size()
-                              << " end_n=" << r.wgs84_xy_end.size();
+                              << "] " << formatObstacleBriefById(r.obstacle_id)
+                              << " 위험시나리오#=" << static_cast<int>(r.hazard_class)
+                              << " isHazard플래그=" << (r.isHarzard ? "true" : "false")
+                              << " 컨피던스=" << r.confidence;
 
             for (size_t s = 0; s < r.wgs84_xy_start.size(); ++s)
             {
-                adcm::Log::Info() << "  start[" << s << "]=(" << r.wgs84_xy_start[s].x
+                adcm::Log::Info() << riskLogPrefix(riskSeq)
+                                  << "start[" << s << "]=(" << r.wgs84_xy_start[s].x
                                   << ", " << r.wgs84_xy_start[s].y << ")";
             }
             for (size_t e = 0; e < r.wgs84_xy_end.size(); ++e)
             {
-                adcm::Log::Info() << "  end[" << e << "]=(" << r.wgs84_xy_end[e].x
+                adcm::Log::Info() << riskLogPrefix(riskSeq)
+                                  << "end[" << e << "]=(" << r.wgs84_xy_end[e].x
                                   << ", " << r.wgs84_xy_end[e].y << ")";
             }
         }

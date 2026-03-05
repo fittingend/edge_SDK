@@ -496,8 +496,8 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
     SCENARIO_LOG_INFO() << "==================== [시나리오5 시작] ====================";
 
     // 상수 (dm/ms)
-    constexpr double EGO_MIN_DM          = 300.0;    // 40 m
-    constexpr double EGO_MAX_DM          = 700.0;    // 50 m
+    constexpr double EGO_MIN_DM          = 10.0;    // 1 m
+    constexpr double EGO_MAX_DM          = 200.0;    // 20 m
     constexpr double DIST_TO_PATH_MAX_DM = 100.0;    // 10 m
     constexpr double MAX_PAIR_DIST_DM    = 200.0;    // 20 m
     constexpr double WINDOW_MS           = 10000.0;  // 10 s
@@ -530,23 +530,23 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
         const auto& obs = obstacle_list[k];
 
         if (static_cast<ObstacleClass>(obs.obstacle_class) != ObstacleClass::PEDESTRIAN) {
-            //SCENARIO_LOG_INFO() << "  └─[제외] ID=" << obs.obstacle_id << " | 보행자 아님";
+            SCENARIO_LOG_INFO() << "  └─[제외] ID=" << obs.obstacle_id << " | 보행자 아님";
             continue;
         }
         double d_ego_dm = calculateDistance(obs, ego_vehicle);
         if (d_ego_dm < EGO_MIN_DM || d_ego_dm > EGO_MAX_DM) {
-            //SCENARIO_LOG_INFO() << "  └─[제외] ID=" << obs.obstacle_id
-            //            << " | Ego거리=" << (d_ego_dm/10.0) << " m (요구: 40~50 m)";
+            SCENARIO_LOG_INFO() << "  └─[제외] ID=" << obs.obstacle_id
+                       << " | Ego거리=" << (d_ego_dm/10.0) << " m (요구: 40~50 m)";
             continue;
         }
         double path_dist_dm = 0.0;
         if (!calculateMinDistanceToPath(obs, path_x, path_y, path_dist_dm)) {
-            //SCENARIO_LOG_INFO() << "  └─[제외] ID=" << obs.obstacle_id << " | 경로거리 계산 실패";
+            SCENARIO_LOG_INFO() << "  └─[제외] ID=" << obs.obstacle_id << " | 경로거리 계산 실패";
             continue;
         }
         if (path_dist_dm > DIST_TO_PATH_MAX_DM) {
-            //SCENARIO_LOG_INFO() << "  └─[제외] ID=" << obs.obstacle_id
-            //            << " | 경로거리=" << (path_dist_dm/10.0) << " m (요구: ≤10 m)";
+            SCENARIO_LOG_INFO() << "  └─[제외] ID=" << obs.obstacle_id
+                        << " | 경로거리=" << (path_dist_dm/10.0) << " m (요구: ≤10 m)";
             continue;
         }
 
