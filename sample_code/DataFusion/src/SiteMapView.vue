@@ -1,23 +1,103 @@
 <template>
-  <SiteInfoLayer :data="workInfo" :vehicle-map-coordinates="vehicleMapCoordinates"></SiteInfoLayer>
+  <SiteInfoLayer :data="workInfo" :vehicle-map-coordinates="vehicleMapCoordinates"
+    :performance-data="performanceDataStore">
+  </SiteInfoLayer>
   <div id="map" ref="map">
     <div v-if="isDebugging" class="debug-panel">
       <div class="debug-timestamp">{{ currentTimestamp }}</div>
       <div class="debug-timestamp">{{ currentDateTime }}</div>
-      <div class="debug-status">
-        <div class="status-label">EDGE Status:</div>
-        <div class="status-value" :class="getStatusClass(edgeStatus)">{{ getStatusText(edgeStatus) }}</div>
-      </div>
     </div>
-    <v-btn class="debug_btn" :class="{ 'debug_on': isDebugging, 'debug_off': !isDebugging }" @click="toggleDebugging">디버깅</v-btn>
-    <v-btn class="roadZ_btn" :class="{ 'roadZ_on': isroadZOn, 'roadZ_off': !isroadZOn }" @click="toggleRoadZBtn">road_z</v-btn>
-    <v-btn v-if="workState === WorkState.WAIT" class="standby_btn" variant="outlined" :class="{ 'standby-active': missionStandby }" :disabled="missionStandby" @click="standbyMission">
+    <v-btn class="debug_btn" :class="{ 'debug_on': isDebugging, 'debug_off': !isDebugging }"
+      @click="toggleDebugging">디버깅</v-btn>
+    <v-btn class="roadZ_btn" :class="{ 'roadZ_on': isroadZOn, 'roadZ_off': !isroadZOn }"
+      @click="toggleRoadZBtn">road_z</v-btn>
+    <div class="debug-status">
+      <div class="status-label">EDGE Status:</div>
+      <div class="status-value" :class="getStatusClass(edgeStatus)">{{ getStatusText(edgeStatus) }}</div>
+    </div>
+    <v-btn v-if="workState === WorkState.WAIT" class="standby_btn" variant="outlined"
+      :class="{ 'standby-active': missionStandby }" :disabled="missionStandby" @click="standbyMission">
       {{ missionStandby ? '임무 대기중' : '임무대기' }}
     </v-btn>
-    <v-btn v-if="workState === WorkState.RUNNING || workState === WorkState.PAUSE" class="reset_btn" variant="outlined" @click="resetMission">초기화</v-btn>
+    <v-btn v-if="workState === WorkState.RUNNING || workState === WorkState.PAUSE" class="save_btn" variant="outlined"
+      @click="saveMission">작업 저장</v-btn>
+    <v-btn v-if="workState === WorkState.RUNNING || workState === WorkState.PAUSE" class="reset_btn" variant="outlined"
+      @click="resetMission">초기화</v-btn>
     <v-btn v-if="workState === WorkState.RUNNING" class="stop_btn" variant="outlined" @click="stopMission">중단</v-btn>
     <v-btn v-if="workState === WorkState.PAUSE" class="resume_btn" variant="outlined" @click="resumeMission">재개</v-btn>
+    <!-- 장애물 전송 버튼 -->
+    <v-btn v-if="selectedObstacleList.length > 0" class="obstacle-send-btn" variant="outlined"
+      @click="openObstacleSendModal">
+      장애물 전송 ({{ selectedObstacleList.length }})
+    </v-btn>
   </div>
+
+  <!-- 좌측 하단 장애물 정보 패널 -->
+  <div v-if="isDebugging" class="obstacle-info-panel">
+    <div class="panel-title">장애물 정보 (관제)</div>
+    <table class="obstacle-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>X</th>
+          <th>Y</th>
+          <th>Class</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="obs in debugObstacleList" :key="obs.obstacle_id">
+          <td>{{ obs.obstacle_id ?? '-' }}</td>
+          <td>{{ typeof obs.fused_position_x === 'number' ? obs.fused_position_x.toFixed(2) : '-' }}</td>
+          <td>{{ typeof obs.fused_position_y === 'number' ? obs.fused_position_y.toFixed(2) : '-' }}</td>
+          <td>{{ obs.obstacle_class ?? '-' }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 좌측 하단 위험판단 정보 패널 -->
+  <div v-if="isDebugging" class="risk-info-panel">
+    <div class="panel-title">위험판단 정보 (Risk Assessment)</div>
+    <table class="obstacle-table">
+      <thead>
+        <tr>
+          <th>Obstacle ID</th>
+          <th>Obstacle XY</th>
+          <th>WGS84 XY Start</th>
+          <th>WGS84 XY End</th>
+          <th>Hazard Class</th>
+          <th>Is Hazard</th>
+          <th>Confidence</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        <tr v-for="row in debugRiskList" :key="row.obstacle_id">
+          <td>{{ row.obstacle_id }}</td>
+          <td class="mono">
+            {{ formatObstacleXY(row.obstacle_xy) }}
+          </td>
+          <td class="mono pre-line">
+            {{ formatWgs84XY(row.wgs84_xy_start) }}
+          </td>
+          <td class="mono pre-line">
+            {{ formatWgs84XY(row.wgs84_xy_end) }}
+          </td>
+          <td>{{ row.hazard_class }}</td>
+          <td>{{ row.isHazard }}</td>
+          <td>{{ row.confidence }}</td>
+        </tr>
+
+        <!-- 데이터 없을 때 -->
+        <tr v-if="debugRiskList.length === 0">
+          <td colspan="10" style="text-align:center; opacity:0.6;">
+            No risk data
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
   <!-- 차량 선택 모달 -->
   <ModalFrame ref="$vehicleSelectModal" :persistent="true">
     <template #dialog>
@@ -49,7 +129,6 @@
       </v-card>
     </template>
   </ModalFrame>
-
   <!-- 임무 시작 모달 -->
   <ModalFrame ref="$modalRef" :persistent="true">
     <template #dialog>
@@ -62,16 +141,31 @@
       </v-card>
     </template>
   </ModalFrame>
+  <!-- 장애물 전송 확인 모달 -->
+  <ModalFrame ref="$obstacleSendModal" :persistent="true">
+    <template #dialog>
+      <v-card class="align-self-center pa-5" width="auto">
+        <v-card-title class="align-self-center">장애물 리스트를 전송하시겠습니까?</v-card-title>
+        <v-card-text class="text-center">
+          선택된 장애물: {{ selectedObstacleList.length }}개
+        </v-card-text>
+        <v-card-actions class="justify-space-around">
+          <v-btn variant="outlined" @click="closeObstacleSendModal">취소</v-btn>
+          <v-btn variant="outlined" color="primary" @click="sendObstacleList">확인</v-btn>
+        </v-card-actions>
+      </v-card>
+    </template>
+  </ModalFrame>
 </template>
 
 <script setup lang="ts">
 import * as vMap from '@/composeables/vMapController';
 import { computed, onMounted, onUnmounted, provide, Ref, ref, watchEffect } from 'vue';
-import { Fill, Icon, Stroke, Style, Text } from 'ol/style';
+import { DebugObstacleRow, DebugRiskRow, FusionData, HubDataObject, IconSource, METER_GRID_SIZE, MeterGridData, ObstacleData, PerformanceData, ROAD_Z_DEADZONE, ROAD_Z_DEFAULT_VALUE, ROAD_Z_GRID_SIZE, RoadZData, RoutePoint, SAMPLE_RATE, SelectedObstacleInfo, StaticObstacleHistory, VEHICLE_DIMENSIONS, VehicleData, VehicleDataStore, VehicleMetaInfo, WorkInformation } from '@/constant/map/type';
+import { Fill, Icon, RegularShape, Stroke, Style, Text } from 'ol/style';
 import { fromLonLat, toLonLat } from 'ol/proj';
-import { getMissionInfo, getWorkInfo } from '@/api';
+import { getMissionInfo, getWorkInfo, postData } from '@/api';
 import { getScaleForZoom, lineStyle } from '@/composeables/vMapController';
-import { HubDataObject, IconSource, MapObstacle, Path, RoutePoint, SensorObstacle, VehicleMetaInfo, WorkInformation } from '@/constant/map/type';
 import { Feature as OlFeature, Map as OlMap } from 'ol';
 import { LineString as OlLineString, Point as OlPoint, Point, Polygon } from 'ol/geom';
 import { useMapStore, useNatsStore } from "@/stores";
@@ -84,8 +178,8 @@ import env from '@/env';
 import { getRoadZColor } from '@/constant/colors';
 import { isEmpty } from 'lodash';
 import { messageBox } from '@/composeables/toastMessage';
-// import { missionDataCollector } from '@/composeables/missionDataCollector'; // 데이터 수집 관련 모듈 주석 처리 (리포트)
-import { MissionTableData } from '@/composeables/useTable';
+import { missionDataCollector } from '@/composeables/missionDataCollector'; // 데이터 수집 관련 모듈 주석 처리 (리포트)
+import { APIRoute, MissionTableData } from '@/composeables/useTable';
 import ModalFrame from '@/components/modal/ModalFrame.vue';
 import munkres from 'munkres-js'
 import OLVector from 'ol/layer/Vector.js';
@@ -97,21 +191,24 @@ import { storeToRefs } from 'pinia';
 import { Subscription } from 'nats.ws';
 import { useRoute } from 'vue-router';
 
-// const { proxy }: any = getCurrentInstance();
+/**
+ * 변수 선언 시작
+ * 
+ */
 const natsStore = useNatsStore();
 const { natsConnection, stringCodec } = storeToRefs(natsStore);
 const { workState } = storeToRefs(useWorkInfoStore());
 const route = useRoute();
 const map = ref("map");
-let olMap: OlMap; // Map 객체 담을 변수 선언
+let olMap: OlMap; // Map 객체 담을 변수
 let olLayer: OLVector<OSVector>; // layer위에 vector들을 그림
 let osVector: OSVector; // 선언된 feature를 vector안에 넣음
-let center: number[]; // 지도의 중앙값을 담을 변수 선언
+let center: number[]; // 지도의 중앙값을 담을 변수
 
-// 작업 정보 관련
+// 작업 정보 관련 변수
 const { workInfo } = storeToRefs(useWorkInfoStore())
 
-// 미션 정보 관련
+// 미션 정보 관련 변수
 const missionInfo = ref<MissionTableData>({
   missionId: "",
   name: "",
@@ -130,38 +227,304 @@ const missionInfo = ref<MissionTableData>({
   registerDate: "",
 });
 
-// 모달 관련
+// 모달 관련 변수
 const modalTriggered = ref(false);
-const missionStandby = ref(false);  // 임무대기 상태를 관리하는 ref 추가
+const missionStandby = ref(false);
 const $modalRef = ref();
 const $vehicleSelectModal = ref();
+const $obstacleSendModal = ref();
 
-// road_z 관련
+// road_z 관련 변수
 const isroadZOn = ref(false);
+const roadZDataStore: RoadZData[] = []; // 노면 데이터 저장소 (10cm x 10cm 셀)
+const meterGridDataStore: MeterGridData[] = []; // 미터 그리드 데이터 저장소 (1m x 1m 셀)
 
-// 디버깅 관련
+// 디버깅 관련 변수
 const isDebugging = ref(false);
 const currentTimestamp = ref('');
 const currentDateTime = ref('');
-const edgeStatus = ref<number | null>(null);
 let timestampInterval: number | null = null;
 
-// 타임스탬프 업데이트 함수
-const updateTimestamp = (): void => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const hours = String(now.getHours()).padStart(2, '0');
-  const minutes = String(now.getMinutes()).padStart(2, '0');
-  const seconds = String(now.getSeconds()).padStart(2, '0');
-  const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
+// EDGE status 관련 변수
+const edgeStatus = ref<number | null>(null);
+
+// 클릭된 장애물 추적 관련 변수
+const selectedObstacles = ref<Set<OlFeature<OlPoint>>>(new Set());
+const selectedObstacleList = ref<SelectedObstacleInfo[]>([]);
+
+// 디버깅용 장애물 리스트(table용) - 지도에 표시된 장애물 데이터
+const debugObstacleList = ref<DebugObstacleRow[]>([]);
+
+// 디버깅용 위험판단 리스트(table용) - riskAssessment 데이터
+const debugRiskList = ref<DebugRiskRow[]>([]);
+
+const performanceDataStore = ref<PerformanceData>({
+  pathGenerationTime: 0,
+  mapGenerationTime: 0,
+}); // 성능 데이터 저장소 (전체 시스템 융합 데이터)
+
+// vehicle_state === 2 에러 메시지 중복 방지 플래그
+let vehicleStateErrorShown = false;
+
+
+/**
+ * 함수 선언 시작
+ */
+provide('missionTriggered', modalTriggered);
+provide('missionStandby', missionStandby);  // 임무대기 상태 provide
+
+const openModal = (): void => {
+  $modalRef.value.open();
+}
+
+const closeModal = (): void => {
+  $modalRef.value.close();
+  modalTriggered.value = false;
+}
+
+// 사용 가능한 차량 목록 (workInfo에서 추출)
+const availableVehicles = computed(() => {
+  const mainVehicles: string[] = [];
+  const subVehicles: string[] = [];
   
-  currentTimestamp.value = Date.now().toString();
-  currentDateTime.value = `${year}/${month}/${day} ${hours}:${minutes}:${seconds}.${milliseconds}`;
+  Object.keys(workInfo.value.vehicleInfo).forEach(vehicleId => {
+    if (vehicleId.includes('F')) {
+      mainVehicles.push(vehicleId);
+    } else {
+      subVehicles.push(vehicleId);
+    }
+  });
+  
+  return { main: mainVehicles, sub: subVehicles };
+});
+
+// 개별 차량 선택 관련 상태
+const selectedVehicles = ref<string[]>([]);
+
+// origin 좌표를 동적으로 계산하는 함수 (C++ 코드와 동일)
+const calculateOriginFromBoundary = (): void => {
+  if (!workInfo.value?.coordinates || workInfo.value.coordinates.length === 0) {
+    console.warn('[calculateOriginFromBoundary] workInfo.coordinates가 없습니다.');
+    return;
+  }
+
+  // boundary 좌표를 WGS84로 변환
+  const boundaryCoords = workInfo.value.coordinates.map(coord => {
+    const [lon, lat] = toLonLat(coord);
+    return {
+      x: parseFloat(lon.toFixed(12)),
+      y: parseFloat(lat.toFixed(13))
+    };
+  });
+
+  if (boundaryCoords.length === 0) {
+    console.warn('[calculateOriginFromBoundary] 변환된 좌표가 없습니다.');
+    return;
+  }
+
+  // min/max 계산
+  let minLon = boundaryCoords[0].x;
+  let minLat = boundaryCoords[0].y;
+  let maxLon = boundaryCoords[0].x;
+  let maxLat = boundaryCoords[0].y;
+
+  for (let i = 1; i < boundaryCoords.length; i += 1) {
+    minLon = boundaryCoords[i].x < minLon ? boundaryCoords[i].x : minLon;
+    minLat = boundaryCoords[i].y < minLat ? boundaryCoords[i].y : minLat;
+    maxLon = boundaryCoords[i].x > maxLon ? boundaryCoords[i].x : maxLon;
+    maxLat = boundaryCoords[i].y > maxLat ? boundaryCoords[i].y : maxLat;
+  }
+
+  // GPS를 UTM으로 변환하여 origin 설정
+  // eslint-disable-next-line @typescript-eslint/no-use-before-define
+  const { utmX: minUtmX, utmY: minUtmY } = GPStoUTM(minLon, minLat);
+  // eslint-disable-next-line @typescript-eslint/no-use-before-define
+  const { utmX: maxUtmX, utmY: maxUtmY } = GPStoUTM(maxLon, maxLat);
+
+  // origin은 min_utm 좌표로 설정 (C++ 코드와 동일)
+  // eslint-disable-next-line @typescript-eslint/no-use-before-define
+  originX = minUtmX;
+  // eslint-disable-next-line @typescript-eslint/no-use-before-define
+  originY = minUtmY;
+
+  const mapX = (maxUtmX - minUtmX) * 10;
+  const mapY = (maxUtmY - minUtmY) * 10;
 };
 
-// EDGE status 관련 함수들
+// 동적으로 work_info 생성하는 함수 (선택된 개별 차량만 포함)
+const generateWorkInfo = (): WorkInformation => {
+  const mainVehicles: VehicleMetaInfo[] = [];
+  const subVehicles: VehicleMetaInfo[] = [];
+
+  // 선택된 개별 차량만 처리
+  selectedVehicles.value.forEach((vehicleId: string) => {
+    if (!workInfo.value.vehicleInfo[vehicleId]) {
+      return;
+    }
+
+    // 메인 차량인지 보조 차량인지 판단
+    const isMainVehicle = vehicleId.includes('F');
+    
+    if (isMainVehicle) {
+      mainVehicles.push({
+        length: VEHICLE_DIMENSIONS.MAIN.length,
+        width: VEHICLE_DIMENSIONS.MAIN.width,
+        id: vehicleId
+      });
+    } else {
+      subVehicles.push({
+        length: VEHICLE_DIMENSIONS.SUB.length,
+        width: VEHICLE_DIMENSIONS.SUB.width,
+        id: vehicleId
+      });
+    }
+  });
+
+  // 좌표를 왼쪽 상단부터 반시계 방향으로 정렬하는 함수
+  const sortCoordinatesCounterClockwise = (coords: {x: number, y: number}[]): {x: number, y: number}[] => {
+    if (coords.length < 3) return coords;
+
+    // 1. 중심점 계산
+    const centerPoint = {
+      x: coords.reduce((sum, c) => sum + c.x, 0) / coords.length,
+      y: coords.reduce((sum, c) => sum + c.y, 0) / coords.length
+    };
+
+    // 2. 각 점을 중심점 기준으로 각도 계산하여 정렬 (반시계 방향)
+    const sortedCoords = coords.slice().sort((a, b) => {
+      const angleA = Math.atan2(a.y - centerPoint.y, a.x - centerPoint.x);
+      const angleB = Math.atan2(b.y - centerPoint.y, b.x - centerPoint.x);
+      return angleA - angleB; // 반시계 방향
+    });
+
+    // 3. 왼쪽 상단 점 찾기 (가장 작은 x, 그 중에서 가장 큰 y)
+    let topLeftIndex = 0;
+    for (let i = 1; i < sortedCoords.length; i += 1) {
+      const current = sortedCoords[i];
+      const topLeft = sortedCoords[topLeftIndex];
+      if (current.x < topLeft.x || (current.x === topLeft.x && current.y > topLeft.y)) {
+        topLeftIndex = i;
+      }
+    }
+
+    // 4. 왼쪽 상단 점이 첫 번째가 되도록 배열 회전
+    return [...sortedCoords.slice(topLeftIndex), ...sortedCoords.slice(0, topLeftIndex)];
+  };
+
+  // working_area_boundary 생성 및 origin 좌표 계산
+  const boundaryCoords = (() => {
+    const coords = workInfo.value.coordinates.map(coord => ({
+      x: parseFloat(toLonLat(coord)[0].toFixed(12)),
+      y: parseFloat(toLonLat(coord)[1].toFixed(13))
+    }));
+    
+    // 마지막 좌표가 첫 번째와 동일한 경우 제거
+    if (coords.length > 1 && 
+        coords[0].x === coords[coords.length - 1].x && 
+        coords[0].y === coords[coords.length - 1].y) {
+      coords.pop();
+    }
+    
+    // 왼쪽 상단부터 반시계 방향으로 정렬
+    return sortCoordinatesCounterClockwise(coords);
+  })();
+
+  // origin 좌표 계산 (C++ 코드와 동일)
+  calculateOriginFromBoundary();
+
+  return {
+    main_vehicle: mainVehicles,
+    sub_vehicle: subVehicles,
+    working_area_boundary: boundaryCoords,
+    timestamp: Date.now(),
+    type: 1
+  };
+};
+
+// 실제 임무대기 실행 (차량 선택 후)
+const executeStandbyMission = (): void => {
+  if (natsConnection.value) {
+    // 선택된 차량으로 work_info 생성
+    const dynamicWorkInfo = generateWorkInfo();
+    
+    // 경유지 정보 가져오기 (siteId.route에서)
+    let routePoint: { route_lat: number; route_lon: number }[] | undefined;
+    if (typeof missionInfo.value.siteId === 'object' && missionInfo.value.siteId !== null) {
+      const routeCoord = (missionInfo.value.siteId as any).route;
+      if (routeCoord && Array.isArray(routeCoord) && routeCoord.length === 2) {
+        // route는 [lat, lon] 형식
+        const [lat, lon] = routeCoord;
+        routePoint = [{
+          route_lat: lat,
+          route_lon: lon
+        }];
+      }
+    }
+    
+    // 임무 정보 생성 (route_point를 work_info 앞에 배치)
+    const missionData: any = {
+      mission_name: 'work',
+      dest_lat: missionInfo.value.latitude,
+      dest_lon: missionInfo.value.longitude
+    };
+    
+    // 경유지 정보가 있으면 work_info 앞에 추가
+    if (routePoint) {
+      missionData.route_point = routePoint;
+    }
+    
+    // work_info는 마지막에 추가
+    missionData.work_info = dynamicWorkInfo;
+    
+    const generateGlobalPath = JSON.stringify([missionData]);
+    
+    // command.ready 토픽으로 경로 정보 전송
+    const topic = 'command.ready';
+    
+    try {
+      natsConnection.value.publish(
+        topic,
+        stringCodec.value?.encode(generateGlobalPath)
+      );
+      console.log(`✅ NATS 임무대기 메시지 발행 성공 - 토픽: ${topic}`);
+      console.log(`📤 발행된 메시지: ${generateGlobalPath}`);
+      
+      // 임무대기 상태로 설정
+      missionStandby.value = true;
+      messageBox('success', `임무대기 상태가 되었습니다. (총 ${selectedVehicles.value.length}대 차량)`);
+    } catch (error) {
+      messageBox('error', 'NATS 메시지 전송에 실패했습니다.');
+    }
+  } else {
+    messageBox('error', 'NATS 연결이 되어있지 않습니다.');
+  }
+}
+
+// 차량 선택 모달 열기
+const openVehicleSelectModal = (): void => {
+  // 기존 선택 초기화
+  selectedVehicles.value = [];
+  $vehicleSelectModal.value.open();
+};
+
+// 차량 선택 모달 닫기
+const closeVehicleSelectModal = (): void => {
+  $vehicleSelectModal.value.close();
+};
+
+// 차량 선택 확인
+const confirmVehicleSelection = (): void => {
+  closeVehicleSelectModal();
+  // 실제 임무대기 실행
+  executeStandbyMission();
+};
+
+// 임무대기 버튼 클릭 - 차량 선택 모달 열기
+const standbyMission = (): void => {
+  openVehicleSelectModal();
+};
+
+// EDGE status 관련 함수
 const getStatusText = (status: number | null): string => {
   if (status === null) return 'Not Connected';
   
@@ -208,7 +571,14 @@ const subscribeControlStatus = async (): Promise<void> => {
       for await (const msg of statusSub) {
         try {
           const data = JSON.parse(natsStore.stringCodec.decode(msg.data));
-          edgeStatus.value = data;
+          const statusValue = typeof data === 'number' ? data : (data.status ?? data.edge_status ?? data);
+          edgeStatus.value = statusValue;
+          
+          // IDLE 상태로 들어오면 초기화 버튼과 동일한 알고리즘 적용
+          if (statusValue === EdgeStatus.IDLE) {
+            // eslint-disable-next-line @typescript-eslint/no-use-before-define
+            resetMission();
+          }
         } catch (error) {
           console.error('EDGE status 파싱 오류:', error);
         }
@@ -217,68 +587,147 @@ const subscribeControlStatus = async (): Promise<void> => {
   }
 };
 
-provide('missionTriggered', modalTriggered);
-provide('missionStandby', missionStandby);  // 임무대기 상태 provide
+// mapDataProcTime 구독
+const subscribeMapDataProcTime = async (): Promise<void> => {
+  const statusSub = natsStore.subscribe(env.natsSubscribeInfo.mapDataProcTime);
+  if (statusSub) {
+    (async () => {
+      for await (const msg of statusSub) {
+        try {
+          const data = JSON.parse(natsStore.stringCodec.decode(msg.data));
 
-const openModal = (): void => {
-  $modalRef.value.onState();
-}
+          const mapDataProcTimeValue =
+            typeof data === 'number'
+              ? data
+              : data.mapDataTimestamp;
 
-const closeModal = (): void => {
-  $modalRef.value.offState();
-  modalTriggered.value = false;
-}
-
-// 개별 차량 선택 관련 상태
-const selectedVehicles = ref<string[]>([]);
-
-// 차량 크기 상수
-const VEHICLE_DIMENSIONS = {
-  MAIN: { length: 9250, width: 4985 },
-  SUB: { length: 500, width: 750 }
+          if (mapDataProcTimeValue !== undefined) {
+            collectMapPerformanceData({
+              mapDataTimestamp: mapDataProcTimeValue,
+            });
+          }
+        } catch (error) {
+          console.error('mapDataProcTime 파싱 오류:', error);
+        }
+      }
+    })();
+  }
 };
 
-// 사용 가능한 차량 목록 (workInfo에서 추출)
-const availableVehicles = computed(() => {
-  const mainVehicles: string[] = [];
-  const subVehicles: string[] = [];
+// 타임스탬프 업데이트 함수
+const updateTimestamp = (): void => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+  const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
   
-  Object.keys(workInfo.value.vehicleInfo).forEach(vehicleId => {
-    if (vehicleId.includes('F')) {
-      mainVehicles.push(vehicleId);
-    } else {
-      subVehicles.push(vehicleId);
+  currentTimestamp.value = Date.now().toString();
+  currentDateTime.value = `${year}/${month}/${day} ${hours}:${minutes}:${seconds}.${milliseconds}`;
+};
+
+// 장애물 전송 모달 열기
+const openObstacleSendModal = (): void => {
+  $obstacleSendModal.value.open();
+};
+
+// 장애물 전송 모달 닫기
+const closeObstacleSendModal = (): void => {
+  $obstacleSendModal.value.close();
+};
+
+// 장애물 스타일 생성 함수 (클릭 여부에 따라 배경색 추가)
+const createObstacleStyle = (iconSource: string, scale: number, obstacleData: ObstacleData, isSelected = false): Style | Style[] => {
+  const styles: Style[] = [];
+  
+  // 클릭된 장애물인 경우 연한 반투명 노란색 배경 추가 (장애물을 감쌀 수 있는 크기)
+  if (isSelected) {
+    styles.push(new Style({
+      image: new CircleStyle({
+        radius: 50 * scale, // 장애물 아이콘을 감쌀 수 있도록 크게 조정
+        fill: new Fill({ color: 'rgba(255, 255, 200, 0.5)' }), // 연한 반투명 노란색
+        stroke: new Stroke({ color: '#ff953f', width: 2 }), // 테두리 색상
+      }),
+    }));
+  }
+  
+  // 아이콘 스타일
+  if (isDebugging.value) {
+    styles.push(new Style({
+      image: new Icon({
+        src: iconSource,
+        scale,
+      }),
+      text: new Text({
+        text: `ID: ${obstacleData.obstacle_id || 'N/A'}`,
+        font: '12px Arial',
+        fill: new Fill({ color: '#fff' }),
+        stroke: new Stroke({ color: '#000', width: 2 }),
+        offsetY: -30,
+        textAlign: 'center',
+      }),
+    }));
+  } else {
+    styles.push(new Style({
+      image: new Icon({
+        src: iconSource,
+        scale,
+      }),
+    }));
+  }
+  
+  return styles.length > 1 ? styles : styles[0];
+};
+
+// 클릭된 장애물 리스트 업데이트
+const updateSelectedObstacleList = (): void => {
+  const list: SelectedObstacleInfo[] = [];
+  
+  selectedObstacles.value.forEach((feature) => {
+    const obstacleData = feature.get('obstacleData') as ObstacleData;
+    if (obstacleData) {
+      const geometry = feature.getGeometry() as OlPoint;
+      if (geometry) {
+        const coord = geometry.getCoordinates();
+        const [lon = 0, lat = 0] = toLonLat(coord);
+        
+        list.push({
+          obstacle_class: obstacleData.obstacle_class,
+          obstacle_id: obstacleData.obstacle_id ?? 0,
+          lon,
+          lat,
+        });
+      }
     }
   });
   
-  return { main: mainVehicles, sub: subVehicles };
-});
+  selectedObstacleList.value = list;
+};
 
-// 선택된 총 차량 수 (더 이상 사용하지 않지만 호환성을 위해 유지)
-const totalSelectedVehicles = computed(() => {
-  return selectedVehicles.value.length;
-});
+// 장애물 리스트 NATS 발행
+const sendObstacleList = async (): Promise<void> => {
+  try {
+    const topic = 'obstacleList';
+    const message = JSON.stringify(selectedObstacleList.value);
+    
+    await natsStore.publishMessage(topic, message);
+    console.log('✅ [장애물 전송] 성공:', {
+      topic,
+      count: selectedObstacleList.value.length,
+      data: selectedObstacleList.value,
+    });
+    
+    // 전송 후 모달 닫기
+    closeObstacleSendModal();
+  } catch (error) {
+    console.error('❌ [장애물 전송] 실패:', error);
+  }
+};
 
-interface ObstacleData {
-  timestamp: number;
-  obstacle_class: number;
-  fused_position_x: number;
-  fused_position_y: number;
-  fused_position_z?: number;
-  fused_cuboid_x?: number;
-  fused_cuboid_y?: number;
-  fused_cuboid_z?: number;
-  fused_heading_angle?: number;
-  fused_velocity_x?: number;
-  fused_velocity_y?: number;
-  fused_velocity_z?: number;
-  obstacle_id?: number; // 부여된 ID
-  map_2d_location: Point2D[];
-  stop_count?: number;
-  isMapCoordinate?: boolean; // 맵 좌표로 변환된 상태인지 표시
-}
 
-// const hubMap = new Map<string | number, ObstacleData[]>(); // vehicle_class별 장애물 리스트 (더 이상 사용 안함)
 let previousObstacleList: ObstacleData[] = []; // 이전 주기의 장애물
 
 // IDManager class to manage obstacle IDs
@@ -332,125 +781,24 @@ class IDManager {
 
 const idManager = new IDManager();
 
-// 융합 데이터 구조
-interface FusionData {
-  vehicle: VehicleData;
-  obstacle_list: ObstacleData[];
-}
-
-interface VehicleData {
-  vehicle_class: string;
-  timestamp: number;
-  position_lat: number;
-  position_long: number;
-  position_height: number;
-  position_x: number;
-  position_y: number;
-  position_z: number;
-  yaw: number;
-  roll: number;
-  pitch: number;
-  velocity_long: number;
-  velocity_lat: number;
-  velocity_x: number;
-  velocity_y: number;
-  velocity_ang: number;
-  map_2d_location: Point2D[];
-}
-
-interface Point2D {
-  x: number;
-  y: number;
-}
-
-// 노면 데이터 관련 인터페이스
-interface RoadZData {
-  x: number; // WGS84 경도
-  y: number; // WGS84 위도
-  roadZ: number;
-  timestamp: number;
-  meterX?: number; // 미터 단위 X 좌표 (1m x 1m 집계용)
-  meterY?: number; // 미터 단위 Y 좌표 (1m x 1m 집계용)
-}
-
-// 노면 데이터 저장소 (10cm x 10cm 셀)
-const roadZDataStore: RoadZData[] = [];
-
-// 0.1m x 0.1m 집계된 노면 데이터 저장소 (1/10 압축)
-interface MeterGridData {
-  x: number; // 0.1m x 0.1m 셀의 중심 X 좌표 (미터 단위)
-  y: number; // 0.1m x 0.1m 셀의 중심 Y 좌표 (미터 단위)
-  roadZ: number; // 집계된 road_z 값 (0-22)
-  count: number; // 해당 0.1m x 0.1m 셀에 포함된 10cm x 10cm 셀 개수
-  validCount: number; // 유효한 데이터가 있는 10cm x 10cm 셀 개수
-  lastUpdated: number; // 마지막 업데이트 시간
-}
-
-const meterGridDataStore: MeterGridData[] = [];
-
-// 메모리 최적화를 위한 상수
-const MAX_ROAD_Z_DATA = 5000; // 최대 10cm 데이터 개수 (5천개로 대폭 감소)
-const MAX_METER_GRID_DATA = 2000; // 최대 0.1m x 0.1m 데이터 개수 (2천개로 대폭 감소)
-const DATA_CLEANUP_INTERVAL = 5000; // 5초마다 정리 (더 자주)
-
-// 데이터 샘플링을 위한 상수
-const SAMPLE_RATE = 3; // 3개당 1개 선택 (33% 샘플링)
-
-// 노면 데이터 초기화 함수 (필요시 호출)
-const clearRoadZData = (): void => {
-  roadZDataStore.length = 0;
-  meterGridDataStore.length = 0;
-};
-
-// 성능 데이터 인터페이스 (융합된 전체 시스템 데이터)
-interface PerformanceData {
-  pathGenerationTime?: number; // 경로생성 처리시간 (ms)
-  mapGenerationTime?: number;  // 맵생성 처리시간 (ms)
-  timestamp: number;
-  source?: string; // 데이터 소스 (예: "F0", "1", "2" 등)
-}
-
-// 성능 데이터 저장소 (전체 시스템 융합 데이터)
-const performanceDataStore: PerformanceData = {};
 
 // 성능 데이터 수집 함수들 (전체 융합 데이터)
-const collectPathPerformanceData = (data: any): void => {
-  if (data.path_generation_time !== undefined) {
-    performanceDataStore.pathGenerationTime = data.path_generation_time;
-    performanceDataStore.timestamp = Date.now();
-    performanceDataStore.source = data.vehicle_id || 'unknown';
-    console.log(`📊 [collectPathPerformanceData] 경로생성 처리시간: ${data.path_generation_time}ms (소스: ${performanceDataStore.source})`);
+const collectPathPerformanceData = (path: { path_proc_time: number | string; }): void => {
+  if (path.path_proc_time !== undefined) {
+    performanceDataStore.value.pathGenerationTime = path.path_proc_time;
+    console.log(`📊 [collectPathPerformanceData] 경로생성 처리시간: ${path.path_proc_time}ms`);
   }
 };
 
-const collectMapPerformanceData = (data: any): void => {
-  if (data.map_generation_time !== undefined) {
-    performanceDataStore.mapGenerationTime = data.map_generation_time;
-    performanceDataStore.timestamp = Date.now();
-    performanceDataStore.source = data.vehicle_id || 'unknown';
-    console.log(`📊 [collectMapPerformanceData] 맵생성 처리시간: ${data.map_generation_time}ms (소스: ${performanceDataStore.source})`);
+const collectMapPerformanceData = (mapData: { mapDataTimestamp: number | string; }): void => {
+  if (mapData.mapDataTimestamp !== undefined) {
+    performanceDataStore.value.mapGenerationTime = mapData.mapDataTimestamp;
+    console.log(`📊 [collectMapPerformanceData] 맵생성 처리시간: ${mapData.mapDataTimestamp}ms`);
   }
 };
 
 // 차량 맵 좌표 저장소
 const vehicleMapCoordinates: { [key: string]: { x: number; y: number } } = {};
-
-// 새로운 노면 데이터 정의에 맞춘 상수
-const ROAD_Z_DEADZONE = 0.3; // 차량 주변 0.3M 데드존 (1/10 크기)
-const ROAD_Z_GRID_SIZE = 1; // 10cm x 10cm 그리드
-const ROAD_Z_CELL_SIZE = 1; // 각 셀의 크기 (10cm x 10cm)
-const ROAD_Z_DEFAULT_VALUE = 255; // 기본값 (0xFF)
-
-// 1m x 1m 셀 집계를 위한 상수 (1/10 압축 적용)
-const METER_GRID_SIZE = 0.1; // 0.1m x 0.1m 그리드 (1/10 압축)
-const CELLS_PER_METER = 10; // 1m당 10cm 셀 개수 (10개)
-
-// 동적 차량 데이터 관리 (Map 사용)
-interface VehicleDataStore {
-  fusionData: FusionData;
-  vehicle: VehicleData;
-  obstacleList: ObstacleData[];
-}
 
 const vehicleDataMap = new Map<string, VehicleDataStore>();
 
@@ -581,361 +929,6 @@ const convertRoadPositionToWgs84 = (relativeX: number, relativeY: number): { lat
   return { lat, lon };
 };
 
-
-// 사각형 폴리곤 생성 함수 (간격 없애기 위해 약간 크게 생성)
-const createRectanglePolygon = (centerX: number, centerY: number, size: number): number[][] => {
-  const halfSize = size / 2 + 0.000001; // 약간 크게 만들어서 간격 없애기
-  return [
-    [centerX - halfSize, centerY - halfSize],
-    [centerX + halfSize, centerY - halfSize],
-    [centerX + halfSize, centerY + halfSize],
-    [centerX - halfSize, centerY + halfSize],
-    [centerX - halfSize, centerY - halfSize] // 닫기
-  ];
-};
-
-// 0.1m x 0.1m 셀로 집계하는 함수 (누적 방식, 1/10 압축)
-const aggregateToMeterGrid = (): void => {  
-  // 기존 0.1m x 0.1m 데이터 초기화 (매번 전체 재집계)
-  meterGridDataStore.length = 0;
-  
-  // 0.1m x 0.1m 그리드 맵 생성 (집계용)
-  const meterGridMap = new Map<string, {
-    roadZValues: number[];
-    positions: { x: number; y: number }[];
-    count: number;
-    validCount: number;
-  }>();
-  
-  // 10cm x 10cm 데이터를 0.1m x 0.1m로 집계 (중복 제거 및 최신 데이터 우선)
-  const processedCells = new Set<string>(); // 이미 처리된 셀 추적
-  
-  roadZDataStore.forEach((data) => {
-    // 미터 단위 좌표가 있는지 확인
-    if (data.meterX === undefined || data.meterY === undefined) {
-      return;
-    }
-    
-    // 0.1m x 0.1m 셀의 중심 좌표 계산 (미터 단위)
-    const meterX = Math.floor(data.meterX / METER_GRID_SIZE) * METER_GRID_SIZE + METER_GRID_SIZE / 2;
-    const meterY = Math.floor(data.meterY / METER_GRID_SIZE) * METER_GRID_SIZE + METER_GRID_SIZE / 2;
-    
-    const gridKey = `${meterX}_${meterY}`;
-    const cellKey = `${meterX}_${meterY}_${data.meterX}_${data.meterY}`; // 정확한 위치까지 포함
-    
-    // 이미 처리된 셀인지 확인 (같은 0.1m x 0.1m 셀 내에서 중복 방지)
-    if (processedCells.has(cellKey)) {
-      return;
-    }
-    processedCells.add(cellKey);
-    
-    if (!meterGridMap.has(gridKey)) {
-      meterGridMap.set(gridKey, {
-        roadZValues: [],
-        positions: [],
-        count: 0,
-        validCount: 0
-      });
-    }
-    
-    const gridData = meterGridMap.get(gridKey);
-    if (gridData) {
-      gridData.roadZValues.push(data.roadZ);
-      if (data.meterX !== undefined && data.meterY !== undefined) {
-        gridData.positions.push({ x: data.meterX, y: data.meterY });
-      }
-      gridData.count += 1;
-      
-      // 유효한 데이터만 카운트 (255가 아닌 값)
-      if (data.roadZ !== ROAD_Z_DEFAULT_VALUE) {
-        gridData.validCount += 1;
-      }
-    }
-  });
-  
-  // 집계된 데이터를 0.1m x 0.1m 저장소에 저장
-  meterGridMap.forEach((gridData, gridKey) => {
-    if (gridData.validCount === 0) return; // 유효한 데이터가 없으면 스킵
-    
-    // road_z 값들의 평균 계산 (가중평균 또는 최빈값 사용)
-    const validRoadZValues = gridData.roadZValues.filter(z => z !== ROAD_Z_DEFAULT_VALUE);
-    const averageRoadZ = validRoadZValues.length > 0 
-      ? Math.round(validRoadZValues.reduce((sum, val) => sum + val, 0) / validRoadZValues.length)
-      : ROAD_Z_DEFAULT_VALUE;
-    
-    // 0.1m x 0.1m 셀의 중심 좌표 (미터 단위)
-    const [meterX, meterY] = gridKey.split('_').map(Number);
-    
-    meterGridDataStore.push({
-      x: meterX,
-      y: meterY,
-      roadZ: averageRoadZ,
-      count: gridData.count,
-      validCount: gridData.validCount,
-      lastUpdated: Date.now()
-    });
-  });
-};
-
-// 차량 위치 기반으로 road_z 데이터를 맵 좌표로 변환 (새로운 정의에 맞춤)
-const processRoadZData = (vehicleData: HubDataObject): void => {
-  if (!vehicleData.road_z || vehicleData.road_z.length === 0) {
-    console.log('⚠️ [processRoadZData] road_z 데이터가 없거나 비어있음');
-    return;
-  }
-
-  // 누적 방식: 기존 데이터 유지하고 새 데이터 추가
-  // roadZDataStore.length = 0; // 주석 처리하여 누적 방식으로 변경
-
-  // 차량의 GPS 좌표를 맵 좌표로 변환 (미터 단위)
-  const { utmX: vehicleUtmX, utmY: vehicleUtmY } = GPStoUTM(vehicleData.position_long, vehicleData.position_lat);
-  const vehicleMapX = vehicleUtmX - originX; // 미터 단위
-  const vehicleMapY = vehicleUtmY - originY; // 미터 단위
-
-  const vehiclePosition = {
-    x: vehicleMapX,
-    y: vehicleMapY
-  };
-
-  // 새로운 정의: 차량 전방 0.4M x 1M 영역 (데드존 0.3M 제외) - 1/10 크기
-  // 4000개 데이터를 모두 사용하되, 표시 영역만 1/10로 압축
-  const gridWidth = 40; // 4M / 0.1M = 40개 셀 (원본과 동일)
-  const gridHeight = 100; // 10M / 0.1M = 100개 셀 (원본과 동일)
-  const displayScale = 0.1; // 표시 크기를 1/10로 압축
-  
-  // 차량의 방향 (yaw)을 고려하여 그리드 방향 결정
-  const vehicleYaw = vehicleData.yaw || 0;
-  const yawRad = vehicleYaw * Math.PI / 180.0;
-  
-  let validDataCount = 0;
-  let processedDataCount = 0;
-
-  // 각 그리드 셀의 상대 위치 계산 (데이터 샘플링 적용)
-  for (let row = 0; row < gridHeight; row += 1) {
-    for (let col = 0; col < gridWidth; col += 1) {
-      const index = row * gridWidth + col;
-      if (index >= vehicleData.road_z.length) {
-        // eslint-disable-next-line no-continue
-        continue;
-      }
-      
-      // 데이터 샘플링: 3개당 1개만 선택 (33% 샘플링)
-      if (index % SAMPLE_RATE !== 0) {
-        // eslint-disable-next-line no-continue
-        continue;
-      }
-      
-      const roadZ = vehicleData.road_z[index];
-      processedDataCount += 1;
-      
-      // 기본값(255)인 경우 스킵
-      if (roadZ === ROAD_Z_DEFAULT_VALUE) {
-        // eslint-disable-next-line no-continue
-        continue;
-      }
-      
-      // 유효한 범주 값인지 확인 (0-22 범위)
-      if (roadZ < 0 || roadZ > 22) {
-        console.warn(`⚠️ [processRoadZData] 유효하지 않은 road_z 값: ${roadZ} (유효 범위: 0-22)`);
-        // eslint-disable-next-line no-continue
-        continue;
-      }
-      
-      validDataCount += 1;
-      
-      // 그리드 셀의 상대 좌표 (차량 중심 기준, 10cm 단위)
-      // col: 좌우 방향 (-2M ~ +2M), row: 전방 방향 (0M ~ 10M)
-      // 표시할 때는 1/10 크기로 압축
-      const relativeX = (col - gridWidth / 2) * ROAD_Z_GRID_SIZE * displayScale; // 좌우 방향 (1/10 압축)
-      const relativeY = row * ROAD_Z_GRID_SIZE * displayScale; // 전방 방향 (1/10 압축)
-      
-      // 데드존 체크 (전방 0.3M 이내 제외, 1/10 압축 적용)
-      if (relativeY < ROAD_Z_DEADZONE * displayScale) {
-        // eslint-disable-next-line no-continue
-        continue;
-      }
-      
-      // 차량 방향을 고려한 좌표 변환
-      const rotatedX = relativeX * Math.cos(yawRad) - relativeY * Math.sin(yawRad);
-      const rotatedY = relativeX * Math.sin(yawRad) + relativeY * Math.cos(yawRad);
-      
-      // 상대 좌표를 절대 좌표로 변환 (미터 단위)
-      const absoluteX = vehiclePosition.x + rotatedX;
-      const absoluteY = vehiclePosition.y + rotatedY;
-      
-      // WGS84 좌표로 변환 (노면데이터용)
-      const wgs84Coords = convertRoadPositionToWgs84(absoluteX, absoluteY);
-      
-      // 데이터 저장 (WGS84 좌표와 미터 좌표 모두 저장)
-      roadZDataStore.push({
-        x: wgs84Coords.lon,
-        y: wgs84Coords.lat,
-        roadZ,
-        timestamp: Date.now(),
-        // 1m x 1m 집계를 위한 미터 단위 좌표 추가
-        meterX: absoluteX, // 이미 미터 단위
-        meterY: absoluteY
-      });
-    }
-  }
-};
-
-// 텔레컨스 사이트에만 간단한 그리드 효과 그리기 (고정된 선 개수)
-const drawTeleconsGrid = (): void => {
-  // 텔레컨스 사이트가 아닌 경우 그리드 그리지 않음
-  if (workInfo.value.name !== '텔레컨스') {
-    return;
-  }
-
-  // 이미 그리드가 그려져 있는지 확인
-  const existingGrid = osVector.getFeatureById('grid_telecons');
-  if (existingGrid) {
-    return; // 이미 그려져 있으면 중복 그리기 방지
-  }
-
-  // 작업영역 경계 좌표 가져오기
-  const boundaryCoords = workInfo.value.coordinates;
-  if (!boundaryCoords || boundaryCoords.length < 3) {
-    return;
-  }
-
-  // 경계 영역의 최소/최대 좌표 계산
-  const lats = boundaryCoords.map(coord => coord[1]);
-  const lons = boundaryCoords.map(coord => coord[0]);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLon = Math.min(...lons);
-  const maxLon = Math.max(...lons);
-
-  // 작업영역 경계선은 그리지 않음 (그리드만 표시)
-
-  // 2. 작업영역의 방향(회전) 계산
-  // 첫 번째와 두 번째 점을 연결하는 선의 각도 계산
-  const dx = boundaryCoords[1][0] - boundaryCoords[0][0];
-  const dy = boundaryCoords[1][1] - boundaryCoords[0][1];
-  const rotationAngle = Math.atan2(dy, dx);
-  
-  // 3. 작업영역의 중심점 계산
-  const centerX = boundaryCoords.reduce((sum, coord) => sum + coord[0], 0) / boundaryCoords.length;
-  const centerY = boundaryCoords.reduce((sum, coord) => sum + coord[1], 0) / boundaryCoords.length;
-
-  // 4. 작업영역의 크기 계산 (회전된 좌표계 기준)
-  // 경계의 최소/최대 좌표를 회전된 좌표계로 변환
-  const rotatedCoords = boundaryCoords.map(coord => {
-    const x = coord[0] - centerX;
-    const y = coord[1] - centerY;
-    const rotatedX = x * Math.cos(-rotationAngle) - y * Math.sin(-rotationAngle);
-    const rotatedY = x * Math.sin(-rotationAngle) + y * Math.cos(-rotationAngle);
-    return [rotatedX, rotatedY];
-  });
-  
-  const rotatedMinX = Math.min(...rotatedCoords.map(coord => coord[0]));
-  const rotatedMaxX = Math.max(...rotatedCoords.map(coord => coord[0]));
-  const rotatedMinY = Math.min(...rotatedCoords.map(coord => coord[1]));
-  const rotatedMaxY = Math.max(...rotatedCoords.map(coord => coord[1]));
-
-  // 5. 그리드 셀을 사각형으로 생성 (장애물 위치에 따른 색상 변경 가능)
-  const verticalSpacing = (rotatedMaxX - rotatedMinX) / 20;
-  const horizontalSpacing = (rotatedMaxY - rotatedMinY) / 10;
-  
-  // 각 그리드 셀을 사각형으로 생성
-  for (let row = 0; row < 10; row += 1) {
-    for (let col = 0; col < 20; col += 1) {
-      const rotatedX1 = rotatedMinX + (verticalSpacing * col);
-      const rotatedX2 = rotatedMinX + (verticalSpacing * (col + 1));
-      const rotatedY1 = rotatedMinY + (horizontalSpacing * row);
-      const rotatedY2 = rotatedMinY + (horizontalSpacing * (row + 1));
-      
-      // 회전된 좌표를 실제 좌표로 변환 (4개 꼭지점)
-      const corners = [
-        [rotatedX1, rotatedY1], [rotatedX2, rotatedY1],
-        [rotatedX2, rotatedY2], [rotatedX1, rotatedY2]
-      ].map(([rx, ry]) => [
-        centerX + rx * Math.cos(rotationAngle) - ry * Math.sin(rotationAngle),
-        centerY + rx * Math.sin(rotationAngle) + ry * Math.cos(rotationAngle)
-      ]);
-      
-             const gridCell = new OlFeature({
-         geometry: new Polygon([corners]),
-       });
-      
-      const gridId = `grid_cell_${row}_${col}`;
-      gridCell.setId(gridId);
-      
-      // 기본 그리드 셀 스타일
-      const gridStyle = new Style({
-        fill: new Fill({
-          color: 'rgba(240, 208, 146, 0.1)', // 매우 연한 베이지색
-        }),
-        stroke: new Stroke({
-          color: '#F0D092', // 베이지색 테두리
-          width: 1,
-        }),
-      });
-      
-             gridCell.setStyle(gridStyle);
-       osVector.addFeature(gridCell);
-     }
-   }
- };
-
-// roadz 데이터 표시 제거 함수
-const removeRoadZFeatures = (): void => {
-  const allFeatures = osVector.getFeatures();
-  const roadZFeaturesToRemove: OlFeature[] = [];
-  
-  allFeatures.forEach((feature) => {
-    const featureId = feature.getId() as string;
-    if (featureId && featureId.startsWith('metergrid_')) {
-      roadZFeaturesToRemove.push(feature);
-    }
-  });
-  
-  roadZFeaturesToRemove.forEach((feature) => {
-    osVector.removeFeature(feature);
-  });
-};
-
-// 0.1m x 0.1m 셀 노면 heatmap 그리기 (1/10 압축)
-const drawMeterGridHeatmap = (): void => {
-  if (meterGridDataStore.length === 0) {
-    console.log('⚠️ [drawMeterGridHeatmap] 0.1m x 0.1m 데이터가 없음');
-    return;
-  }
-  
-  // 기존 0.1m x 0.1m 노면 데이터 제거
-  removeRoadZFeatures();
-  
-  // 새로운 0.1m x 0.1m 노면 데이터 그리기
-  meterGridDataStore.forEach((data, index) => {
-    // 0.1m x 0.1m 셀을 WGS84 좌표로 변환 (노면데이터용)
-    const wgs84Coords = convertRoadPositionToWgs84(data.x, data.y);
-    
-    // 사각형 폴리곤 생성 (0.1m x 0.1m 셀)
-    // 0.1m를 도 단위로 변환 (대략 0.1/111000도)
-    const polygonCoords = createRectanglePolygon(wgs84Coords.lon, wgs84Coords.lat, METER_GRID_SIZE / 111000);
-    const meterGridPolygon = new OlFeature({
-      geometry: new Polygon([polygonCoords.map(coord => fromLonLat(coord))]),
-    });
-    
-    const featureId = `metergrid_${Date.now()}_${index}`;
-    meterGridPolygon.setId(featureId);
-    
-    // 색상 계산 및 스타일 적용 (road_z는 0~22 범위의 범주 값)
-    const color = getRoadZColor(data.roadZ);
-    
-    const meterGridStyle = new Style({
-      fill: new Fill({ 
-        color 
-      }),
-      // stroke 제거하여 블럭같은 느낌 없애기
-    });
-    
-    meterGridPolygon.setStyle(meterGridStyle);
-    osVector.addFeature(meterGridPolygon);
-  });
-};
-
 // 장애물 데이터 필터링 (차량 데이터 제거)
 function filterVehicleData(obstacles: ObstacleData[]): void {
   for (let i = obstacles.length - 1; i >= 0; i -= 1) {
@@ -1032,228 +1025,7 @@ function euclideanDistance(a: ObstacleData, b: ObstacleData): number {
 
 // 정적 장애물인지 확인 (클래스 30, 40)
 function isStaticObstacle(obstacleClass: number): boolean {
-  return obstacleClass === 30 || obstacleClass === 40;
-}
-
-// 정적 장애물 위치 히스토리 인터페이스
-interface StaticObstacleHistory {
-  obstacle: ObstacleData;
-  positionHistory: Array<{ x: number; y: number }>; // 최대 10프레임 (x, y만)
-}
-
-// 동적 장애물 트래커: 5프레임 매칭 안되면 제거
-class DynamicObstacleTracker {
-  private trackedObstacles: Map<number, { obstacle: ObstacleData; unmatchedFrames: number }> = new Map();
-
-  private readonly DISTANCE_THRESHOLD = 100; // 1m = 100cm
-
-  private readonly MAX_UNMATCHED_FRAMES = 5; // 5프레임
-
-  track(newList: ObstacleData[]): ObstacleData[] {
-    const trackedList: ObstacleData[] = [];
-    const matchedIds = new Set<number>();
-
-    // 현재 프레임의 동적 장애물과 기존 트래킹 중인 장애물 매칭
-    for (const currentObstacle of newList) {
-      if (isStaticObstacle(currentObstacle.obstacle_class)) {
-        // eslint-disable-next-line no-continue
-        continue; // 정적 장애물은 제외
-      }
-
-      let matched = false;
-      let bestMatchId: number | null = null;
-      let bestDistance = Infinity;
-
-      // 기존 트래킹 중인 장애물과 거리 비교
-      for (const [id, tracked] of this.trackedObstacles) {
-        if (matchedIds.has(id)) {
-          // eslint-disable-next-line no-continue
-          continue;
-        }
-
-        const distance = euclideanDistance(currentObstacle, tracked.obstacle);
-
-        if (distance < this.DISTANCE_THRESHOLD && distance < bestDistance) {
-          bestMatchId = id;
-          bestDistance = distance;
-          matched = true;
-        }
-      }
-
-      if (matched && bestMatchId !== null) {
-        // 매칭된 경우: 현재 좌표로 교체, 이전 ID 유지
-        const tracked = this.trackedObstacles.get(bestMatchId);
-        if (!tracked) {
-          // eslint-disable-next-line no-continue
-          continue;
-        }
-        const trackedObstacle: ObstacleData = {
-          ...currentObstacle,
-          obstacle_id: tracked.obstacle.obstacle_id
-        };
-        trackedList.push(trackedObstacle);
-        // 매칭 성공: unmatchedFrames 리셋
-        this.trackedObstacles.set(bestMatchId, {
-          obstacle: trackedObstacle,
-          unmatchedFrames: 0
-        });
-        matchedIds.add(bestMatchId);
-      } else {
-        // 매칭되지 않은 경우: 새로 추가
-        const newId = currentObstacle.obstacle_id || idManager.allocID();
-        const trackedObstacle: ObstacleData = {
-          ...currentObstacle,
-          obstacle_id: newId
-        };
-        trackedList.push(trackedObstacle);
-        this.trackedObstacles.set(newId, {
-          obstacle: trackedObstacle,
-          unmatchedFrames: 0
-        });
-        matchedIds.add(newId);
-      }
-    }
-
-    // 매칭되지 않은 기존 장애물들의 unmatchedFrames 증가
-    for (const [id, tracked] of this.trackedObstacles) {
-      if (!matchedIds.has(id)) {
-        tracked.unmatchedFrames += 1;
-        // 5프레임 이상 매칭 안되면 제거
-        if (tracked.unmatchedFrames >= this.MAX_UNMATCHED_FRAMES) {
-          this.trackedObstacles.delete(id);
-        }
-      }
-    }
-
-    return trackedList;
-  }
-
-  reset(): void {
-    this.trackedObstacles.clear();
-  }
-}
-
-// 정적 장애물 트래커: 10프레임 평균 위치 사용
-class StaticObstacleTracker {
-  private trackedObstacles: Map<number, StaticObstacleHistory> = new Map();
-
-  private readonly DISTANCE_THRESHOLD = 100; // 1m = 100cm
-
-  private readonly POSITION_HISTORY_SIZE = 10; // 10프레임
-
-  track(newList: ObstacleData[]): ObstacleData[] {
-    const trackedList: ObstacleData[] = [];
-    const matchedIds = new Set<number>();
-
-    // 현재 프레임의 정적 장애물과 기존 트래킹 중인 장애물 매칭
-    for (const currentObstacle of newList) {
-      if (!isStaticObstacle(currentObstacle.obstacle_class)) {
-        // eslint-disable-next-line no-continue
-        continue; // 동적 장애물은 제외
-      }
-
-      let matched = false;
-      let bestMatchId: number | null = null;
-      let bestDistance = Infinity;
-
-      // 기존 트래킹 중인 장애물과 거리 비교
-      for (const [id, history] of this.trackedObstacles) {
-        if (matchedIds.has(id)) {
-          // eslint-disable-next-line no-continue
-          continue;
-        }
-
-        const distance = euclideanDistance(currentObstacle, history.obstacle);
-
-        if (distance < this.DISTANCE_THRESHOLD && distance < bestDistance) {
-          bestMatchId = id;
-          bestDistance = distance;
-          matched = true;
-        }
-      }
-
-      if (matched && bestMatchId !== null) {
-        // 매칭된 경우: 위치 히스토리에 추가하고 평균 위치 계산
-        const history = this.trackedObstacles.get(bestMatchId);
-        if (!history) {
-          // eslint-disable-next-line no-continue
-          continue;
-        }
-        
-        // 현재 위치를 히스토리에 추가 (x, y만)
-        history.positionHistory.push({
-          x: currentObstacle.fused_position_x,
-          y: currentObstacle.fused_position_y
-        });
-
-        // 10프레임 초과하면 오래된 것 제거
-        if (history.positionHistory.length > this.POSITION_HISTORY_SIZE) {
-          history.positionHistory.shift();
-        }
-
-        // 평균 위치 계산 (x, y만)
-        const avgX = history.positionHistory.reduce((sum, pos) => sum + pos.x, 0) / history.positionHistory.length;
-        const avgY = history.positionHistory.reduce((sum, pos) => sum + pos.y, 0) / history.positionHistory.length;
-
-        // 평균 위치로 업데이트된 장애물 생성 (z는 현재 값 유지)
-        const trackedObstacle: ObstacleData = {
-          ...currentObstacle,
-          obstacle_id: history.obstacle.obstacle_id,
-          fused_position_x: avgX,
-          fused_position_y: avgY
-        };
-        trackedList.push(trackedObstacle);
-        
-        // 히스토리 업데이트
-        history.obstacle = trackedObstacle;
-        matchedIds.add(bestMatchId);
-      } else {
-        // 매칭되지 않은 경우: 새로 추가
-        const newId = currentObstacle.obstacle_id || idManager.allocID();
-        const trackedObstacle: ObstacleData = {
-          ...currentObstacle,
-          obstacle_id: newId
-        };
-        trackedList.push(trackedObstacle);
-        
-        // 히스토리 초기화 (x, y만)
-        this.trackedObstacles.set(newId, {
-          obstacle: trackedObstacle,
-          positionHistory: [{
-            x: currentObstacle.fused_position_x,
-            y: currentObstacle.fused_position_y
-          }]
-        });
-        matchedIds.add(newId);
-      }
-    }
-
-    // 매칭되지 않은 기존 정적 장애물도 유지 (계속 남겨줌)
-    for (const [id, history] of this.trackedObstacles) {
-      if (!matchedIds.has(id)) {
-        // 평균 위치로 유지 (x, y만)
-        if (history.positionHistory.length > 0) {
-          const avgX = history.positionHistory.reduce((sum, pos) => sum + pos.x, 0) / history.positionHistory.length;
-          const avgY = history.positionHistory.reduce((sum, pos) => sum + pos.y, 0) / history.positionHistory.length;
-
-          const trackedObstacle: ObstacleData = {
-            ...history.obstacle,
-            fused_position_x: avgX,
-            fused_position_y: avgY
-          };
-          trackedList.push(trackedObstacle);
-        } else {
-          trackedList.push(history.obstacle);
-        }
-      }
-    }
-
-    return trackedList;
-  }
-
-  reset(): void {
-    this.trackedObstacles.clear();
-  }
+  return obstacleClass >= 30 && obstacleClass <= 50;
 }
 
 // 통합 트래커: 하나의 리스트에서 정적/동적 장애물을 분기 처리
@@ -1266,7 +1038,7 @@ class ObstacleTracker {
 
   private readonly STATIC_DISTANCE_THRESHOLD = 50; // 정적 장애물: 0.5m = 50cm
 
-  private readonly MAX_UNMATCHED_FRAMES = 5; // 동적 장애물: 5프레임
+  private readonly MAX_UNMATCHED_FRAMES = 25; // 동적 장애물: 25프레임
 
   private readonly POSITION_HISTORY_SIZE = 10; // 정적 장애물: 10프레임 버퍼
 
@@ -1412,11 +1184,11 @@ class ObstacleTracker {
       }
     }
 
-    // 매칭되지 않은 기존 동적 장애물 처리: 5프레임 이상 매칭 안되면 제거
+    // 매칭되지 않은 기존 동적 장애물 처리: 25프레임 이상 매칭 안되면 제거
     for (const [id, tracked] of this.dynamicObstacles) {
       if (!matchedDynamicIds.has(id)) {
         tracked.unmatchedFrames += 1;
-        // 5프레임 이상 매칭 안되면 제거
+        // 25프레임 이상 매칭 안되면 제거
         if (tracked.unmatchedFrames >= this.MAX_UNMATCHED_FRAMES) {
           this.dynamicObstacles.delete(id);
         } else {
@@ -1529,65 +1301,14 @@ function processFusionForVehiclePair(presList: ObstacleData[], prevList: Obstacl
 // 프레임 간 융합 처리 (C++ 코드와 동일한 로직)
 /* eslint-disable no-param-reassign */
 function processFusion(presList: ObstacleData[], prevList: ObstacleData[], assignment: number[]): void {
-  const startTime = performance.now();
   const newList: ObstacleData[] = [];
-  
-  // assignment[i]는 prevList[i]가 매칭된 presList의 인덱스
-  // assignment.length = prevList.length
-  
-  // presList와 prevList 출력
-  console.log('📋 [processFusion] 리스트 정보:', {
-    presList: presList.map(obs => ({
-      id: obs.obstacle_id,
-      x: obs.fused_position_x,
-      y: obs.fused_position_y,
-      z: obs.fused_position_z,
-      class: obs.obstacle_class
-    })),
-    prevList: prevList.map(obs => ({
-      id: obs.obstacle_id,
-      x: obs.fused_position_x,
-      y: obs.fused_position_y,
-      z: obs.fused_position_z,
-      class: obs.obstacle_class
-    })),
-    assignment,
-    presListLength: presList.length,
-    prevListLength: prevList.length,
-    assignmentLength: assignment.length
-  });
   
   // 1. 매칭된 장애물 처리
   for (let i = 0; i < assignment.length; i += 1) {
     const j = assignment[i]; // j는 presList의 인덱스
     if (j >= 0) {
-      // // 배열 범위 체크
-      // if (i >= prevList.length || j >= presList.length) {
-      //   console.warn('⚠️ [processFusion] 배열 인덱스 범위 초과:', {
-      //     i,
-      //     j,
-      //     presListLength: presList.length,
-      //     prevListLength: prevList.length,
-      //     assignmentLength: assignment.length
-      //   });
-      //   // eslint-disable-next-line no-continue
-      //   continue;
-      // }
-      
       const prevObstacle = prevList[i]; // prevList[i]가 매칭됨
       const currentObstacle = presList[j]; // presList[j]와 매칭됨
-      // console.log('prevObstacle', prevObstacle);
-      // // undefined 체크
-      // if (!prevObstacle || !currentObstacle) {
-      //   console.warn('⚠️ [processFusion] 장애물 데이터가 undefined:', {
-      //     i,
-      //     j,
-      //     prevObstacle: !!prevObstacle,
-      //     currentObstacle: !!currentObstacle
-      //   });
-      //   // eslint-disable-next-line no-continue
-      //   continue;
-      // }
       
       // obstacle_class가 다르면 매칭 취소 (현재 장애물만 추가, 이전 장애물은 제거하지 않음)
       if (prevObstacle.obstacle_class !== currentObstacle.obstacle_class) {
@@ -1607,7 +1328,6 @@ function processFusion(presList: ObstacleData[], prevList: ObstacleData[], assig
         currentObstacle.obstacle_id = idManager.allocID();
         newList.push(currentObstacle);
         // 이전 시점 장애물은 제거 (누적 방지)
-        // eslint-disable-next-line no-continue
         continue;
       }
       
@@ -1637,45 +1357,21 @@ function processFusion(presList: ObstacleData[], prevList: ObstacleData[], assig
     }
   }
   
-  // newList 출력
-  console.log('📋 [processFusion] newList 정보:', {
-    newList: newList.map(obs => ({
-      id: obs.obstacle_id,
-      x: obs.fused_position_x,
-      y: obs.fused_position_y,
-      z: obs.fused_position_z,
-      class: obs.obstacle_class
-    })),
-    newListLength: newList.length
-  });
-  
   // 트래커를 사용하여 newList 정리
-  const trackerStartTime = performance.now();
+  // const trackerStartTime = performance.now();
   const trackedList = obstacleTracker.track(newList);
-  const trackerTime = performance.now() - trackerStartTime;
+  // const trackerTime = performance.now() - trackerStartTime;
   
-  // trackedList 출력
-  console.log('📋 [processFusion] trackedList 정보:', {
-    trackedList: trackedList.map(obs => ({
-      id: obs.obstacle_id,
-      x: obs.fused_position_x,
-      y: obs.fused_position_y,
-      z: obs.fused_position_z,
-      class: obs.obstacle_class
-    })),
-    trackedListLength: trackedList.length
-  });
-  
-  // 속도 측정 출력
-  const totalTime = performance.now() - startTime;
-  console.log('⚡ [processFusion] 성능 측정:', {
-    totalTime: `${totalTime.toFixed(2)}ms`,
-    trackerTime: `${trackerTime.toFixed(2)}ms`,
-    newListLength: newList.length,
-    trackedListLength: trackedList.length,
-    presListLength: presList.length,
-    prevListLength: prevList.length
-  });
+  // // 속도 측정 출력
+  // const totalTime = performance.now() - startTime;
+  // console.log('⚡ [processFusion] 성능 측정:', {
+  //   totalTime: `${totalTime.toFixed(2)}ms`,
+  //   trackerTime: `${trackerTime.toFixed(2)}ms`,
+  //   newListLength: newList.length,
+  //   trackedListLength: trackedList.length,
+  //   presListLength: presList.length,
+  //   prevListLength: prevList.length
+  // });
   
   // 새로운 리스트로 갱신
   presList.length = 0;
@@ -1719,15 +1415,6 @@ function mergeAndCompareListsDynamic(
     }
   }
 
-  // 디버깅 로그
-  if (nonEmptyLists.length === 0) {
-    console.log('🔍 [mergeAndCompareListsDynamic] 장애물 리스트 없음:', {
-      totalVehicles: vehicles.length,
-      obstacleListsLengths: obstacleLists.map(list => list?.length || 0),
-      hasTimestamp: vehicles.map(v => !!v.timestamp)
-    });
-  }
-
   // 융합할 리스트 필터링
   if (nonEmptyLists.length === 0) {
     // 모든 리스트가 비어있음 - 빈 배열 반환
@@ -1762,11 +1449,11 @@ function mergeAndCompareListsDynamic(
   // Worker 중복 제거 로직 제거 - 모든 Worker가 표시되도록 함
 
   if (mergedList.length === 0) {
-    if (previousFusionList.length === 0) {
-      console.log('📭 [mergeAndCompareLists] 장애물 리스트 비어있음');
-    } else {
-      console.log('📦 [mergeAndCompareLists] 현재 TimeStamp 장애물 X, 이전 TimeStamp 장애물리스트 그대로 사용');
-    }
+    // if (previousFusionList.length === 0) {
+    //   console.log('📭 [mergeAndCompareLists] 장애물 리스트 비어있음');
+    // } else {
+    //   console.log('📦 [mergeAndCompareLists] 현재 TimeStamp 장애물 X, 이전 TimeStamp 장애물리스트 그대로 사용');
+    // }
     return previousFusionList;
   }
   
@@ -1887,17 +1574,410 @@ function fillObstacleList(obstacle_list: ObstacleData[], data: HubDataObject): v
   }
 }
 
+
+// 노면 데이터 초기화 함수 (필요시 호출)
+const clearRoadZData = (): void => {
+  roadZDataStore.length = 0;
+  meterGridDataStore.length = 0;
+};
+
+// 사각형 폴리곤 생성 함수 (간격 없애기 위해 약간 크게 생성)
+const createRectanglePolygon = (centerX: number, centerY: number, size: number): number[][] => {
+  const halfSize = size / 2 + 0.000001; // 약간 크게 만들어서 간격 없애기
+  return [
+    [centerX - halfSize, centerY - halfSize],
+    [centerX + halfSize, centerY - halfSize],
+    [centerX + halfSize, centerY + halfSize],
+    [centerX - halfSize, centerY + halfSize],
+    [centerX - halfSize, centerY - halfSize] // 닫기
+  ];
+};
+
+// 0.1m x 0.1m 셀로 집계하는 함수 (누적 방식, 1/10 압축)
+const aggregateToMeterGrid = (): void => {  
+  // 기존 0.1m x 0.1m 데이터 초기화 (매번 전체 재집계)
+  meterGridDataStore.length = 0;
+  
+  // 0.1m x 0.1m 그리드 맵 생성 (집계용)
+  const meterGridMap = new Map<string, {
+    roadZValues: number[];
+    positions: { x: number; y: number }[];
+    count: number;
+    validCount: number;
+  }>();
+  
+  // 10cm x 10cm 데이터를 0.1m x 0.1m로 집계 (중복 제거 및 최신 데이터 우선)
+  const processedCells = new Set<string>(); // 이미 처리된 셀 추적
+  
+  roadZDataStore.forEach((data) => {
+    // 미터 단위 좌표가 있는지 확인
+    if (data.meterX === undefined || data.meterY === undefined) {
+      return;
+    }
+    
+    // 0.1m x 0.1m 셀의 중심 좌표 계산 (미터 단위)
+    const meterX = Math.floor(data.meterX / METER_GRID_SIZE) * METER_GRID_SIZE + METER_GRID_SIZE / 2;
+    const meterY = Math.floor(data.meterY / METER_GRID_SIZE) * METER_GRID_SIZE + METER_GRID_SIZE / 2;
+    
+    const gridKey = `${meterX}_${meterY}`;
+    const cellKey = `${meterX}_${meterY}_${data.meterX}_${data.meterY}`; // 정확한 위치까지 포함
+    
+    // 이미 처리된 셀인지 확인 (같은 0.1m x 0.1m 셀 내에서 중복 방지)
+    if (processedCells.has(cellKey)) {
+      return;
+    }
+    processedCells.add(cellKey);
+    
+    if (!meterGridMap.has(gridKey)) {
+      meterGridMap.set(gridKey, {
+        roadZValues: [],
+        positions: [],
+        count: 0,
+        validCount: 0
+      });
+    }
+    
+    const gridData = meterGridMap.get(gridKey);
+    if (gridData) {
+      gridData.roadZValues.push(data.roadZ);
+      if (data.meterX !== undefined && data.meterY !== undefined) {
+        gridData.positions.push({ x: data.meterX, y: data.meterY });
+      }
+      gridData.count += 1;
+      
+      // 유효한 데이터만 카운트 (255가 아닌 값)
+      if (data.roadZ !== ROAD_Z_DEFAULT_VALUE) {
+        gridData.validCount += 1;
+      }
+    }
+  });
+  
+  // 집계된 데이터를 0.1m x 0.1m 저장소에 저장
+  meterGridMap.forEach((gridData, gridKey) => {
+    if (gridData.validCount === 0) return; // 유효한 데이터가 없으면 스킵
+    
+    // road_z 값들의 평균 계산
+    // *** To-Do: 테스트 후 이상 있으면 수정해야 함 *** 
+    const validRoadZValues = gridData.roadZValues.filter(
+      z => z !== ROAD_Z_DEFAULT_VALUE
+    );
+
+    const averageRoadZ = validRoadZValues.length > 0
+      ? Math.round(
+          validRoadZValues.reduce((sum, val) => sum + val, 0) /
+          validRoadZValues.length
+        )
+      : ROAD_Z_DEFAULT_VALUE;
+
+    // 🔥 평균값 기준으로 필터
+    if (averageRoadZ > 6 && averageRoadZ < 15) {
+      return; // 6 초과 15 미만이면 저장 자체를 안함
+    }
+    
+    // 0.1m x 0.1m 셀의 중심 좌표 (미터 단위)
+    const [meterX, meterY] = gridKey.split('_').map(Number);
+    
+    meterGridDataStore.push({
+      x: meterX,
+      y: meterY,
+      roadZ: averageRoadZ,
+      count: gridData.count,
+      validCount: gridData.validCount,
+      lastUpdated: Date.now()
+    });
+  });
+};
+
+// 차량 위치 기반으로 road_z 데이터를 맵 좌표로 변환 (새로운 정의에 맞춤)
+const processRoadZData = (vehicleData: HubDataObject): void => {
+  if (!vehicleData.road_z || vehicleData.road_z.length === 0) {
+    // console.log('⚠️ [processRoadZData] road_z 데이터가 없거나 비어있음');
+    return;
+  }
+
+  // 누적 방식: 기존 데이터 유지하고 새 데이터 추가
+  // roadZDataStore.length = 0; // 주석 처리하여 누적 방식으로 변경
+
+  // 차량의 GPS 좌표를 맵 좌표로 변환 (미터 단위)
+  const { utmX: vehicleUtmX, utmY: vehicleUtmY } = GPStoUTM(vehicleData.position_long, vehicleData.position_lat);
+  const vehicleMapX = vehicleUtmX - originX; // 미터 단위
+  const vehicleMapY = vehicleUtmY - originY; // 미터 단위
+
+  const vehiclePosition = {
+    x: vehicleMapX,
+    y: vehicleMapY
+  };
+
+  // 새로운 정의: 차량 전방 0.4M x 1M 영역 (데드존 0.3M 제외) - 1/10 크기
+  // 4000개 데이터를 모두 사용하되, 표시 영역만 1/10로 압축
+  const gridWidth = 40; // 4M / 0.1M = 40개 셀 (원본과 동일)
+  const gridHeight = 100; // 10M / 0.1M = 100개 셀 (원본과 동일)
+  const displayScale = 0.1; // 표시 크기를 1/10로 압축
+  
+  // 차량의 방향 (yaw)을 고려하여 그리드 방향 결정
+  const vehicleYaw = vehicleData.yaw || 0;
+  const yawRad = vehicleYaw * Math.PI / 180.0;
+  
+  let validDataCount = 0;
+  let processedDataCount = 0;
+
+  // 각 그리드 셀의 상대 위치 계산 (데이터 샘플링 적용)
+  for (let row = 0; row < gridHeight; row += 1) {
+    for (let col = 0; col < gridWidth; col += 1) {
+      // 차량 전방 0.4m * 0.3m (실제 셀 기준 30개 행 * 40개 열 = 1200개) 영역은 빈 공간으로 둠
+      if (row < 30) {
+        // eslint-disable-next-line no-continue
+        continue;
+      }
+      
+      // road_z 데이터는 데드존(1200개)을 제외한 2800개가 들어오므로 인덱스 조정
+      const index = (row - 30) * gridWidth + col;
+      
+      if (index >= vehicleData.road_z.length) {
+        // eslint-disable-next-line no-continue
+        continue;
+      }
+      
+      // 데이터 샘플링: 3개당 1개만 선택 (33% 샘플링)
+      if (index % SAMPLE_RATE !== 0) {
+        // eslint-disable-next-line no-continue
+        continue;
+      }
+      
+      const roadZ = vehicleData.road_z[index];
+      processedDataCount += 1;
+      
+      // 기본값(255)인 경우 스킵
+      if (roadZ === ROAD_Z_DEFAULT_VALUE) {
+        // eslint-disable-next-line no-continue
+        continue;
+      }
+      
+      // 유효한 범주 값인지 확인 (0-22 범위)
+      if (roadZ < 0 || roadZ > 22) {
+        console.warn(`⚠️ [processRoadZData] 유효하지 않은 road_z 값: ${roadZ} (유효 범위: 0-22)`);
+        // eslint-disable-next-line no-continue
+        continue;
+      }
+      
+      validDataCount += 1;
+      
+      // 그리드 셀의 상대 좌표 (차량 중심 기준, 10cm 단위)
+      // col: 좌우 방향 (-2M ~ +2M), row: 전방 방향 (0M ~ 10M)
+      // 표시할 때는 1/10 크기로 압축
+      const relativeX = (col - gridWidth / 2) * ROAD_Z_GRID_SIZE * displayScale; // 좌우 방향 (1/10 압축)
+      const relativeY = row * ROAD_Z_GRID_SIZE * displayScale; // 전방 방향 (1/10 압축)
+      
+      // 전방 0.4m * 0.3m 로직에서 이미 제외했으므로, 기존 데드존 로직은 그대로 두거나 생략 가능하지만 안전을 위해 유지합니다.
+      if (relativeY < ROAD_Z_DEADZONE * displayScale) {
+        // eslint-disable-next-line no-continue
+        continue;
+      }
+      
+      // 차량 방향을 고려한 좌표 변환
+      const rotatedX = relativeX * Math.cos(yawRad) - relativeY * Math.sin(yawRad);
+      const rotatedY = relativeX * Math.sin(yawRad) + relativeY * Math.cos(yawRad);
+      
+      // 상대 좌표를 절대 좌표로 변환 (미터 단위)
+      const absoluteX = vehiclePosition.x + rotatedX;
+      const absoluteY = vehiclePosition.y + rotatedY;
+      
+      // WGS84 좌표로 변환 (노면데이터용)
+      const wgs84Coords = convertRoadPositionToWgs84(absoluteX, absoluteY);
+      
+      // 데이터 저장 (WGS84 좌표와 미터 좌표 모두 저장)
+      roadZDataStore.push({
+        x: wgs84Coords.lon,
+        y: wgs84Coords.lat,
+        roadZ,
+        timestamp: Date.now(),
+        // 1m x 1m 집계를 위한 미터 단위 좌표 추가
+        meterX: absoluteX, // 이미 미터 단위
+        meterY: absoluteY
+      });
+    }
+  }
+};
+
+// roadz 데이터 표시 제거 함수
+const removeRoadZFeatures = (): void => {
+  const allFeatures = osVector.getFeatures();
+  const roadZFeaturesToRemove: OlFeature[] = [];
+  
+  allFeatures.forEach((feature) => {
+    const featureId = feature.getId() as string;
+    if (featureId && featureId.startsWith('metergrid_')) {
+      roadZFeaturesToRemove.push(feature);
+    }
+  });
+  
+  roadZFeaturesToRemove.forEach((feature) => {
+    osVector.removeFeature(feature);
+  });
+};
+
+// 1m x 1m 셀 노면 heatmap 그리기 (성능 개선)
+const drawMeterGridHeatmap = (): void => {
+  if (meterGridDataStore.length === 0) {
+    // console.log('⚠️ [drawMeterGridHeatmap] 1m x 1m 데이터가 없음');
+    return;
+  }
+  
+  // 기존 노면 데이터 제거
+  removeRoadZFeatures();
+  
+  // 새로운 0.3m x 0.3m 노면 데이터 그리기
+  meterGridDataStore.forEach((data, index) => {
+    // 0.1m x 0.1m 셀을 WGS84 좌표로 변환 (노면데이터용)
+    const wgs84Coords = convertRoadPositionToWgs84(data.x, data.y);
+    
+    // 사각형 폴리곤 생성 (1m x 1m 셀)
+    // 1m를 도 단위로 변환 (대략 1/111000도)
+    const polygonCoords = createRectanglePolygon(wgs84Coords.lon, wgs84Coords.lat, METER_GRID_SIZE / 111000);
+    const meterGridPolygon = new OlFeature({
+      geometry: new Polygon([polygonCoords.map(coord => fromLonLat(coord))]),
+    });
+    
+    const featureId = `metergrid_${Date.now()}_${index}`;
+    meterGridPolygon.setId(featureId);
+    
+    // 색상 계산 및 스타일 적용 (road_z는 0~22 범위의 범주 값)
+    const color = getRoadZColor(data.roadZ);
+    
+    const meterGridStyle = new Style({
+      fill: new Fill({ 
+        color 
+      }),
+      // stroke 제거하여 블럭같은 느낌 없애기
+    });
+    
+    meterGridPolygon.setStyle(meterGridStyle);
+    osVector.addFeature(meterGridPolygon);
+  });
+};
+
+const toggleRoadZBtn = (): void => {
+  isroadZOn.value = !isroadZOn.value;
+  
+  // off 상태일 때 roadz 데이터 제거 및 초기화
+  if (!isroadZOn.value) {
+    removeRoadZFeatures();
+    clearRoadZData();
+  }
+};
+
+
+// 텔레컨스 사이트에만 간단한 그리드 효과 그리기 (고정된 선 개수)
+const drawTeleconsGrid = (): void => {
+  // 텔레컨스 사이트가 아닌 경우 그리드 그리지 않음
+  if (workInfo.value.name !== '텔레컨스') {
+    return;
+  }
+
+  // 이미 그리드가 그려져 있는지 확인
+  const existingGrid = osVector.getFeatureById('grid_telecons');
+  if (existingGrid) {
+    return; // 이미 그려져 있으면 중복 그리기 방지
+  }
+
+  // 작업영역 경계 좌표 가져오기
+  const boundaryCoords = workInfo.value.coordinates;
+  if (!boundaryCoords || boundaryCoords.length < 3) {
+    return;
+  }
+
+  // 작업영역 경계선은 그리지 않음 (그리드만 표시)
+
+  // 2. 작업영역의 방향(회전) 계산
+  // 첫 번째와 두 번째 점을 연결하는 선의 각도 계산
+  const dx = boundaryCoords[1][0] - boundaryCoords[0][0];
+  const dy = boundaryCoords[1][1] - boundaryCoords[0][1];
+  const rotationAngle = Math.atan2(dy, dx);
+  
+  // 3. 작업영역의 중심점 계산
+  const centerX = boundaryCoords.reduce((sum, coord) => sum + coord[0], 0) / boundaryCoords.length;
+  const centerY = boundaryCoords.reduce((sum, coord) => sum + coord[1], 0) / boundaryCoords.length;
+
+  // 4. 작업영역의 크기 계산 (회전된 좌표계 기준)
+  // 경계의 최소/최대 좌표를 회전된 좌표계로 변환
+  const rotatedCoords = boundaryCoords.map(coord => {
+    const x = coord[0] - centerX;
+    const y = coord[1] - centerY;
+    const rotatedX = x * Math.cos(-rotationAngle) - y * Math.sin(-rotationAngle);
+    const rotatedY = x * Math.sin(-rotationAngle) + y * Math.cos(-rotationAngle);
+    return [rotatedX, rotatedY];
+  });
+  
+  const rotatedMinX = Math.min(...rotatedCoords.map(coord => coord[0]));
+  const rotatedMaxX = Math.max(...rotatedCoords.map(coord => coord[0]));
+  const rotatedMinY = Math.min(...rotatedCoords.map(coord => coord[1]));
+  const rotatedMaxY = Math.max(...rotatedCoords.map(coord => coord[1]));
+
+  // 5. 그리드 셀을 사각형으로 생성 (장애물 위치에 따른 색상 변경 가능)
+  const verticalSpacing = (rotatedMaxX - rotatedMinX) / 20;
+  const horizontalSpacing = (rotatedMaxY - rotatedMinY) / 10;
+  
+  // 각 그리드 셀을 사각형으로 생성
+  for (let row = 0; row < 10; row += 1) {
+    for (let col = 0; col < 20; col += 1) {
+      const rotatedX1 = rotatedMinX + (verticalSpacing * col);
+      const rotatedX2 = rotatedMinX + (verticalSpacing * (col + 1));
+      const rotatedY1 = rotatedMinY + (horizontalSpacing * row);
+      const rotatedY2 = rotatedMinY + (horizontalSpacing * (row + 1));
+      
+      // 회전된 좌표를 실제 좌표로 변환 (4개 꼭지점)
+      const corners = [
+        [rotatedX1, rotatedY1], [rotatedX2, rotatedY1],
+        [rotatedX2, rotatedY2], [rotatedX1, rotatedY2]
+      ].map(([rx, ry]) => [
+        centerX + rx * Math.cos(rotationAngle) - ry * Math.sin(rotationAngle),
+        centerY + rx * Math.sin(rotationAngle) + ry * Math.cos(rotationAngle)
+      ]);
+      
+             const gridCell = new OlFeature({
+         geometry: new Polygon([corners]),
+       });
+      
+      const gridId = `grid_cell_${row}_${col}`;
+      gridCell.setId(gridId);
+      
+      // 기본 그리드 셀 스타일
+      const gridStyle = new Style({
+        fill: new Fill({
+          color: 'rgba(240, 208, 146, 0.1)', // 매우 연한 베이지색
+        }),
+        stroke: new Stroke({
+          color: '#F0D092', // 베이지색 테두리
+          width: 1,
+        }),
+      });
+      
+             gridCell.setStyle(gridStyle);
+       osVector.addFeature(gridCell);
+     }
+   }
+ };
+
+
 // 실제 데이터가 처음 들어왔는지 추적
 let isFirstDataReceived = false;
 
 // 메인 센싱 데이터 처리 함수 (통합)
 const processSensingData = (data: HubDataObject): void => {
   try {
+    console.log('🔍 차량 id:', data.vehicle_id, '장애물 리스트:', data.obstacle);
     // vehicle_state가 2(fail)인지 확인
     if (data.vehicle_state === 2) {
-      messageBox('error', '현장 확인이 필요합니다');
-      // eslint-disable-next-line @typescript-eslint/no-use-before-define
-      resetMission();
+      // 이미 에러 메시지를 표시한 경우 중복 알림 방지
+      if (!vehicleStateErrorShown) {
+        // 토스트가 닫힐 때 플래그 초기화 및 미션 리셋 (사용자가 닫은 경우에만)
+        messageBox('error', '현장 확인이 필요합니다', () => {
+          vehicleStateErrorShown = false;
+          // eslint-disable-next-line @typescript-eslint/no-use-before-define
+          resetMission(); // 알림창이 닫힌 후에 resetMission 호출
+        });
+        vehicleStateErrorShown = true;
+      }
       return;
     }
     
@@ -1964,8 +2044,8 @@ const processSensingData = (data: HubDataObject): void => {
   
   // 융합된 장애물 리스트를 지도에 표시
   // eslint-disable-next-line @typescript-eslint/no-use-before-define
-  drawObstacle(obstacleList);
-  
+  drawObstacle(obstacleList, data.vehicle_id || 'unknown');
+
   // 텔레컨스 사이트 그리드 효과 그리기
   drawTeleconsGrid();
   
@@ -2058,7 +2138,7 @@ const SITE_ABSOLUTE_COORDINATE = [14087278.085107934, 4292292.6313868845];
 // 차량 상태를 workInfo의 vehicleInfo에 업데이트
 const setVehicleState = (vehicleData: any): void => {
   // vehicle_id 추출
-  const vehicleId = vehicleData.vehicle_id;
+  const vehicleId = String(vehicleData.vehicle_id);
   if (!vehicleId) return;
 
   // 실제 데이터가 들어온 차량으로 표시
@@ -2091,7 +2171,7 @@ const setVehicleState = (vehicleData: any): void => {
     ...mappedData, // 실제 데이터로 업데이트
     // 차량 타입 정보 (기존에 없으면 새로 설정, 있으면 유지)
     type: existingVehicleData.type || vehicleType,
-    vehicle_type: (existingVehicleData as any).vehicle_type || vehicleType,
+    vehicle_type: existingVehicleData.vehicle_type || vehicleType,
     // vehicle_id는 항상 최신 값으로 업데이트
     vehicle_id: vehicleId,
   };
@@ -2105,12 +2185,6 @@ const setVehicleState = (vehicleData: any): void => {
     },
   };
 };
-
-// 장애물 감지 여부(보조차량 기준으로 특정 거리 안에 있는지 감지)
-const isNearBySub = (obstacleCoord: number[]): boolean => {
-  const distance = Math.sqrt(obstacleCoord[0] ** 2 + obstacleCoord[1] ** 2);
-  return distance < DETECT_DIST_LIMIT;
-}
 
 // 점이 폴리곤 내부에 있는지 확인하는 함수 (Ray Casting 알고리즘)
 const isPointInsidePolygon = (point: [number, number], polygon: number[][]): boolean => {
@@ -2136,16 +2210,13 @@ const isPointInsidePolygon = (point: [number, number], polygon: number[][]): boo
   return inside;
 }
 
-function drawObstacle(fusionList: ObstacleData[]): void {
+function drawObstacle(fusionList: ObstacleData[], vehicleId: string = 'unknown'): void {
   // 융합 리스트가 비어있으면 기존 상태 유지 (장애물 제거하지 않음)
   if (!fusionList || fusionList.length === 0) {
     console.log('📭 [drawObstacle] 융합 리스트가 비어있음 - 기존 장애물 상태 유지 (제거하지 않음)');
     // 빈 리스트일 때는 아무것도 하지 않음 (기존 장애물 유지)
     return;
   }
-  
-  // 디버깅 로그 (필요시만 활성화)
-  // console.log('🎯 [drawObstacle] 시작 - fusionList 길이:', fusionList.length);
   
   // 기존 장애물 맵 생성 (ID로 빠른 검색) - 제거하지 않고 유지
   const allFeatures = osVector.getFeatures();
@@ -2160,6 +2231,7 @@ function drawObstacle(fusionList: ObstacleData[]): void {
   
   // 현재 fusionList에 있는 장애물 ID 추적
   const currentObstacleIds = new Set<string>();
+  const renderedObstacles: ObstacleData[] = [];
   
   let processedCount = 0;
   let skippedCount = 0;
@@ -2192,7 +2264,6 @@ function drawObstacle(fusionList: ObstacleData[]): void {
     const obstacleProperties = getObstacleProperties(obs.obstacle_class);
     if (!obstacleProperties) {
       skippedCount += 1;
-      // console.log('⚠️ [drawObstacle] obstacleProperties 없음:', obs.obstacle_class);
       return;
     }
     
@@ -2211,7 +2282,6 @@ function drawObstacle(fusionList: ObstacleData[]): void {
         if (!isInside) {
           // 바운더리 밖에 있으면 표시하지 않음
           skippedCount += 1;
-          // console.log('⚠️ [drawObstacle] 바운더리 밖:', obs.obstacle_id, obs.obstacle_class);
           return;
         }
       } catch (error) {
@@ -2223,6 +2293,7 @@ function drawObstacle(fusionList: ObstacleData[]): void {
     const obstaclePosition = fromLonLat([rotatedLon, rotatedLat]);
     const obsId = `obstacle_${obs.obstacle_id || 'unknown'}`;
     currentObstacleIds.add(obsId);
+    renderedObstacles.push(obs);
     
     // 같은 ID의 장애물이 이미 있는지 확인
     const existingObstacle = existingObstacles.get(obsId);
@@ -2236,32 +2307,10 @@ function drawObstacle(fusionList: ObstacleData[]): void {
       }
       existingObstacle.set('obstacleData', obs);
       
-      // 스타일 업데이트 (디버깅 모드 변경 대응)
+      // 스타일 업데이트 (디버깅 모드 변경 대응, 클릭 여부 확인)
       const scale = getScaleForZoom(olMap.getView().getZoom() || 8);
-      let iconStyle;
-      if (isDebugging.value) {
-        iconStyle = new Style({
-          image: new Icon({
-            src: iconSource,
-            scale,
-          }),
-          text: new Text({
-            text: `ID: ${obs.obstacle_id || 'N/A'}\n(${obs.fused_position_x.toFixed(2)}, ${obs.fused_position_y.toFixed(2)})`,
-            font: '12px Arial',
-            fill: new Fill({ color: '#fff' }),
-            stroke: new Stroke({ color: '#000', width: 2 }),
-            offsetY: -30,
-            textAlign: 'center',
-          }),
-        });
-      } else {
-        iconStyle = new Style({
-          image: new Icon({
-            src: iconSource,
-            scale,
-          }),
-        });
-      }
+      const isSelected = selectedObstacles.value.has(existingObstacle as OlFeature<OlPoint>);
+      const iconStyle = createObstacleStyle(iconSource, scale, obs, isSelected);
       existingObstacle.setStyle(iconStyle);
     } else {
       // 새로운 장애물 생성 (추가)
@@ -2274,45 +2323,25 @@ function drawObstacle(fusionList: ObstacleData[]): void {
       osVector.addFeature(newObstacle);
       
       const scale = getScaleForZoom(olMap.getView().getZoom() || 8);
-      let iconStyle;
-      if (isDebugging.value) {
-        iconStyle = new Style({
-          image: new Icon({
-            src: iconSource,
-            scale,
-          }),
-          text: new Text({
-            text: `ID: ${obs.obstacle_id || 'N/A'}\n(${obs.fused_position_x.toFixed(2)}, ${obs.fused_position_y.toFixed(2)})`,
-            font: '12px Arial',
-            fill: new Fill({ color: '#fff' }),
-            stroke: new Stroke({ color: '#000', width: 2 }),
-            offsetY: -30,
-            textAlign: 'center',
-          }),
-        });
-      } else {
-        iconStyle = new Style({
-          image: new Icon({
-            src: iconSource,
-            scale,
-          }),
-        });
-      }
+      const isSelected = selectedObstacles.value.has(newObstacle);
+      const iconStyle = createObstacleStyle(iconSource, scale, obs, isSelected);
       newObstacle.setStyle(iconStyle);
     }
   });
-  
-  // 디버깅 로그 (필요시만 활성화)
-  // console.log('🎯 [drawObstacle] 완료 - 처리:', processedCount, '새로 추가:', newCount, '업데이트:', updatedCount, '스킵:', skippedCount);
-  
+    
   // 더 이상 존재하지 않는 장애물만 제거 (ID가 다른 경우만)
   existingObstacles.forEach((feature, featureId) => {
     if (!currentObstacleIds.has(featureId)) {
       osVector.removeFeature(feature);
     }
   });
+
+  // eslint-disable-next-line @typescript-eslint/no-use-before-define
+  missionDataCollector.updateObservedObstacles(vehicleId, renderedObstacles);
+  syncDebugTableFromMap();
 }
 
+// 장애물 스타일 생성 함수 (클릭 여부에 따라 배경색 추가)
 // 디버깅 모드 변경 시 장애물 스타일 업데이트
 const updateObstacleStyles = (): void => {
   const allFeatures = osVector.getFeatures();
@@ -2327,32 +2356,9 @@ const updateObstacleStyles = (): void => {
         
         const { iconSource } = obstacleProperties;
         const scale = getScaleForZoom(olMap.getView().getZoom() || 8);
+        const isSelected = selectedObstacles.value.has(feature as OlFeature<OlPoint>);
         
-        let iconStyle;
-        if (isDebugging.value) {
-          iconStyle = new Style({
-            image: new Icon({
-              src: iconSource,
-              scale,
-            }),
-            text: new Text({
-              text: `ID: ${obstacleData.obstacle_id || 'N/A'}\n(${obstacleData.fused_position_x.toFixed(2)}, ${obstacleData.fused_position_y.toFixed(2)})`,
-              font: '12px Arial',
-              fill: new Fill({ color: '#fff' }),
-              stroke: new Stroke({ color: '#000', width: 2 }),
-              offsetY: -30,
-              textAlign: 'center',
-            }),
-          });
-        } else {
-          iconStyle = new Style({
-            image: new Icon({
-              src: iconSource,
-              scale,
-            }),
-          });
-        }
-        
+        const iconStyle = createObstacleStyle(iconSource, scale, obstacleData, isSelected);
         feature.setStyle(iconStyle);
       }
     }
@@ -2360,12 +2366,16 @@ const updateObstacleStyles = (): void => {
 };
 
 // 차량 디버깅 스타일 업데이트 함수
-const updateVehicleDebugStyle = (marker: OlFeature<Point>, vehicleId: string): void => {
-  const scale = getScaleForZoom(olMap.getView().getZoom() || 8);
-  
+const updateVehicleDebugStyle = (marker: OlFeature<Point>, vehicleId: string): void => {  
   // 기존 스타일 가져오기
-  const existingStyle = marker.getStyle();
+  let existingStyle = marker.getStyle();
   if (!existingStyle) return;
+
+  if (Array.isArray(existingStyle)) {
+    // eslint-disable-next-line prefer-destructuring
+    existingStyle = existingStyle[0];
+  }
+  if (typeof existingStyle === 'function') return;
   
   // 아이콘 스타일 복사
   const iconStyle = existingStyle.getImage();
@@ -2402,11 +2412,17 @@ const updateVehicleStyles = (): void => {
       const vehicleId = featureId.replace('vehicle', '');
       
       if (isDebugging.value) {
-        updateVehicleDebugStyle(feature, vehicleId);
+        updateVehicleDebugStyle(feature as OlFeature<Point>, vehicleId);
       } else {
         // 디버깅 모드가 아닐 때는 원래 아이콘만 표시
-        const existingStyle = feature.getStyle();
+        let existingStyle = feature.getStyle();
         if (existingStyle) {
+          if (Array.isArray(existingStyle)) {
+            // eslint-disable-next-line prefer-destructuring
+            existingStyle = existingStyle[0];
+          }
+          if (typeof existingStyle === 'function') return;
+
           const iconStyle = existingStyle.getImage();
           if (iconStyle) {
             feature.setStyle(new Style({ image: iconStyle }));
@@ -2417,203 +2433,6 @@ const updateVehicleStyles = (): void => {
   });
 };
 
-// origin 좌표를 동적으로 계산하는 함수 (C++ 코드와 동일)
-const calculateOriginFromBoundary = (): void => {
-  if (!workInfo.value?.coordinates || workInfo.value.coordinates.length === 0) {
-    console.warn('[calculateOriginFromBoundary] workInfo.coordinates가 없습니다.');
-    return;
-  }
-
-  // boundary 좌표를 WGS84로 변환
-  const boundaryCoords = workInfo.value.coordinates.map(coord => {
-    const [lon, lat] = toLonLat(coord);
-    return {
-      x: parseFloat(lon.toFixed(12)),
-      y: parseFloat(lat.toFixed(13))
-    };
-  });
-
-  if (boundaryCoords.length === 0) {
-    console.warn('[calculateOriginFromBoundary] 변환된 좌표가 없습니다.');
-    return;
-  }
-
-  // min/max 계산
-  let minLon = boundaryCoords[0].x;
-  let minLat = boundaryCoords[0].y;
-  let maxLon = boundaryCoords[0].x;
-  let maxLat = boundaryCoords[0].y;
-
-  for (let i = 1; i < boundaryCoords.length; i += 1) {
-    minLon = boundaryCoords[i].x < minLon ? boundaryCoords[i].x : minLon;
-    minLat = boundaryCoords[i].y < minLat ? boundaryCoords[i].y : minLat;
-    maxLon = boundaryCoords[i].x > maxLon ? boundaryCoords[i].x : maxLon;
-    maxLat = boundaryCoords[i].y > maxLat ? boundaryCoords[i].y : maxLat;
-  }
-
-  // GPS를 UTM으로 변환하여 origin 설정
-  const { utmX: minUtmX, utmY: minUtmY } = GPStoUTM(minLon, minLat);
-  const { utmX: maxUtmX, utmY: maxUtmY } = GPStoUTM(maxLon, maxLat);
-
-  // origin은 min_utm 좌표로 설정 (C++ 코드와 동일)
-  originX = minUtmX;
-  originY = minUtmY;
-
-  const mapX = (maxUtmX - minUtmX) * 10;
-  const mapY = (maxUtmY - minUtmY) * 10;
-};
-
-// 동적으로 work_info 생성하는 함수 (선택된 개별 차량만 포함)
-const generateWorkInfo = (): WorkInformation => {
-  const mainVehicles: VehicleMetaInfo[] = [];
-  const subVehicles: VehicleMetaInfo[] = [];
-
-  // 선택된 개별 차량만 처리
-  selectedVehicles.value.forEach((vehicleId: string) => {
-    if (!workInfo.value.vehicleInfo[vehicleId]) {
-      return;
-    }
-
-    // 메인 차량인지 보조 차량인지 판단
-    const isMainVehicle = vehicleId.includes('F');
-    
-    if (isMainVehicle) {
-      mainVehicles.push({
-        length: VEHICLE_DIMENSIONS.MAIN.length,
-        width: VEHICLE_DIMENSIONS.MAIN.width,
-        id: vehicleId
-      });
-    } else {
-      subVehicles.push({
-        length: VEHICLE_DIMENSIONS.SUB.length,
-        width: VEHICLE_DIMENSIONS.SUB.width,
-        id: vehicleId
-      });
-    }
-  });
-
-  // 좌표를 왼쪽 상단부터 반시계 방향으로 정렬하는 함수
-  const sortCoordinatesCounterClockwise = (coords: {x: number, y: number}[]): {x: number, y: number}[] => {
-    if (coords.length < 3) return coords;
-
-    // 1. 중심점 계산
-    const centerPoint = {
-      x: coords.reduce((sum, c) => sum + c.x, 0) / coords.length,
-      y: coords.reduce((sum, c) => sum + c.y, 0) / coords.length
-    };
-
-    // 2. 각 점을 중심점 기준으로 각도 계산하여 정렬 (반시계 방향)
-    const sortedCoords = coords.slice().sort((a, b) => {
-      const angleA = Math.atan2(a.y - centerPoint.y, a.x - centerPoint.x);
-      const angleB = Math.atan2(b.y - centerPoint.y, b.x - centerPoint.x);
-      return angleA - angleB; // 반시계 방향
-    });
-
-    // 3. 왼쪽 상단 점 찾기 (가장 작은 x, 그 중에서 가장 큰 y)
-    let topLeftIndex = 0;
-    for (let i = 1; i < sortedCoords.length; i += 1) {
-      const current = sortedCoords[i];
-      const topLeft = sortedCoords[topLeftIndex];
-      if (current.x < topLeft.x || (current.x === topLeft.x && current.y > topLeft.y)) {
-        topLeftIndex = i;
-      }
-    }
-
-    // 4. 왼쪽 상단 점이 첫 번째가 되도록 배열 회전
-    return [...sortedCoords.slice(topLeftIndex), ...sortedCoords.slice(0, topLeftIndex)];
-  };
-
-  // working_area_boundary 생성 및 origin 좌표 계산
-  const boundaryCoords = (() => {
-    const coords = workInfo.value.coordinates.map(coord => ({
-      x: parseFloat(toLonLat(coord)[0].toFixed(12)),
-      y: parseFloat(toLonLat(coord)[1].toFixed(13))
-    }));
-    
-    // 마지막 좌표가 첫 번째와 동일한 경우 제거
-    if (coords.length > 1 && 
-        coords[0].x === coords[coords.length - 1].x && 
-        coords[0].y === coords[coords.length - 1].y) {
-      coords.pop();
-    }
-    
-    // 왼쪽 상단부터 반시계 방향으로 정렬
-    return sortCoordinatesCounterClockwise(coords);
-  })();
-
-  // origin 좌표 계산 (C++ 코드와 동일)
-  calculateOriginFromBoundary();
-
-  return {
-    main_vehicle: mainVehicles,
-    sub_vehicle: subVehicles,
-    working_area_boundary: boundaryCoords,
-    timestamp: Date.now(),
-    type: 1
-  };
-};
-
-// 실제 임무대기 실행 (차량 선택 후)
-const executeStandbyMission = (): void => {
-  if (natsConnection.value) {
-    // 선택된 차량으로 work_info 생성
-    const dynamicWorkInfo = generateWorkInfo();
-    
-    // 임무 정보 생성
-    const missionData = {
-      mission_name: 'work',
-      dest_lat: missionInfo.value.latitude,
-      dest_lon: missionInfo.value.longitude,
-      work_info: dynamicWorkInfo
-    };
-    
-    const generateGlobalPath = JSON.stringify([missionData]);
-    
-    // command.ready 토픽으로 경로 정보 전송
-    const topic = 'command.ready';
-    
-    try {
-      natsConnection.value.publish(
-        topic,
-        stringCodec.value?.encode(generateGlobalPath)
-      );
-      console.log(`✅ NATS 임무대기 메시지 발행 성공 - 토픽: ${topic}`);
-      console.log(`📤 발행된 메시지: ${generateGlobalPath}`);
-      
-      // 임무대기 상태로 설정
-      missionStandby.value = true;
-      messageBox('success', `임무대기 상태가 되었습니다. (총 ${selectedVehicles.value.length}대 차량)`);
-    } catch (error) {
-      messageBox('error', 'NATS 메시지 전송에 실패했습니다.');
-    }
-  } else {
-    messageBox('error', 'NATS 연결이 되어있지 않습니다.');
-  }
-}
-
-// 차량 선택 모달 열기
-const openVehicleSelectModal = (): void => {
-  // 기존 선택 초기화
-  selectedVehicles.value = [];
-  $vehicleSelectModal.value.onState();
-};
-
-// 차량 선택 모달 닫기
-const closeVehicleSelectModal = (): void => {
-  $vehicleSelectModal.value.offState();
-};
-
-// 차량 선택 확인
-const confirmVehicleSelection = (): void => {
-  closeVehicleSelectModal();
-  // 실제 임무대기 실행
-  executeStandbyMission();
-};
-
-// 임무대기 버튼 클릭 - 차량 선택 모달 열기
-const standbyMission = (): void => {
-  openVehicleSelectModal();
-};
 
 const hubData: Ref<HubDataObject> = ref({} as HubDataObject);
 
@@ -2707,22 +2526,18 @@ const consumeMessage = async (sub: Subscription): Promise<void> => {
         if (!isFirstDataReceived && data.vehicle_id) {
           isFirstDataReceived = true;
           workInfo.value.vehicleInfo = {};
-          console.log('🔄 [consumeMessage] 첫 데이터 수신 - workInfo.vehicleInfo 리셋');
         }
-        
-        // 디버깅 로그 (필요시만 활성화)
-        // console.log('📦 센싱 데이터 수신:', data);
+
         hubData.value = data;
         
         // 임무 데이터 수집 (센싱 데이터가 있을 때만) // 데이터 수집 관련 모듈 주석 처리 (리포트)
-        // if (missionDataCollector.isActive()) {
-        //   missionDataCollector.addDataPoint(data as HubDataObject);
-        // }
+        if (missionDataCollector.isActive()) {
+          missionDataCollector.addDataPoint(data as HubDataObject);
+        }
         
         // vehicle_state가 2인 경우 resetMission 후 setHubData 호출하지 않음
         if (data.vehicle_state === 2) {
           processSensingData(hubData.value); // resetMission 호출됨
-          console.log('🚨 [consumeMessage] vehicle_state: 2 감지 - setHubData 호출 건너뜀');
         } else {
           processSensingData(hubData.value); // 새로운 융합 로직 적용
           // eslint-disable-next-line @typescript-eslint/no-use-before-define
@@ -2747,20 +2562,20 @@ const consumeMessage = async (sub: Subscription): Promise<void> => {
       }
       // 경로 (텔레컨스 사이트에서는 건너뜀 - 전용 토픽 사용)
       if (Object.keys(data).includes('route') && workInfo.value.name !== '텔레컨스') {
-        console.log("Global Path created")
+        console.log(`Global Path created %c${data.vehicle_id}`, "color: #69eeff; font-weight: bold;");
         // console.log(`Global Path: ${msgData}`)
         // eslint-disable-next-line @typescript-eslint/no-use-before-define
         setGlobalPath(data);
         // 경로 성능 데이터 수집
         collectPathPerformanceData(data);
-      }
+      } 
       // 차량 상태(배터리, 신호)
       if (Object.keys(data).includes('battery_info')) {
-        console.log('🚘 carInfo 데이터 수신:', data);
+        // console.log('🚘 carInfo 데이터 수신:', data);
         setVehicleState(data);
       }
     } catch (e: unknown) {
-      // console.log(`skipped Data: ${msgData}, Error: ${e.stack}`);
+      console.error("Failed to parse NATS message:", e, msgData);
     }
     // printFeatures();
   }
@@ -2869,29 +2684,29 @@ const updateZoneGrid = (coordinates: Array<{position_long: number, position_lat:
   });
 }
 
-// 모든 그리드 셀 색상을 원래대로 복원
-const resetAllGridCellColors = (): void => {
-  const allFeatures = osVector.getFeatures();
-  const gridCells = allFeatures.filter(feature => {
-    const featureId = feature.getId() as string;
-    return featureId && featureId.startsWith('grid_cell_');
-  });
+// // 모든 그리드 셀 색상을 원래대로 복원
+// const resetAllGridCellColors = (): void => {
+//   const allFeatures = osVector.getFeatures();
+//   const gridCells = allFeatures.filter(feature => {
+//     const featureId = feature.getId() as string;
+//     return featureId && featureId.startsWith('grid_cell_');
+//   });
 
-  // 원래 그리드 스타일로 복원
-  const originalStyle = new Style({
-    fill: new Fill({
-      color: 'rgba(240, 208, 146, 0.1)', // 원래 그리드 색상
-    }),
-    stroke: new Stroke({
-      color: '#F0D092', // 원래 그리드 테두리 색상
-      width: 1,
-    }),
-  });
+//   // 원래 그리드 스타일로 복원
+//   const originalStyle = new Style({
+//     fill: new Fill({
+//       color: 'rgba(240, 208, 146, 0.1)', // 원래 그리드 색상
+//     }),
+//     stroke: new Stroke({
+//       color: '#F0D092', // 원래 그리드 테두리 색상
+//       width: 1,
+//     }),
+//   });
 
-  gridCells.forEach(gridCell => {
-    gridCell.setStyle(originalStyle);
-  });
-}
+//   gridCells.forEach(gridCell => {
+//     gridCell.setStyle(originalStyle);
+//   });
+// }
 
 // 텔레컨스 Zone(red, yellow, green) 구독
 const subscribeTeleconsZone = async (): Promise<void> => {
@@ -2905,7 +2720,6 @@ const subscribeTeleconsZone = async (): Promise<void> => {
           const zoneData = JSON.parse(msgData);
           
           if (Array.isArray(zoneData)) {
-            console.log('🔴 RedZone 데이터 수신:', zoneData);
             updateZoneGrid(zoneData as Array<{position_long: number, position_lat: number}>, 'red');
           }
         } catch (error) {
@@ -2925,7 +2739,6 @@ const subscribeTeleconsZone = async (): Promise<void> => {
           const zoneData = JSON.parse(msgData);
           
           if (Array.isArray(zoneData)) {
-            console.log('🟡 YellowZone 데이터 수신:', zoneData);
             updateZoneGrid(zoneData as Array<{position_long: number, position_lat: number}>, 'yellow');
           }
         } catch (error) {
@@ -2945,7 +2758,6 @@ const subscribeTeleconsZone = async (): Promise<void> => {
           const zoneData = JSON.parse(msgData);
           
           if (Array.isArray(zoneData)) {
-            console.log('🟢 GreenZone 데이터 수신:', zoneData);
             updateZoneGrid(zoneData as Array<{position_long: number, position_lat: number}>, 'green');
           }
         } catch (error) {
@@ -2984,8 +2796,6 @@ const updateTeleconsDestination = (vehicleId: string | number, positionLong: num
   vMap.addIcon(destFeature, destIcon);
   
   osVector.addFeature(destFeature);
-  
-  console.log(`🎯 텔레컨스 목적지 업데이트: vehicle_id=${vehicleId}, 좌표=[${positionLong}, ${positionLat}]`);
 };
 
 // 텔레컨스 목적지 구독
@@ -3001,7 +2811,6 @@ const subscribeTeleconsDestination = async (): Promise<void> => {
           if (planData && (typeof planData.vehicle_id === 'number' || typeof planData.vehicle_id === 'string') && 
               typeof planData.position_long === 'number' && 
               typeof planData.position_lat === 'number') {
-            console.log('🎯 RegenPlanResult 데이터 수신:', planData);
             updateTeleconsDestination(planData.vehicle_id, planData.position_long, planData.position_lat);
           }
         } catch (error) {
@@ -3028,6 +2837,31 @@ const generateRoute = (path: RoutePoint[]): Coordinate[] => {
 const availableColors = ['#FF69B4', '#c869ff', '#69eeff', '#69ff96', '#ff8269'];
 const vehicleColors = new Map<string, string>();
 
+// ---- Gradient helpers (line + point 공용, 차량 색상만 사용) ----
+const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
+const clamp01 = (t: number): number => Math.max(0, Math.min(1, t));
+
+const parseToRgb = (color: string): { r: number; g: number; b: number } => {
+  if (color.startsWith('#') && color.length === 7) {
+    return {
+      r: parseInt(color.slice(1, 3), 16),
+      g: parseInt(color.slice(3, 5), 16),
+      b: parseInt(color.slice(5, 7), 16),
+    };
+  }
+  const m = color.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+  if (m) return { r: Number(m[1]), g: Number(m[2]), b: Number(m[3]) };
+  return { r: 80, g: 80, b: 80 };
+};
+
+// 같은 차량색(baseColor)에서 alpha만 바꿔 그라데이션처럼 보이게 함 (색상 자체는 동일)
+const gradientRgbaForT = (baseColor: string, t: number, minAlpha = 0.15, maxAlpha = 1): string => {
+  const { r, g, b } = parseToRgb(baseColor);
+  const tt = clamp01(t);
+  const alpha = lerp(minAlpha, maxAlpha, tt);
+  return `rgba(${r},${g},${b},${alpha})`;
+};
+
 // 차량에 색상 할당 (이미 사용된 색 제외)
 const assignVehicleColor = (vehicleId: string): string => {  
   // 이미 할당된 색이 있으면 그대로 사용
@@ -3050,12 +2884,78 @@ const assignVehicleColor = (vehicleId: string): string => {
   return selectedColor;
 };
 
+const drawGradientPathBySegments = (
+  path: number[][],
+  baseColor: string,
+  vehicleId: string
+): void => {
+  // 두 점 사이의 거리 계산 함수
+  const calculateSegmentLength = (start: number[], end: number[]): number => {
+    const dx = end[0] - start[0];
+    const dy = end[1] - start[1];
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const segCount = path.length - 1;
+  if (segCount <= 0) return;
+
+  const denom = segCount > 1 ? (segCount - 1) : 1;
+  
+  // 점선 패턴 길이 (lineDash: [3, 3]이므로 패턴 하나의 길이는 6)
+  const dashPatternLength = 6;
+  let cumulativeOffset = 0;
+
+  for (let i = 0; i < segCount; i += 1) {
+    const t = i / denom;          // 0 ~ 1
+    // 차량 색상(baseColor)만 사용해서 alpha 그라데이션
+    const gradientColor = gradientRgbaForT(baseColor, t, 0.3, 1);
+
+    const segFeature = new OlFeature({
+      geometry: new OlLineString([
+        path[i],
+        path[i + 1],
+      ]),
+    });
+
+    segFeature.setId(`global_path_line_${vehicleId}_${i}`);
+
+    // 현재 세그먼트의 점선 오프셋 계산
+    const lineDashOffset = cumulativeOffset % dashPatternLength;
+
+    segFeature.setStyle(
+      new Style({
+        stroke: new Stroke({
+          color: gradientColor,
+          // 배경/위성지도에서 확실히 보이도록 두껍게 + 대시 길이 확대
+          width: 2 ,
+          lineDash: [3, 3],
+          lineDashOffset: -lineDashOffset, // 음수로 설정하여 패턴이 연속적으로 보이게 함
+        }),
+      })
+    );
+
+    osVector.addFeature(segFeature);
+
+    // 다음 세그먼트를 위한 누적 오프셋 업데이트
+    const segmentLength = calculateSegmentLength(path[i], path[i + 1]);
+    cumulativeOffset += segmentLength;
+  }
+};
+
 // 전역 경로 표시
-const setGlobalPath = (path: Path): void => {
+const setGlobalPath = (path: { vehicle_id: string | number; route: any[]; move_type?: number }): void => {
+  console.log('setGlobalPath', path);
   const globalPath = generateRoute(path.route);
   
-  // 차량별 색상 할당
+  // 경로 생성 이벤트 기록 (AI 분석용)
   const vehicleId = String(path.vehicle_id);
+  // move_type이나 현재 상태로 MOVE/WORK 판단
+  const currentState = edgeStatus.value || EdgeStatus.IDLE;
+  if (currentState === EdgeStatus.MOVE || currentState === EdgeStatus.WORK) {
+    missionDataCollector.recordPathGeneration(vehicleId, currentState as EdgeStatus.MOVE | EdgeStatus.WORK);
+  }
+  
+  // 차량별 색상 할당
   const vehicleColor = assignVehicleColor(vehicleId);
   
   // 기존 전역 경로 요소들 제거 (포인트와 라인 모두)
@@ -3077,23 +2977,13 @@ const setGlobalPath = (path: Path): void => {
     osVector.removeFeature(feature);
   });
   
-  // 경로 라인 생성 (가느다란 선)
+  // 그라데이션 점선 경로
   if (globalPath.length > 1) {
-    const pathLine = new OlFeature({
-      geometry: new OlLineString(globalPath),
-    });
-    pathLine.setId(`global_path_line_${path.vehicle_id}`);
-    
-    // 가느다란 선 스타일
-    const pathLineStyle = new Style({
-      stroke: new Stroke({
-        color: vehicleColor,
-        width: 2,
-        lineDash: [3, 3] // 점선 효과
-      }),
-    });
-    pathLine.setStyle(pathLineStyle);
-    osVector.addFeature(pathLine);
+    drawGradientPathBySegments(
+      globalPath,
+      vehicleColor,
+      String(path.vehicle_id)
+    );
   }
   
   // 각 경로 포인트를 개별 점으로 표시 (차량 ID 텍스트 포함)
@@ -3108,10 +2998,12 @@ const setGlobalPath = (path: Path): void => {
     
     // 점 스타일 적용 (텍스트 포함)
     const zoom = olMap.getView().getZoom() || 8;
+    const pointT = globalPath.length > 1 ? index / (globalPath.length - 1) : 1;
+    const pointFillColor = gradientRgbaForT(vehicleColor, pointT, 0.25, 1);
     const pointStyle = new Style({
       image: new CircleStyle({
         radius: getScaleForZoom(zoom) * 22,
-        fill: new Fill({ color: vehicleColor }),
+        fill: new Fill({ color: pointFillColor }),
         stroke: new Stroke({ color: '#FFFFFF', width: 1 }),
       }),
       text: new Text({
@@ -3138,9 +3030,7 @@ const subscribeTeleconsRoute = async (): Promise<void> => {
           const msgData = natsStore.stringCodec.decode(msg.data);
           const routeData = JSON.parse(msgData);
           
-          if (routeData && (typeof routeData.vehicle_id === 'number' || typeof routeData.vehicle_id === 'string') && Array.isArray(routeData.route)) {
-            console.log('🛣️ RegenRouteResult 데이터 수신:', routeData);
-            
+          if (routeData && (typeof routeData.vehicle_id === 'number' || typeof routeData.vehicle_id === 'string') && Array.isArray(routeData.route)) {            
             // 기존 경로 제거
             const allFeatures = osVector.getFeatures();
             for (const feature of allFeatures) {
@@ -3205,11 +3095,14 @@ const subscribe = async (): Promise<void> => {
     // 임무 데이터 수집 시작 // 데이터 수집 관련 모듈 주석 처리 (리포트)
     const siteId = route.params.id as string;
     const missionId = missionInfo.value?.missionId;
-    // const sessionId = missionDataCollector.startCollection(siteId, missionId);
-    // console.log(`📊 임무 데이터 수집 시작 - Session ID: ${sessionId}`);
+    const sessionId = missionDataCollector.startCollection(siteId, missionId);
+    console.log(`📊 임무 데이터 수집 시작 - Session ID: ${sessionId}`);
+    
+    // 새로운 미션 시작 시 vehicle_state 에러 플래그 초기화
+    vehicleStateErrorShown = false;
     
     workState.value = WorkState.RUNNING;
-    $modalRef.value.offState();
+    $modalRef.value.close();
     modalTriggered.value = false;
     if (route.params.id === 'one_div_test') {
       await subscribeFirst();
@@ -3239,6 +3132,23 @@ const resumeMission = async (): Promise<void> => {
   }
 }
 
+const saveMission = async (): Promise<void> => {
+  if (missionDataCollector.isActive()) {
+    const session = missionDataCollector.stopCollection();
+
+    if (!session) return;
+    const data = missionDataCollector.buildSessionSaveRequest(session);
+
+    await postData(APIRoute.SESSION, data).then(() => {
+      messageBox("success", "저장 성공");
+    }).catch(() => {
+      messageBox("error", "저장이 실패됐습니다.");
+    });
+  } else {
+    messageBox('warn', '저장할 세션 데이터가 없습니다.');
+  }
+};
+
 const resetMission = async (): Promise<void> => {
   workState.value = WorkState.WAIT;
   // 임무대기 상태도 초기화
@@ -3248,41 +3158,63 @@ const resetMission = async (): Promise<void> => {
   // 노면 데이터 초기화
   clearRoadZData();
   
-  // 차량 데이터 초기화
+  // 차량 데이터 초기화 (내부 데이터만 초기화, UI의 차량 아이콘은 유지)
   vehicleDataMap.clear();
   activeVehicleIds.clear(); // 실제 데이터가 들어온 차량 추적도 초기화
   isFirstDataReceived = false; // 첫 데이터 수신 플래그 리셋
   console.log('🔄 [resetMission] 차량 데이터 초기화 완료');
   
-  // 임무 데이터 수집 중지 // 데이터 수집 관련 모듈 주석 처리 (리포트)
-  // const session = missionDataCollector.stopCollection();
-  // if (session) {
-  //   console.log(`📊 [resetMission] 데이터 수집 종료 - 총 ${session.dataPoints.length}개 데이터 포인트 수집됨`);
-  // }
+  // 임무 데이터 수집 중지 (저장하지 않고 폐기)
+  missionDataCollector.discardSession();
   
   // IDManager 초기화
   idManager.reset();
   console.log('🔄 [resetMission] IDManager 초기화 완료');
+  
   // NATS 연결 해제
   for (const topic of globalTopics) {
     natsStore.unsubscribe(topic);
   }
-  // 초기 표시 요소 제외 후 모든 요소 제거
-  const initialFeatures = ['sitePolygon', 'entrance', 'exit', 'destination', 'basePoint'];
-  const featuresToRemove = osVector.getFeatures().filter((feature) => {
-    return !initialFeatures.includes(feature.getId() as string);
+  
+  // 경로만 제거 (장애물과 차량은 유지)
+  const allFeatures = osVector.getFeatures();
+  const pathFeaturesToRemove: OlFeature[] = [];
+  
+  allFeatures.forEach((feature) => {
+    const featureId = feature.getId() as string;
+    if (!featureId) return;
+    
+    // 차량이 지나온 경로 제거 (movePath로 시작)
+    if (featureId.startsWith('movePath')) {
+      pathFeaturesToRemove.push(feature);
+    }
+    // 전역 경로 제거 (global_path_line, global_path_point로 시작)
+    else if (featureId.startsWith('global_path_line') || featureId.startsWith('global_path_point_')) {
+      pathFeaturesToRemove.push(feature);
+    }
   });
-
-  featuresToRemove.forEach((feature) => {
+  
+  pathFeaturesToRemove.forEach((feature) => {
     osVector.removeFeature(feature);
-    console.log('🔄 [resetMission] 요소 제거:', feature.getId());
+    console.log('🔄 [resetMission] 경로 제거:', feature.getId());
   });
+  
+  console.log('🔄 [resetMission] 경로 제거 완료 (장애물과 차량은 유지)');
+  
+  // 초기화 후 바로 구독 시작 (데이터 수신 가능하도록)
+  console.log('🔄 [resetMission] 구독 재시작');
+  if (route.params.id === 'one_div_test') {
+    await subscribeFirst();
+  } else {
+    await subscribeHubData();
+  }
 }
+
 
 onMounted(async () => {
   // 타임스탬프 업데이트 시작
   updateTimestamp();
-  timestampInterval = setInterval(updateTimestamp, 1);
+  timestampInterval = window.setInterval(updateTimestamp, 1);
   
   // NATS 연결
   await natsStore.setConnection();
@@ -3300,10 +3232,6 @@ onMounted(async () => {
         if (!workInfo.value.vehicleInfo) {
           workInfo.value.vehicleInfo = {};
         }
-        console.log('📋 [onMounted] 서버에서 가져온 차량 정보:', {
-          vehicleInfo: workInfo.value.vehicleInfo,
-          vehicleIds: Object.keys(workInfo.value.vehicleInfo),
-        });
         // workInfo 로드 후 origin 좌표 계산 (센싱 데이터 처리 전에 설정)
         calculateOriginFromBoundary();
       })
@@ -3323,8 +3251,69 @@ onMounted(async () => {
     olMap = vMap.initMap(map, center);
     vMap.changeMapType(olMap);
     olMap.on('click', (evt) => {
-      console.log('coordinate 투영좌표[] - ', evt.coordinate);
-      console.log('coordinate => lnglat [경도,위도]', toLonLat(evt.coordinate));
+      // 클릭한 지점의 좌표 (항상 표시)
+      const clickCoord = evt.coordinate;
+      const [clickLon, clickLat] = toLonLat(clickCoord);
+      console.log('📍 [지도 클릭] 좌표:', {
+        lon: clickLon,
+        lat: clickLat,
+      });
+
+      // 장애물 클릭 체크
+      const clickedFeature = olMap.forEachFeatureAtPixel(evt.pixel, (feature) => {
+        const featureId = feature.getId() as string;
+        if (featureId && featureId.startsWith('obstacle_')) {
+          return feature;
+        }
+        return null;
+      });
+      
+      if (clickedFeature) {
+        const obstacleData = clickedFeature.get('obstacleData') as ObstacleData;
+        if (obstacleData) {
+          const obstacleFeature = clickedFeature as OlFeature<OlPoint>;
+          const isCurrentlySelected = selectedObstacles.value.has(obstacleFeature);
+          
+          // 토글: 이미 선택된 경우 제거, 아니면 추가
+          if (isCurrentlySelected) {
+            // 선택 해제
+            selectedObstacles.value.delete(obstacleFeature);
+            const obstacleProperties = getObstacleProperties(obstacleData.obstacle_class);
+            if (obstacleProperties) {
+              const scale = getScaleForZoom(olMap.getView().getZoom() || 8);
+              const unselectedStyle = createObstacleStyle(obstacleProperties.iconSource, scale, obstacleData, false);
+              obstacleFeature.setStyle(unselectedStyle);
+            }
+          } else {
+            // 선택 추가
+            selectedObstacles.value.add(obstacleFeature);
+            const obstacleProperties = getObstacleProperties(obstacleData.obstacle_class);
+            if (obstacleProperties) {
+              const scale = getScaleForZoom(olMap.getView().getZoom() || 8);
+              const selectedStyle = createObstacleStyle(obstacleProperties.iconSource, scale, obstacleData, true);
+              obstacleFeature.setStyle(selectedStyle);
+            }
+          }
+          
+          // 리스트 업데이트
+          updateSelectedObstacleList();
+          
+          // 장애물의 WGS84 좌표로 변환
+          const geometry = obstacleFeature.getGeometry() as OlPoint;
+          if (geometry) {
+            const coord = geometry.getCoordinates();
+            const [obstacleLon, obstacleLat] = toLonLat(coord);
+            
+            console.log('🎯 [장애물 클릭]', {
+              obstacle_class: obstacleData.obstacle_class,
+              obstacle_id: obstacleData.obstacle_id,
+              lon: obstacleLon,
+              lat: obstacleLat,
+              isSelected: !isCurrentlySelected,
+            });
+          }
+        }
+      }
     });
     olMap.getView().setZoom(16);
     osVector = new OSVector({
@@ -3337,6 +3326,7 @@ onMounted(async () => {
     olMap.addLayer(olLayer);
     subscribeFirst();
     subscribeControlStatus();
+    subscribeMapDataProcTime();
   } else {
     // 경로 생성 모듈 테스트시 기본 좌표 사용
     center = workInfo && !isEmpty(workInfo.value.coordinates)
@@ -3347,8 +3337,69 @@ onMounted(async () => {
     olMap.getView().fit(vMap.setThumbnailCoords(workInfo.value.coordinates));
     vMap.changeMapType(olMap);
     olMap.on('click', (evt) => {
-      console.log('coordinate 투영좌표[] - ', evt.coordinate);
-      console.log('coordinate => lnglat [경도,위도]', toLonLat(evt.coordinate));
+      // 클릭한 지점의 좌표 (항상 표시)
+      const clickCoord = evt.coordinate;
+      const [clickLon, clickLat] = toLonLat(clickCoord);
+      console.log('📍 [지도 클릭] 좌표:', {
+        lon: clickLon,
+        lat: clickLat,
+      });
+
+      // 장애물 클릭 체크
+      const clickedFeature = olMap.forEachFeatureAtPixel(evt.pixel, (feature) => {
+        const featureId = feature.getId() as string;
+        if (featureId && featureId.startsWith('obstacle_')) {
+          return feature;
+        }
+        return null;
+      });
+      
+      if (clickedFeature) {
+        const obstacleData = clickedFeature.get('obstacleData') as ObstacleData;
+        if (obstacleData) {
+          const obstacleFeature = clickedFeature as OlFeature<OlPoint>;
+          const isCurrentlySelected = selectedObstacles.value.has(obstacleFeature);
+          
+          // 토글: 이미 선택된 경우 제거, 아니면 추가
+          if (isCurrentlySelected) {
+            // 선택 해제
+            selectedObstacles.value.delete(obstacleFeature);
+            const obstacleProperties = getObstacleProperties(obstacleData.obstacle_class);
+            if (obstacleProperties) {
+              const scale = getScaleForZoom(olMap.getView().getZoom() || 8);
+              const unselectedStyle = createObstacleStyle(obstacleProperties.iconSource, scale, obstacleData, false);
+              obstacleFeature.setStyle(unselectedStyle);
+            }
+          } else {
+            // 선택 추가
+            selectedObstacles.value.add(obstacleFeature);
+            const obstacleProperties = getObstacleProperties(obstacleData.obstacle_class);
+            if (obstacleProperties) {
+              const scale = getScaleForZoom(olMap.getView().getZoom() || 8);
+              const selectedStyle = createObstacleStyle(obstacleProperties.iconSource, scale, obstacleData, true);
+              obstacleFeature.setStyle(selectedStyle);
+            }
+          }
+          
+          // 리스트 업데이트
+          updateSelectedObstacleList();
+          
+          // 장애물의 WGS84 좌표로 변환
+          const geometry = obstacleFeature.getGeometry() as OlPoint;
+          if (geometry) {
+            const coord = geometry.getCoordinates();
+            const [obstacleLon, obstacleLat] = toLonLat(coord);
+            
+            console.log('🎯 [장애물 클릭]', {
+              obstacle_class: obstacleData.obstacle_class,
+              obstacle_id: obstacleData.obstacle_id,
+              lon: obstacleLon,
+              lat: obstacleLat,
+              isSelected: !isCurrentlySelected,
+            });
+          }
+        }
+      }
     });
     olMap.getView().setZoom(vMap.DEFAULT_SITE_ZOOM_LEVEL);
     osVector = new OSVector({
@@ -3370,6 +3421,35 @@ onMounted(async () => {
     dest.setId('destination');
     vMap.addIcon(dest, IconSource.DESTINATION)
     osVector.addFeature(dest);
+    
+    // 경유지 표시 (missionInfo의 siteId.route 값 사용)
+    let routeValue: [number, number] | null = null;
+    if (typeof missionInfo.value.siteId === 'object' && missionInfo.value.siteId !== null) {
+      routeValue = (missionInfo.value.siteId as any).route;
+    } else if (missionInfo.value.route) {
+      routeValue = missionInfo.value.route as unknown as [number, number];
+    }
+    
+    if (routeValue && Array.isArray(routeValue) && routeValue.length === 2) {
+      // route는 [위도, 경도] 순서이므로 [경도, 위도]로 변환
+      const stopoverCoord = fromLonLat([routeValue[1], routeValue[0]]);
+      const stopover = new OlFeature({
+        geometry: new OlPoint(stopoverCoord),
+      });
+      stopover.setId('stopover_0');
+      const zoom = olMap.getView().getZoom() || 8;
+      const scale = getScaleForZoom(zoom) * 0.7;
+      stopover.setStyle(new Style({
+        image: new Icon({
+          crossOrigin: 'anonymous',
+          src: '/images/stopover.png',
+          scale: scale,
+          anchor: [0.5, 0.5],
+          opacity: 0.4,
+        }),
+      }));
+      osVector.addFeature(stopover);
+    }
     olLayer = new OLVector({
       updateWhileAnimating: true,
       updateWhileInteracting: true,
@@ -3388,6 +3468,7 @@ onMounted(async () => {
     
     subscribeHubData();
     subscribeControlStatus();
+    subscribeMapDataProcTime();
   }
   useMapStore().map = olMap;
 });
@@ -3411,29 +3492,12 @@ onUnmounted(async () => {
     natsStore.unsubscribe('telecons.regenPlanResult');
     natsStore.unsubscribe('telecons.regenRouteResult');
   }
+  // 위험판단 NATS 구독 해제
+  // eslint-disable-next-line @typescript-eslint/no-use-before-define
+  unsubscribeRiskTopic();
   
   await natsStore.closeConnection();
 });
-
-/* MapData 장애물 관련 코드 */
-// 장애물 데이터를 저장할 배열
-const storedObstacles: MapObstacle[] = [];
-
-// 장애물의 좌표를 계산해 저장 (WGS84 좌표계)
-const setMapObstacles = (obstacles: MapObstacle[]): void => {  
-  if (!obstacles || obstacles.length === 0) {
-    return;
-  }
-  console.log('setMapObstacles');
-  const filteredObstacles = obstacles.filter((o) => o.obstacle_class >= 1);
-
-  if (filteredObstacles.length > 0) {    
-    // 기존 장애물 데이터 초기화 (옵션)
-    storedObstacles.length = 0;
-    // 새 장애물 데이터 저장
-    storedObstacles.push(...filteredObstacles);
-  }
-}
 
 // 차량의 좌표를 계산해 표시 (WGS84 좌표계)
 // eslint-disable-next-line @typescript-eslint/no-shadow
@@ -3524,19 +3588,282 @@ const setHubData = (ele: HubDataObject): void => {
   // if (obstacleDataSource.value === 'sensor') addSensorObstacles(ele);
 }
 
-const toggleRoadZBtn = (): void => {
-  isroadZOn.value = !isroadZOn.value;
-  
-  // off 상태일 때 roadz 데이터 제거 및 초기화
-  if (!isroadZOn.value) {
-    removeRoadZFeatures();
-    clearRoadZData();
-  }
+let riskSub: any = null;
+
+const formatObstacleXY = (value: [number, number] | []): string => {
+  if (!value || value.length === 0) return '';
+
+  // [x, y] → x,y
+  const [x, y] = value as [number, number];
+  return `x: ${x}, y: ${y}`;
 };
+
+
+const formatWgs84XY = (value: { x: number; y: number }[]): string => {
+  if (!value || value.length === 0) return '';
+
+  // [{x,y},{x,y}] → {x:...,y:...},{x:...,y:...}
+  return value
+    .map(v => `{x: ${v.x}, y: ${v.y}}`).join(',\n');
+};
+
+const syncDebugTableFromMap = (): void => {
+  const tableList: DebugObstacleRow[] = [];
+
+  osVector.getFeatures().forEach((feature) => {
+    const id = feature.getId() as string;
+    if (id && id.startsWith('obstacle_')) {
+      const obs = feature.get('obstacleData');
+      if (!obs) return;
+
+      const base: DebugObstacleRow = {
+        obstacle_id: obs.obstacle_id,
+        fused_position_x: obs.fused_position_x,
+        fused_position_y: obs.fused_position_y,
+        obstacle_class: obs.obstacle_class,
+      };
+
+      tableList.push(base);
+    }
+  });
+
+  tableList.sort((a, b) => a.obstacle_id - b.obstacle_id);
+
+  if (isDebugging.value) {
+    debugObstacleList.value = tableList;
+  } else {
+    debugObstacleList.value = [];
+  }
+}
+
+
+// 리스크 피처 제거
+const clearRiskFeatures = (): void => {
+  const featuresToRemove: OlFeature[] = [];
+  const allFeatures = osVector.getFeatures();
+  
+  allFeatures.forEach((feature) => {
+    const id = feature.getId();
+    if (typeof id === 'string' && id.startsWith('risk_')) {
+      featuresToRemove.push(feature);
+    }
+  });
+  
+  featuresToRemove.forEach((feature) => {
+    osVector.removeFeature(feature);
+  });
+};
+
+// 리스크 피처 그리기
+// 리스크 피처 그리기
+const drawRiskFeatures = (list: any[]): void => {
+  clearRiskFeatures();
+  
+  list.forEach((item: any) => {
+    const riskId = item.obstacle_id;
+
+    // ==============================
+    // 기존 obstacle_xy 원 스타일
+    // ==============================
+    const createRiskStyle = (text: string) => {
+      return new Style({
+        image: new CircleStyle({
+          radius: 10,
+          fill: new Fill({ color: 'rgba(255, 0, 0, 0.4)' }),
+          stroke: new Stroke({ color: 'red', width: 2 }),
+        }),
+        text: new Text({
+          text,
+          font: 'bold 12px Arial',
+          fill: new Fill({ color: '#FFFFFF' }),
+          stroke: new Stroke({ color: '#000000', width: 3 }),
+        }),
+      });
+    };
+
+    // ==============================
+    // wgs84 start/end 사각형 스타일
+    // ==============================
+    const createBoxStyle = (text: string) => {
+      return new Style({
+        image: new RegularShape({
+          points: 4,          // 사각형
+          radius: 10,
+          angle: Math.PI / 4, // 네모 반듯하게
+          fill: new Fill({ color: 'rgba(255, 140, 0, 0.8)' }),
+          stroke: new Stroke({ color: '#000', width: 2 }),
+        }),
+        text: new Text({
+          text,
+          font: 'bold 12px Arial',
+          fill: new Fill({ color: '#000' }),
+          stroke: new Stroke({ color: '#fff', width: 3 }),
+        }),
+      });
+    };
+
+    // ==============================
+    // 기존 obstacle_xy
+    // ==============================
+    const drawObstacleXY = (points: [number, number][]) => {
+      points.forEach((p) => {
+        if (!Array.isArray(p) || p.length !== 2) return;
+
+        const [x, y] = p;
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+
+        const wgs84 = convertObstaclePositionToWgs84(x, y);
+        const coord = fromLonLat([wgs84.lon, wgs84.lat]);
+
+        const feature = new OlFeature({
+          geometry: new OlPoint(coord),
+        });
+
+        feature.setId(`risk_${riskId}_obstacle_xy`);
+        feature.setStyle(createRiskStyle(String(riskId)));
+        osVector.addFeature(feature);
+      });
+    };
+
+    if (Array.isArray(item.obstacle_xy) && item.obstacle_xy.length === 2) {
+      drawObstacleXY([item.obstacle_xy]);
+    }
+
+    // =====================================================
+    // ✅ wgs84 start / end pair 표시 (선 + 사각형)
+    // =====================================================
+
+    const starts = item.wgs84_xy_start ?? [];
+    const ends   = item.wgs84_xy_end   ?? [];
+
+    const pairCount = Math.min(starts.length, ends.length);
+
+    for (let i = 0; i < pairCount; i++) {
+
+      const s = starts[i];
+      const e = ends[i];
+
+      if (
+        !Number.isFinite(s?.x) || !Number.isFinite(s?.y) ||
+        !Number.isFinite(e?.x) || !Number.isFinite(e?.y)
+      ) continue;
+
+      const startCoord = fromLonLat([s.x, s.y]);
+      const endCoord   = fromLonLat([e.x, e.y]);
+
+      // ------------------------
+      // 선
+      // ------------------------
+      const lineFeature = new OlFeature({
+        geometry: new OlLineString([startCoord, endCoord]),
+      });
+
+      lineFeature.setId(`risk_${riskId}_pair_line_${i}`);
+      lineFeature.setStyle(
+        new Style({
+          stroke: new Stroke({
+            color: 'rgba(255, 140, 0, 0.9)',
+            width: 3,
+            lineDash: [6, 4],
+          }),
+        })
+      );
+
+      osVector.addFeature(lineFeature);
+
+      // ------------------------
+      // start : 's'
+      // ------------------------
+      const startFeature = new OlFeature({
+        geometry: new OlPoint(startCoord),
+      });
+
+      startFeature.setId(`risk_${riskId}_start_${i}`);
+      startFeature.setStyle(createBoxStyle('s'));
+      osVector.addFeature(startFeature);
+
+      // ------------------------
+      // end : hazard_class
+      // ------------------------
+      const endText =
+        item.hazard_class !== undefined
+          ? String(item.hazard_class)
+          : '';
+
+      const endFeature = new OlFeature({
+        geometry: new OlPoint(endCoord),
+      });
+
+      endFeature.setId(`risk_${riskId}_end_${i}`);
+      endFeature.setStyle(createBoxStyle(endText));
+      osVector.addFeature(endFeature);
+    }
+
+  });
+};
+
+const subscribeRiskTopic = (): void => {
+  if (riskSub) return;
+
+  riskSub = natsStore.subscribe('riskAssessmentObjects.create');
+  (async () => {
+    for await (const msg of riskSub) {
+      try {
+        const text = new TextDecoder().decode(msg.data);
+        const raw = JSON.parse(text);
+        const inner = JSON.parse(raw.riskAssessment);
+        const list = inner.riskAssessmentList || [];
+        
+
+        
+        // debugRiskList 업데이트
+        const riskTableList: DebugRiskRow[] = [];
+        
+        list.forEach((r: any) => {
+          // debugRiskList에 추가
+          riskTableList.push({
+            obstacle_id: r.obstacle_id,
+            obstacle_xy: r.obstacle_xy || [],
+            wgs84_xy_start: r.wgs84_xy_start || [],
+            wgs84_xy_end: r.wgs84_xy_end || [],
+            hazard_class: r.hazard_class,
+            isHazard: r.isHazard,
+            confidence: r.confidence,
+          });
+        });
+
+        // 👉 risk 데이터 들어오면, 현재 지도 기준으로 표 다시 갱신 및 지도 표시
+        if (isDebugging.value) {
+          syncDebugTableFromMap(); // 장애물 테이블 갱신
+          debugRiskList.value = riskTableList; // 위험판단 테이블 갱신
+          drawRiskFeatures(list);
+        }
+
+      } catch (e) {
+        console.error('risk 메시지 처리 실패:', e);
+      }
+    }
+  })();
+};
+
+const unsubscribeRiskTopic = (): void => {
+  if (!riskSub) return;
+  riskSub.unsubscribe();
+  riskSub = null;
+  debugRiskList.value = []; // 위험판단 테이블 초기화
+  clearRiskFeatures(); // 지도에서 리스크 피처 제거
+}
 
 // 디버깅 모드 토글 함수
 const toggleDebugging = (): void => {
   isDebugging.value = !isDebugging.value;
+
+  if (isDebugging.value) {
+    subscribeRiskTopic();
+  } else {
+    unsubscribeRiskTopic();
+  }
+
   // 디버깅 모드 변경 시 장애물 스타일 업데이트
   updateObstacleStyles();
   // 디버깅 모드 변경 시 차량 스타일 업데이트
@@ -3546,6 +3873,7 @@ const toggleDebugging = (): void => {
 
 <style lang="scss" scoped>
 @import '@/styles/variables.scss';
+
 #map {
   position: relative;
   height: 100vh;
@@ -3562,6 +3890,7 @@ const toggleDebugging = (): void => {
 .roadZ_on {
   background-color: #de9f00;
   color: white;
+
   &:hover {
     background-color: white;
     color: #de9f00;
@@ -3571,6 +3900,7 @@ const toggleDebugging = (): void => {
 .roadZ_off {
   background-color: white;
   color: #de9f00;
+
   &:hover {
     background-color: #de9f00;
     color: white;
@@ -3588,6 +3918,7 @@ const toggleDebugging = (): void => {
 .debug_on {
   background-color: #be2b2b;
   color: white;
+
   &:hover {
     background-color: white;
     color: #be2b2b;
@@ -3597,6 +3928,7 @@ const toggleDebugging = (): void => {
 .debug_off {
   background-color: white;
   color: #be2b2b;
+
   &:hover {
     background-color: #be2b2b;
     color: white;
@@ -3621,10 +3953,16 @@ const toggleDebugging = (): void => {
 }
 
 .debug-status {
+  position: absolute;
+  top: 22px;
+  left: 275px;
+  background-color: rgba(173, 173, 173, 0.496);
+  padding: 8px 18px;
+  border-radius: 20px;
+  z-index: 10;
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 5px;
 }
 
 .status-label {
@@ -3675,6 +4013,29 @@ const toggleDebugging = (): void => {
   color: #fff;
 }
 
+.obstacle-send-btn {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  background-color: white;
+  color: #ff953f;
+  border-radius: 20px;
+
+  &:hover {
+    background-color: #ff953f;
+    color: white;
+  }
+
+  z-index: 10;
+
+  &:disabled {
+    opacity: 1 !important;
+    /* 투명도 유지 */
+  }
+}
+
 .standby_btn {
   position: absolute;
   top: 23px;
@@ -3682,26 +4043,45 @@ const toggleDebugging = (): void => {
   background-color: white;
   color: #3D5BC1;
   border-radius: 20px;
+
   &:hover {
     background-color: #3D5BC1;
     color: white;
   }
+
   z-index: 10;
-  
+
   &:disabled {
-    opacity: 1 !important;  /* 투명도 유지 */
+    opacity: 1 !important;
+    /* 투명도 유지 */
   }
 }
 
 .standby-active {
   background-color: #3D5BC1 !important;
   color: white !important;
-  
+
   &:disabled {
     background-color: #3D5BC1 !important;
     color: white !important;
     opacity: 1 !important;
   }
+}
+
+.save_btn {
+  position: absolute;
+  top: 23px;
+  right: 370px;
+  background-color: white;
+  color: #4A60BF;
+  border-radius: 20px;
+
+  &:hover {
+    background-color: #4A60BF;
+    color: white;
+  }
+
+  z-index: 10;
 }
 
 .reset_btn {
@@ -3711,10 +4091,12 @@ const toggleDebugging = (): void => {
   background-color: white;
   color: #087212;
   border-radius: 20px;
+
   &:hover {
     background-color: #087212;
     color: white;
   }
+
   z-index: 10;
 }
 
@@ -3725,10 +4107,12 @@ const toggleDebugging = (): void => {
   background-color: white;
   color: #be2b2b;
   border-radius: 20px;
+
   &:hover {
     background-color: #be2b2b;
     color: white;
   }
+
   z-index: 10;
 }
 
@@ -3739,10 +4123,72 @@ const toggleDebugging = (): void => {
   background-color: white;
   color: #3957c8;
   border-radius: 20px;
+
   &:hover {
     background-color: #3957c8;
     color: white;
   }
+
   z-index: 10;
+}
+
+/* 장애물 정보 패널 */
+.obstacle-info-panel {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  padding: 10px;
+  border-radius: 6px;
+  min-width: 280px;
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 1000;
+}
+
+/* 위험판단 정보 패널 */
+.risk-info-panel {
+  position: absolute;
+  left: 310px;
+  bottom: 10px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  padding: 10px;
+  border-radius: 6px;
+  min-width: 400px;
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 1000;
+}
+
+.panel-title {
+  font-weight: bold;
+  margin-bottom: 6px;
+}
+
+.obstacle-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.obstacle-table th,
+.obstacle-table td {
+  border: 1px solid #444;
+  padding: 4px 6px;
+  text-align: center;
+}
+
+.obstacle-table tbody tr:hover td {
+  background-color: rgba(88, 133, 222, 0.331);
+}
+
+.obstacle-table th {
+  background: #222;
+}
+
+.pre-line {
+  white-space: pre-line;
 }
 </style>

@@ -136,6 +136,7 @@ static bool cfgB255Enabled = false;
 static std::vector<BoundaryData> cfgB255Pts;
 static bool b255SendPending = false;
 static std::unordered_set<std::uint64_t> b255AddedCells;
+static bool isPointInsidePolygon(const Point2D &point, const std::vector<Point2D> &polygon);
 
 static inline std::uint64_t nowMilliseconds()
 {
@@ -1866,10 +1867,27 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
     mapData.vehicle_list.clear();
     mapData.road_list.clear();
 
+    std::vector<Point2D> cfgB255Polygon;
+    bool cfgB255PolygonReady = false;
+    if (cfgB255Enabled && cfgB255Pts.size() == 4)
+    {
+        cfgB255Polygon.reserve(cfgB255Pts.size());
+        for (const auto &boundaryPoint : cfgB255Pts)
+        {
+            double utm_x = 0.0;
+            double utm_y = 0.0;
+            GPStoUTM(boundaryPoint.lon, boundaryPoint.lat, utm_x, utm_y);
+            cfgB255Polygon.push_back({(utm_x - origin_x) * M_TO_10CM_PRECISION,
+                                      (utm_y - origin_y) * M_TO_10CM_PRECISION});
+        }
+        cfgB255PolygonReady = cfgB255Polygon.size() >= 3;
+    }
+
     std::vector<adcm::roadListStruct> merged_road_list;
     bool hasRoadZ = false;
     std::unordered_map<std::uint64_t, std::pair<std::uint8_t, std::uint64_t>> cell_to_road;
     std::unordered_map<std::uint8_t, std::uint64_t> road_timestamp;
+    std::unordered_set<std::uint64_t> obstacle_cells;
 
     auto packCell = [](int x, int y) -> std::uint64_t
     {
@@ -1891,6 +1909,29 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
 
     for (const auto &obstacle : obstacle_list)
     {
+        for (const auto &pt : obstacle.map_2d_location)
+        {
+            const int x = static_cast<int>(pt.x);
+            const int y = static_cast<int>(pt.y);
+            if (x < 0 || y < 0 || x >= map_x || y >= map_y)
+                continue;
+            obstacle_cells.insert(packCell(x, y));
+        }
+    }
+
+    for (const auto &obstacle : obstacle_list)
+    {
+        if (cfgB255PolygonReady)
+        {
+            const Point2D point = {obstacle.fused_position_x, obstacle.fused_position_y};
+            if (isPointInsidePolygon(point, cfgB255Polygon))
+            {
+                adcm::Log::Info() << prefix << "[BOUNDARY255][FILTER] excluded obstacle inside forbidden zone: id="
+                                  << obstacle.obstacle_id << ", class=" << static_cast<int>(obstacle.obstacle_class)
+                                  << ", pos=(" << obstacle.fused_position_x << ", " << obstacle.fused_position_y << ")";
+                continue;
+            }
+        }
         mapData.obstacle_list.push_back(ConvertToObstacleListStruct(obstacle, mapData.map_2d));
     }
 
@@ -1936,6 +1977,8 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
                             continue;
 
                         const auto key = packCell(x, y);
+                        if (obstacle_cells.find(key) != obstacle_cells.end())
+                            continue;
                         const std::uint8_t road_index = road_list[i].road_index;
                         const auto ts = road_list[i].Timestamp;
                         auto it = cell_to_road.find(key);
@@ -2270,12 +2313,6 @@ static void logEmptyMapRoadList(const std::string &prefix, const adcm::map_data_
     }
 
     adcm::Log::Info() << prefix << "[SEND][EMPTY] road_index=255 cell_count=" << it255->map_2d_location.size();
-    const std::size_t sampleCount = std::min<std::size_t>(5, it255->map_2d_location.size());
-    for (std::size_t i = 0; i < sampleCount; ++i)
-    {
-        const auto &cell = it255->map_2d_location[i];
-        adcm::Log::Info() << prefix << "[SEND][EMPTY] road255 sample[" << i << "]=(" << cell.x << ", " << cell.y << ")";
-    }
 }
 
 // boundary 외부 영역을 road_index 255로 설정하는 함수
@@ -2514,6 +2551,20 @@ void ThreadReceiveWorkInfo()
             origin_x = min_utm_x;
             origin_y = min_utm_y;
 
+            if (cfgB255Enabled && cfgB255Pts.size() == 4)
+            {
+                for (size_t i = 0; i < cfgB255Pts.size(); ++i)
+                {
+                    double utm_x = 0.0;
+                    double utm_y = 0.0;
+                    GPStoUTM(cfgB255Pts[i].lon, cfgB255Pts[i].lat, utm_x, utm_y);
+                    const double map_x_local = (utm_x - origin_x) * M_TO_10CM_PRECISION;
+                    const double map_y_local = (utm_y - origin_y) * M_TO_10CM_PRECISION;
+                    adcm::Log::Info() << "[BOUNDARY255] cfg point[" << i << "] gps=(" << cfgB255Pts[i].lon << ", "
+                                      << cfgB255Pts[i].lat << ") map=(" << map_x_local << ", " << map_y_local << ")";
+                }
+            }
+
             b255SendPending =
                 (cfgB255Enabled && cfgB255Pts.size() == 4);
             b255AddedCells.clear();
@@ -2582,12 +2633,11 @@ void ThreadKatech()
         {
             unique_lock<mutex> lock(mtx_data);
             dataReady.wait(lock, []
-                           { return (get_workinfo && ((!workego || ego) && ((!worksub1 || sub1) && (!worksub2 || sub2) && (!worksub3 || sub3) && (!worksub4 || sub4)))); });
+                           { return (get_workinfo && (((!worksub1 || sub1) && (!worksub2 || sub2) && (!worksub3 || sub3) && (!worksub4 || sub4)))); });
 
             startTime = std::chrono::high_resolution_clock::now();
             adcm::Log::Info() << prefix << "[KATECH] FUSION_START";
             adcm::Log::Info() << prefix << "==============KATECH modified code start==========";
-
             //==============1. 차량 및 장애물 데이터 위치 변환=================
 
             if (workego && ego)
