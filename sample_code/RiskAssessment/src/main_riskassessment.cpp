@@ -83,6 +83,7 @@ bool useNats = false;
 bool saveJson = false;
 bool gScenarioLogEnabled = false;
 std::unique_ptr<AutoLabelWriter> labelWriter;
+Config config;
 
 std::uint8_t type = 0; // 시뮬레이션 = 0, 실증 = 1
 
@@ -435,7 +436,7 @@ void ThreadRASS()
             evaluateScenario4(obstacle_list, ego_vehicle, riskAssessment);
             evaluateScenario5(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
             evaluateScenario6(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
-            evaluateScenario7(path_x, path_y, map_2d, riskAssessment);
+            evaluateScenario7(path_x, path_y, map_2d, config, riskAssessment);
             evaluateScenario8(path_x, path_y, map_2d, riskAssessment);
             evaluateScenario9(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
             evaluateScenario10(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
@@ -604,7 +605,6 @@ int main(int argc, char *argv[])
     UNUSED(argc);
     UNUSED(argv);
 
-    Config config;
     std::string iniFilePath = "/opt/RiskAssessment/etc/config.ini";
 
     if (!ara::core::Initialize())

@@ -31,6 +31,8 @@
 #include "map_data_subscriber.h"
 #include "work_information_subscriber.h"
 
+class Config;
+
 // ==== 상수 정의 ====
 #define STOP_VALUE 30                // STOP_VALUE 1이 약 300ms 30 이상이면 10초정도 정지 시 정지 장애물로 판단
 //#define INVALID_RETURN_VALUE 99999 
@@ -197,6 +199,7 @@ void resetScenario6State();
 void evaluateScenario7(const std::vector<double>& path_x,
                         const std::vector<double>& path_y,
                         const std::vector<adcm::map_2dListVector>& map_2d,
+                        const Config& config,
                         adcm::risk_assessment_Objects& riskAssessment);
 // 시나리오 8: 경로와 맵 정보 필요
 void evaluateScenario8(const std::vector<double>& path_x,

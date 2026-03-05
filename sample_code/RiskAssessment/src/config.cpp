@@ -15,7 +15,8 @@ void Config::setDefault(
     bool &saveJson,
     bool &scenarioLog,
     bool &labelWrite,
-    std::string &labelOutputPath
+    std::string &labelOutputPath,
+    int &scenario7MinUnscanned
 ) {
     serverAddress = pt.get<std::string>("Network.NATSServerAddress", "https://nats.beyless.com");
     serverPort = pt.get<int>("Network.ServerPort", 0);
@@ -24,6 +25,7 @@ void Config::setDefault(
     scenarioLog = pt.get<bool>("Network.ScenarioLog", false);
     labelWrite = pt.get<bool>("label.LabelWrite", false);
     labelOutputPath = pt.get<std::string>("label.LabelOutputPath", "");
+    scenario7MinUnscanned = pt.get<int>("Scenario.MinUnscanned7", 10);
 }
 
 bool Config::loadFromFile(const std::string &filePath)
@@ -32,13 +34,13 @@ bool Config::loadFromFile(const std::string &filePath)
     try
     {
         boost::property_tree::ini_parser::read_ini(filePath, pt);
-        setDefault(pt, serverAddress, serverPort, useNats, saveJson, scenarioLog, labelWrite, labelOutputPath);
+        setDefault(pt, serverAddress, serverPort, useNats, saveJson, scenarioLog, labelWrite, labelOutputPath, scenario7MinUnscanned);
         return true;
     }
     catch (const std::exception &ex)
     {
         adcm::Log::Info() << "Error reading INI file: " << ex.what();
-        setDefault(pt, serverAddress, serverPort, useNats, saveJson, scenarioLog, labelWrite, labelOutputPath);
+        setDefault(pt, serverAddress, serverPort, useNats, saveJson, scenarioLog, labelWrite, labelOutputPath, scenario7MinUnscanned);
         return false;
     }
 }
@@ -52,4 +54,5 @@ void Config::print() const
     adcm::Log::Info() << "Scenario Log: " << (scenarioLog ? "true" : "false");
     adcm::Log::Info() << "Label Write: " << (labelWrite ? "true" : "false");
     adcm::Log::Info() << "Label Output Path: " << labelOutputPath;
+    adcm::Log::Info() << "Scenario7 Min Unscanned: " << scenario7MinUnscanned;
 }

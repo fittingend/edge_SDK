@@ -13,6 +13,7 @@ public:
     bool scenarioLog = false;
     bool labelWrite = false;
     std::string labelOutputPath;
+    int scenario7MinUnscanned = 10;
 
     void setDefault(
         boost::property_tree::ptree &pt,
@@ -22,7 +23,8 @@ public:
         bool &saveJson,
         bool &scenarioLog,
         bool &labelWrite,
-        std::string &labelOutputPath
+        std::string &labelOutputPath,
+        int &scenario7MinUnscanned
     );
 
     bool loadFromFile(const std::string &filePath);

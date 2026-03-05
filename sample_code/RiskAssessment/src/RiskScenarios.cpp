@@ -1,4 +1,5 @@
 #include "main_riskassessment.hpp"
+#include "config.hpp"
 namespace {
 inline bool scenarioLogEnabled() { return gScenarioLogEnabled; }
 }
@@ -890,6 +891,7 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
 void evaluateScenario7(const std::vector<double>& path_x,
                        const std::vector<double>& path_y,
                        const std::vector<adcm::map_2dListVector>& map_2d,
+                       const Config& config,
                        adcm::risk_assessment_Objects& riskAssessment)
 {
     SCENARIO_LOG_INFO() << "============= KATECH: Scenario 7 START =============";
@@ -903,10 +905,14 @@ void evaluateScenario7(const std::vector<double>& path_x,
         // 0xFE : 스캔되지 않은 지역
     };
 
+    const int kMinUnscanned = std::max(1, config.scenario7MinUnscanned);
+
     adcm::riskAssessmentStruct r{};
     bool has_unscanned = false;
     r.hazard_class = SCENARIO_7;
     r.isHarzard = true;
+
+    SCENARIO_LOG_INFO() << "[시나리오7] Min unscanned cells per segment: " << kMinUnscanned;
 
     for (size_t count = 0; count + 1 < path_x.size(); count++)
     {
@@ -925,6 +931,7 @@ void evaluateScenario7(const std::vector<double>& path_x,
         int error = dx / 2;
         int ystep = (y_start < y_end) ? 1 : -1;
         int y = y_start;
+        int unscanned_count = 0;
 
         for (int x = x_start; x <= x_end; ++x)
         {
@@ -937,17 +944,21 @@ void evaluateScenario7(const std::vector<double>& path_x,
 
             if (isUnscanned(map_2d[gridX][gridY].road_z))
             {
-                adcm::globalPathPosition start{path_x[count], path_y[count]};
-                adcm::globalPathPosition end{path_x[count+1], path_y[count+1]};
-                r.wgs84_xy_start.push_back(start);
-                r.wgs84_xy_end.push_back(end);
-                has_unscanned = true;
+                ++unscanned_count;
+                if (unscanned_count >= kMinUnscanned)
+                {
+                    adcm::globalPathPosition start{path_x[count], path_y[count]};
+                    adcm::globalPathPosition end{path_x[count+1], path_y[count+1]};
+                    r.wgs84_xy_start.push_back(start);
+                    r.wgs84_xy_end.push_back(end);
+                    has_unscanned = true;
 
-                SCENARIO_LOG_INFO() << "[시나리오7] Unscanned path detected: "
-                                  << "X=" << start.x << " Y=" << start.y
-                                  << " road_z=" << static_cast<int>(map_2d[gridX][gridY].road_z);
+                    SCENARIO_LOG_INFO() << "[시나리오7] Unscanned threshold reached: "
+                                      << "X=" << start.x << " Y=" << start.y
+                                      << " count=" << unscanned_count;
 
-                break; // 한 구간당 한 번만 리스크 등록
+                    break; // 한 구간당 한 번만 리스크 등록
+                }
             }
 
             error -= dy;
