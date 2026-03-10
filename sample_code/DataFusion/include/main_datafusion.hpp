@@ -12,7 +12,7 @@
 #include <string>
 #include <algorithm>
 #include <queue>
-#include <deque>
+#include <atomic>
 #include <unistd.h>
 #include <limits.h>
 #include <libgen.h>
@@ -62,6 +62,7 @@ double min_utm_x, min_utm_y, max_utm_x, max_utm_y;
 bool useNats = false;
 bool saveJson = false;
 
+std::uint64_t nats_map_timestamp = 0; // nats로 전송할 맵생성 타임스탬프
 IDManager id_manager; // 장애물 ID 부여 및 반환
 bool ego = false;
 bool sub1 = false;
@@ -90,6 +91,9 @@ queue<adcm::map_data_Objects> map_nats_queue;
 mutex mtx;
 
 int map_2d_size = 0;
+int mapVer = 1; // 현재 맵이 몇 번째 맵인지 확인
+int sendVer = 1; // 전송 맵 버전 카운터
+std::atomic<std::uint64_t> last_hub_timestamp{0};
 
 // 좌표가 10 cm 단위이므로 게이트도 10배 확대(0.5 m -> 5, 1.0 m -> 10)
 constexpr double STATIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD = 15.0;  // 1.5 m in 10 cm units (temporal match)
@@ -121,7 +125,7 @@ struct Point2D
 
 struct ObstacleData
 {
-    std::uint16_t obstacle_id;
+    std::uint16_t obstacle_id = 0;
     std::uint8_t obstacle_class;
     std::uint64_t timestamp = 0;
     std::vector<Point2D> map_2d_location;
@@ -141,8 +145,8 @@ struct ObstacleData
 
 struct VehicleSizeData
 {
-    std::uint16_t length;
-    std::uint16_t width;
+    std::uint16_t length=0;
+    std::uint16_t width=0;
 };
 
 struct BoundaryData
@@ -328,7 +332,7 @@ void fillObstacleList(std::vector<ObstacleData> &obstacle_list_fill, const std::
 double euclideanDistance(const ObstacleData &a, const ObstacleData &b);
 
 // 거리 행렬 생성
-std::vector<std::vector<double>> createDistanceMatrix(const std::vector<ObstacleData> &listA, const std::vector<ObstacleData> &listB, double maxDistance);
+std::vector<std::vector<double>> createDistanceMatrix(const std::vector<ObstacleData> &listA, const std::vector<ObstacleData> &listB, double maxDistance = std::numeric_limits<double>::infinity());
 
 // 신뢰성 기반 융합 계산
 double calculateWeightedPosition(const std::vector<double> &positions, const std::vector<double> &variances);
@@ -353,9 +357,13 @@ std::vector<ObstacleData> mergeAndCompareLists(
     std::vector<ObstacleData> listMain,
     std::vector<ObstacleData> listSub1,
     std::vector<ObstacleData> listSub2,
+    std::vector<ObstacleData> listSub3,
+    std::vector<ObstacleData> listSub4,
     const VehicleData &mainVehicle,
     const VehicleData &sub1Vehicle,
-    const VehicleData &sub2Vehicle);
+    const VehicleData &sub2Vehicle,
+    const VehicleData &sub3Vehicle,
+    const VehicleData &sub4Vehicle);
 
 void processWorkingAreaBoundary(const std::vector<BoundaryData> &work_boundary);
 

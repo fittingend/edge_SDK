@@ -1,0 +1,47 @@
+{
+    "End2EndEventDataIdMappingSet" : {
+        "End2EndEventDataIdMapping" : {
+            "serviceId": 1001,
+            "instanceId": 101,
+            "eventId": 32769,
+            "dataId": 4321
+        },
+        "End2EndEventDataIdMapping" : {
+            "serviceId": 2001,
+            "instanceId": 201,
+            "eventId": 32769,
+            "dataId": 4321
+        },
+        "End2EndEventDataIdMapping" : {
+            "serviceId": 3001,
+            "instanceId": 301,
+            "eventId": 32769,
+            "dataId": 4321
+        },
+        "End2EndEventDataIdMapping" : {
+            "serviceId": 4001,
+            "instanceId": 401,
+            "eventId": 32769,
+            "dataId": 4321
+        },
+        "End2EndEventDataIdMapping" : {
+            "serviceId": 5001,
+            "instanceId": 501,
+            "eventId": 32769,
+            "dataId": 4321
+        },
+        "End2EndEventDataIdMapping" : {
+            "serviceId": 6001,
+            "instanceId": 601,
+            "eventId": 32769,
+            "dataId": 4321
+        },
+        "End2EndEventDataIdMapping" : {
+            "serviceId": 7001,
+            "instanceId": 701,
+            "eventId": 32769,
+            "dataId": 4321
+        }
+    }
+}
+

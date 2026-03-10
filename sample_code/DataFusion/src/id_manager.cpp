@@ -6,7 +6,7 @@ IDManager::IDManager()
     pool_.reserve(OBSTACLE_MAX);
     for (int i = OBSTACLE_MAX; i >= 1; --i)
     {
-        pool_.push_back(static_cast<std::uint16_t>(i));
+        id_Notused[i] = static_cast<std::uint16_t>(OBSTACLE_MAX - i);
     }
     top_ = pool_.size();
 }

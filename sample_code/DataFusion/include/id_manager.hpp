@@ -3,7 +3,7 @@
 
 #include <iostream>
 #include <string>
-#include <vector>
+#include <cstdint>
 
 #define OBSTACLE_MAX 65000
 
@@ -16,7 +16,7 @@ public:
     int getNum();
 
 private:
-    std::size_t top_;
-    std::vector<std::uint16_t> pool_;
+    std::uint16_t id_Counter;
+    std::uint16_t id_Notused[OBSTACLE_MAX];
 };
 #endif
