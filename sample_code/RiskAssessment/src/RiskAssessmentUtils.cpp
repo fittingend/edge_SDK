@@ -112,14 +112,17 @@ const char* to_string(ObstacleClass cls)
 
 void printObstacleList(obstacleListVector obstacle_list)
 {
-    adcm::Log::Info() << "현재 장애물 리스트 프린트";
+    adcm::Log::Info() << "주요 장애물 리스트 프린트";
     if (obstacle_list.empty()) {
-        adcm::Log::Info() << "장애물이 없습니다.";
+        adcm::Log::Info() << "장애물 없음";
         return;
     }
 
     for (const auto& obs : obstacle_list) 
     {
+        if (obs.obstacle_class == 41 || obs.obstacle_class == 42) {
+            continue;
+        }
         adcm::Log::Info()
             << "ID=" << obs.obstacle_id
             << ", Class=" << obs.obstacle_class << " (" << to_string(static_cast<ObstacleClass>(obs.obstacle_class)) << ")"
@@ -325,7 +328,7 @@ bool calculateMinDistanceToPath(const adcm::obstacleListStruct& obstacle,
         return true;
     }
 
-    adcm::Log::Info() << "Obstacle " << obstacle.obstacle_id << " is not within any trajectory segment.";
+    //adcm::Log::Info() << "Obstacle " << obstacle.obstacle_id << " is not within any trajectory segment.";
     return false;
 }
 

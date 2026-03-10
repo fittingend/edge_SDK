@@ -16,8 +16,8 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
     SCENARIO_LOG_INFO() << "============= KATECH: Scenario 1 START =============";
 
     // 단위: 거리 dm(0.1 m), 시간 ms
-    constexpr double DIST_TO_EGO_MAX_DM  = 300.0; // 30 m 이내
-    constexpr double DIST_TO_PATH_MAX_DM = 100.0; // 10 m 이내
+    constexpr double DIST_TO_EGO_MAX_DM  = 300.0; // 특장차와 30 m 이내
+    constexpr double DIST_TO_PATH_MAX_DM = 100.0; // 특장차의 전역경로와 10 m 이내
 
     // 컨피던스 파라미터
     constexpr double EGO_THRESH_DM  = 300.0;
@@ -32,7 +32,7 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
         // (i) 동적 장애물 & 정지 상태
         const bool is_vehicle = (obs.obstacle_class >= 1 && obs.obstacle_class <= 21);
         if (!is_vehicle) continue;
-        //if (obs.stop_count < STOP_VALUE) continue;
+        if (obs.stop_count < gStopValue) continue;
 
         SCENARIO_LOG_INFO() << "[1-i] 차량 & 정지 상태: ID=" << obs.obstacle_id
                           << " | class=" << static_cast<int>(obs.obstacle_class)
@@ -92,7 +92,7 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
         r.hazard_class = SCENARIO_1;
         r.confidence   = confidence;
 
-        SCENARIO_LOG_INFO() << "[시나리오1 TRIGGER] ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "[시나리오1 활성] ID=" << obs.obstacle_id
                           << " | s_ego=" << s_ego << ", s_path=" << s_path
                           << " | confidence=" << confidence;
 
@@ -126,10 +126,10 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
     for (const auto& obs : obstacle_list) {
         // ----------------------------------------------------
         // (i) 조건: 차량이면서 정지 상태 OR 높이 2m 이상 정적 장애물
-        bool cond_vehicle_stopped = (obs.obstacle_class >= 1 && obs.obstacle_class <= 19 && obs.stop_count >= STOP_VALUE);
-        bool cond_static_high     = (obs.obstacle_class >= 30 && obs.obstacle_class <= 49 && obs.fused_cuboid_z > HEIGHT_THRESH_M);
+        bool cond_vehicle_stopped = (obs.obstacle_class >= 1 && obs.obstacle_class <= 19 && obs.stop_count >= gStopValue);
+        //bool cond_static_high     = (obs.obstacle_class >= 30 && obs.obstacle_class <= 49 && obs.fused_cuboid_z > HEIGHT_THRESH_M);
 
-        if (!(cond_vehicle_stopped || cond_static_high)) continue;
+        if (!cond_vehicle_stopped) continue;
 
         SCENARIO_LOG_INFO() << "[2-i] 통과: ID=" << obs.obstacle_id
                           << " | class=" << static_cast<int>(obs.obstacle_class)
@@ -192,7 +192,7 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
         r.hazard_class = SCENARIO_2;
         r.confidence   = confidence;
 
-        SCENARIO_LOG_INFO() << "[시나리오2 TRIGGER] ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "[시나리오2 활성] ID=" << obs.obstacle_id
                           << " | s_ego=" << s_ego << ", s_path=" << s_path
                           << " | confidence=" << confidence;
 
@@ -221,7 +221,7 @@ void evaluateScenario3(const obstacleListVector& obstacle_list,
     // (i) 기본 필터: 동적 클래스 & 실제 이동중 & Ego 거리 10~30m
     for (const auto& obs : obstacle_list) {
         const bool dynamic_class = (obs.obstacle_class >= 1 && obs.obstacle_class <= 29);
-        const bool moving        = (obs.stop_count < STOP_VALUE);
+        const bool moving        = (obs.stop_count < gStopValue);
         if (!dynamic_class || !moving) continue;
 
         const double d_ego_dm = calculateDistance(obs, ego_vehicle);
@@ -288,7 +288,7 @@ void evaluateScenario3(const obstacleListVector& obstacle_list,
         r.hazard_class = SCENARIO_3;
         r.confidence   = confidence;
 
-        SCENARIO_LOG_INFO() << "[시나리오3 TRIGGER] ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "[시나리오3 활성] ID=" << obs.obstacle_id
                           << " | s_ttc=" << s_ttc
                           << " | s_dist=" << s_dist
                           << " | confidence=" << confidence
@@ -330,7 +330,7 @@ void evaluateScenario4(const obstacleListVector& obstacle_list,
     for (const auto& obs : obstacle_list) {
         // ② 동적 객체(프로젝트 규약에 맞춰 클래스/정지여부 정의)
         const bool dynamic_class = (obs.obstacle_class >= 1 && obs.obstacle_class <= 29);
-        const bool moving        = (obs.stop_count < STOP_VALUE);
+        const bool moving        = (obs.stop_count < gStopValue);
         if (!dynamic_class || !moving) continue;
 
         // Ego-장애물 직선거리 (dm)
@@ -399,7 +399,7 @@ void evaluateScenario4(const obstacleListVector& obstacle_list,
         r.hazard_class = SCENARIO_4;
         r.confidence   = confidence;
 
-        SCENARIO_LOG_INFO() << "[시나리오4 TRIGGER] ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "[시나리오4 활성] ID=" << obs.obstacle_id
                           << " | s_ttc=" << s_ttc
                           << " | s_minDist=" << s_mind
                           << " | confidence=" << confidence
@@ -497,8 +497,8 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
 
     // 상수 (dm/ms)
     constexpr double EGO_MIN_DM          = 10.0;    // 1 m
-    constexpr double EGO_MAX_DM          = 200.0;    // 20 m
-    constexpr double DIST_TO_PATH_MAX_DM = 100.0;    // 10 m
+    constexpr double EGO_MAX_DM          = 500.0;    // 20 m
+    constexpr double DIST_TO_PATH_MAX_DM = 300.0;    // 10 m
     constexpr double MAX_PAIR_DIST_DM    = 200.0;    // 20 m
     constexpr double WINDOW_MS           = 10000.0;  // 10 s
     constexpr double FRAME_GRACE_MS      = 120.0;    // 동시 프레임 관용치
@@ -530,7 +530,6 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
         const auto& obs = obstacle_list[k];
 
         if (static_cast<ObstacleClass>(obs.obstacle_class) != ObstacleClass::PEDESTRIAN) {
-            SCENARIO_LOG_INFO() << "  └─[제외] ID=" << obs.obstacle_id << " | 보행자 아님";
             continue;
         }
         double d_ego_dm = calculateDistance(obs, ego_vehicle);
@@ -650,7 +649,7 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
     adcm::riskAssessmentStruct s5a{ .obstacle_id=best_a.obstacle_id, .hazard_class=SCENARIO_5, .confidence=conf };
     adcm::riskAssessmentStruct s5b{ .obstacle_id=best_b.obstacle_id, .hazard_class=SCENARIO_5, .confidence=conf };
 
-    SCENARIO_LOG_INFO() << "[시나리오5 TRIGGER]"
+    SCENARIO_LOG_INFO() << "[시나리오5 활성]"
                 << " | 페어 IDs=(" << s5a.obstacle_id << "," << s5b.obstacle_id << ")"
                 << " | 거리=" << pair_m << " m"
                 << " | confidence=" << conf;
@@ -738,7 +737,7 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
     using namespace adcm;
     SCENARIO_LOG_INFO() << "==================== [시나리오6 시작] ====================";
 
-    constexpr double EGO_MIN_DM          = 400.0;   // 50 m
+    constexpr double EGO_MIN_DM          = 100.0;   // 50 m
     constexpr double EGO_MAX_DM          = 600.0;   // 60 m
     constexpr double DIST_TO_PATH_MAX_DM = 150.0;   // 15 m
     constexpr double MAX_PAIR_DIST_DM    = 300.0;   // 30 m
@@ -866,7 +865,7 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
     s6.hazard_class = SCENARIO_6;
     s6.confidence   = confidence;
 
-    SCENARIO_LOG_INFO() << "[시나리오6 TRIGGER]"
+    SCENARIO_LOG_INFO() << "[시나리오6 활성]"
                 << " | 페어 IDs=(" << best_a.obstacle_id << "," << best_b.obstacle_id << ")"
                 << " | 페어거리=" << pair_m << " m"
                 << " | Ego-가까운차 ID=" << chosen.obstacle_id
@@ -991,7 +990,7 @@ void evaluateScenario8(const std::vector<double>& path_x,
     // =========================
 
     // 파라미터
-    constexpr int    SHIFT_DISTANCE   = 30;     // 전역경로 근방 5m (10cm/cell 가정)
+    constexpr int    SHIFT_DISTANCE   = 50;     // 전역경로 근방 5m (10cm/cell 가정)
     constexpr int    STEP             = 10;      // 5셀 = 50cm 간격에서 높이 변화 측정
     constexpr double CELL_SIZE_CM     = 10.0;   // 1셀 = 10cm
     constexpr double BIN_CM           = 5.0;    // road_z 1단계(bin) = 5cm
@@ -1328,7 +1327,7 @@ void evaluateScenario9(const obstacleListVector& obstacle_list,
     for (const auto& obs : obstacle_list) {
         // (i) 정차 차량 OR 높이 2m 이상 정적 장애물
         const bool cond_vehicle_stopped =
-            (obs.obstacle_class >= 1 && obs.obstacle_class <= 19 && obs.stop_count >= STOP_VALUE);
+            (obs.obstacle_class >= 1 && obs.obstacle_class <= 19 && obs.stop_count >= gStopValue);
         const bool cond_static_high =
             (obs.obstacle_class >= 30 && obs.obstacle_class <= 49 && obs.fused_cuboid_z > HEIGHT_THRESH_M);
         if (!(cond_vehicle_stopped || cond_static_high)) continue;
@@ -1376,7 +1375,7 @@ void evaluateScenario9(const obstacleListVector& obstacle_list,
         r.hazard_class = SCENARIO_9;
         r.confidence   = confidence;
 
-        SCENARIO_LOG_INFO() << "[시나리오9 TRIGGER] ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "[시나리오9 활성] ID=" << obs.obstacle_id
                           << " | 목적지 근접도=" << s_goal
                           << ", ego 근접도=" << s_ego
                           << ", 높이점수 =" << s_height
@@ -1474,7 +1473,7 @@ void evaluateScenario10(const obstacleListVector& obstacle_list,
         r.hazard_class = SCENARIO_10;
         r.confidence   = confidence;
 
-        SCENARIO_LOG_INFO() << "[시나리오10 TRIGGER] ID=" << obs.obstacle_id
+        SCENARIO_LOG_INFO() << "[시나리오10 활성] ID=" << obs.obstacle_id
                           << " | s_goal=" << s_goal
                           << ", s_ego=" << s_ego
                           << ", s_stop=" << s_stop

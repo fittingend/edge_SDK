@@ -83,6 +83,7 @@ std::string nats_server_url;
 bool useNats = false;
 bool saveJson = false;
 bool gScenarioLogEnabled = false;
+int gStopValue = 1;
 std::unique_ptr<AutoLabelWriter> labelWriter;
 Config config;
 std::atomic<uint64_t> gRiskLogSeq{0};
@@ -93,8 +94,8 @@ std::string formatObstacleBriefById(std::uint64_t id)
     for (const auto& obs : obstacle_list) {
         if (obs.obstacle_id == id) {
             std::ostringstream oss;
-            oss << " 장애물 id=" << obs.obstacle_id
-                << " 장애물 class=" << static_cast<int>(obs.obstacle_class)
+            oss << " obstacle_id=" << obs.obstacle_id
+                << " obstacle_class=" << static_cast<int>(obs.obstacle_class)
                 << " (" << to_string(static_cast<ObstacleClass>(obs.obstacle_class)) << ")"
                 << " pos=(" << obs.fused_position_x << ", " << obs.fused_position_y << ")";
             return oss.str();
@@ -476,17 +477,17 @@ void ThreadRASS()
         }
 
         adcm::Log::Info() << riskLogPrefix(riskSeq)
-                          << "[KATECH]위험판단 생성 완료- size " << riskAssessment.riskAssessmentList.size();
+                          << "[KATECH] 위험판단 생성 완료 size " << riskAssessment.riskAssessmentList.size();
         for (size_t i = 0; i < riskAssessment.riskAssessmentList.size(); ++i)
         {
             const auto& r = riskAssessment.riskAssessmentList[i];
             adcm::Log::Info() << riskLogPrefix(riskSeq)
-                              << (r.confidence > 0.7 ? "TRIGGER!!! ==========" : "")
+                              << (r.confidence > 0.7 ? "[TRIGGER]" : "")
                               << "riskAssessment[" << i
-                              << "] " << formatObstacleBriefById(r.obstacle_id)
-                              << " 위험시나리오#=" << static_cast<int>(r.hazard_class)
-                              << " isHazard플래그=" << (r.isHarzard ? "true" : "false")
-                              << " 컨피던스=" << r.confidence;
+                              << "] " << " 위험시나리오 #" << static_cast<int>(r.hazard_class)
+                              << formatObstacleBriefById(r.obstacle_id)
+                              << " isHazard flag=" << (r.isHarzard ? "true" : "false")
+                              << " conf=" << r.confidence;
 
             for (size_t s = 0; s < r.wgs84_xy_start.size(); ++s)
             {
@@ -695,6 +696,7 @@ int main(int argc, char *argv[])
     if (config.saveJson)
         saveJson = true;
     gScenarioLogEnabled = config.scenarioLog;
+    gStopValue = config.stopValue;
 
     adcm::Log::Info() << (useNats ? "NATS ON" : "NATS OFF");
 
