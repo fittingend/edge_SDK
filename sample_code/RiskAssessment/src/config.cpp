@@ -17,7 +17,8 @@ void Config::setDefault(
     bool &labelWrite,
     std::string &labelOutputPath,
     int &scenario7MinUnscanned,
-    int &stopValue
+    int &stopValue,
+    double &scenario7VehicleWidthM
 ) {
     serverAddress = pt.get<std::string>("Network.NATSServerAddress", "https://nats.beyless.com");
     serverPort = pt.get<int>("Network.ServerPort", 0);
@@ -28,6 +29,7 @@ void Config::setDefault(
     labelOutputPath = pt.get<std::string>("label.LabelOutputPath", "");
     scenario7MinUnscanned = pt.get<int>("Scenario.MinUnscanned7", 10);
     stopValue = pt.get<int>("Scenario.StopValue", 30);
+    scenario7VehicleWidthM = pt.get<double>("Scenario.VehicleWidthM", 2.5);
 }
 
 bool Config::loadFromFile(const std::string &filePath)
@@ -36,13 +38,13 @@ bool Config::loadFromFile(const std::string &filePath)
     try
     {
         boost::property_tree::ini_parser::read_ini(filePath, pt);
-        setDefault(pt, serverAddress, serverPort, useNats, saveJson, scenarioLog, labelWrite, labelOutputPath, scenario7MinUnscanned, stopValue);
+        setDefault(pt, serverAddress, serverPort, useNats, saveJson, scenarioLog, labelWrite, labelOutputPath, scenario7MinUnscanned, stopValue, scenario7VehicleWidthM);
         return true;
     }
     catch (const std::exception &ex)
     {
         adcm::Log::Info() << "Error reading INI file: " << ex.what();
-        setDefault(pt, serverAddress, serverPort, useNats, saveJson, scenarioLog, labelWrite, labelOutputPath, scenario7MinUnscanned, stopValue);
+        setDefault(pt, serverAddress, serverPort, useNats, saveJson, scenarioLog, labelWrite, labelOutputPath, scenario7MinUnscanned, stopValue, scenario7VehicleWidthM);
         return false;
     }
 }
@@ -58,4 +60,5 @@ void Config::print() const
     adcm::Log::Info() << "Label Output Path: " << labelOutputPath;
     adcm::Log::Info() << "Scenario7 Min Unscanned: " << scenario7MinUnscanned;
     adcm::Log::Info() << "Stop Value: " << stopValue;
+    adcm::Log::Info() << "Scenario7 Vehicle Width (m): " << scenario7VehicleWidthM;
 }

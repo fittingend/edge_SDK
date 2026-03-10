@@ -15,6 +15,7 @@ public:
     std::string labelOutputPath;
     int scenario7MinUnscanned = 10;
     int stopValue = 30;
+    double scenario7VehicleWidthM = 2.5;
 
     void setDefault(
         boost::property_tree::ptree &pt,
@@ -26,7 +27,8 @@ public:
         bool &labelWrite,
         std::string &labelOutputPath,
         int &scenario7MinUnscanned,
-        int &stopValue
+        int &stopValue,
+        double &scenario7VehicleWidthM
     );
 
     bool loadFromFile(const std::string &filePath);
