@@ -30,6 +30,7 @@
 #include "build_path_subscriber.h"
 #include "map_data_subscriber.h"
 #include "work_information_subscriber.h"
+#include "edge_information_subscriber.h"
 
 class Config;
 
@@ -180,7 +181,8 @@ void evaluateScenario3(const obstacleListVector& obstacle_list,
 
 void evaluateScenario4(const obstacleListVector& obstacle_list,
                         const adcm::vehicleListStruct& ego_vehicle,
-                        adcm::risk_assessment_Objects& riskAssessment);
+                        adcm::risk_assessment_Objects& riskAssessment,
+                        std::uint8_t& edge_state);   
 
 void evaluateScenario5(const obstacleListVector& obstacle_list,
                         const adcm::vehicleListStruct& ego_vehicle,
@@ -276,6 +278,7 @@ namespace {
     std::atomic_uint gReceivedEvent_count_map_data{0};
     std::atomic_uint gReceivedEvent_count_build_path{0};
     std::atomic_uint gReceivedEvent_count_work_information{0};
+    std::atomic_uint gReceivedEvent_count_edge_information{0};
     std::atomic_uint gMainthread_Loopcount{0};
 
     void SigTermHandler(int signal) {

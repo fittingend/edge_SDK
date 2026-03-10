@@ -342,24 +342,23 @@ void evaluateScenario3(const obstacleListVector& obstacle_list,
 //===== 시나리오 #4. 정지중(ego=0 m/s) 주변 동적 객체 접근 위험 =====
 void evaluateScenario4(const obstacleListVector& obstacle_list,
                        const adcm::vehicleListStruct& ego_vehicle,
-                       adcm::risk_assessment_Objects& riskAssessment)
+                       adcm::risk_assessment_Objects& riskAssessment,
+                       std::uint8_t& edge_state)
 {
     SCENARIO_LOG_INFO() << "============= KATECH: Scenario 4 START =============";
 
     // 좌표 단위: dm(0.1 m) 가정, 속도 단위: m/s
     constexpr double MIN_DIST_DM = 200.0;   // 20 m
     constexpr double MAX_DIST_DM = 400.0;   // 40 m
-    constexpr double STOP_SPEED_TH_MPS = 0.2; // 자차 '정지' 판단 임계
     constexpr double TTC_TH_S = 10.0;       // TTC 정규화 기준(튜닝)
 
     // 컨피던스 가중치 (합=1.0로 유지 권장)
     constexpr double W_TTC  = 0.6;
     constexpr double W_MIND = 0.4;
 
-    // ① 자차 정지 조건
-    const double ego_speed = std::hypot(ego_vehicle.velocity_x, ego_vehicle.velocity_y);
-    if (ego_speed > STOP_SPEED_TH_MPS) {
-        SCENARIO_LOG_INFO() << "[시나리오4] 자차 정지 상태 아님(" << ego_speed << " m/s) → 종료";
+    // ① 특장차 작업중 
+    if (edge_state != 4) {
+        SCENARIO_LOG_INFO() << "[시나리오4] 특장차 작업 상태 아님(" << static_cast<int>(edge_state) << ") → 종료";
         SCENARIO_LOG_INFO() << "============= KATECH: Scenario 4 DONE =============";
         return;
     }

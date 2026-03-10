@@ -80,6 +80,7 @@ adcm::vehicleListStruct ego_vehicle, sub_vehicle_1, sub_vehicle_2, sub_vehicle_3
 adcm::risk_assessment_Objects riskAssessment;
 uint64_t timestamp_map = 0; 
 std::string nats_server_url;
+std::uint8_t edge_state = 0; //(0 = idle / 1 = search / 2 = return / 3 = move / 4 = work )
 bool useNats = false;
 bool saveJson = false;
 bool gScenarioLogEnabled = false;
@@ -462,7 +463,7 @@ void ThreadRASS()
             evaluateScenario1(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
             evaluateScenario2(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
             evaluateScenario3(obstacle_list, ego_vehicle, riskAssessment);
-            evaluateScenario4(obstacle_list, ego_vehicle, riskAssessment);
+            evaluateScenario4(obstacle_list, ego_vehicle, riskAssessment, edge_state);
             evaluateScenario5(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
             evaluateScenario6(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
             evaluateScenario7(path_x, path_y, map_2d, config, riskAssessment);
@@ -588,6 +589,30 @@ void ThreadSend()
         // std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
 }
+void ThreadReceiveEdgeInformation()
+{
+    adcm::Log::Info() << "RiskAssessment ThreadReceiveEdgeInformation";
+    adcm::EdgeInformation_Subscriber edgeInformation_subscriber;
+    edgeInformation_subscriber.init("RiskAssessment/RiskAssessment/RPort_edge_information");
+
+    while (continueExecution) {
+        gMainthread_Loopcount++;
+        VERBOSE("[RiskAssessment] ThreadReceiveEdgeInformation loop");
+        bool edgeInformation_rxEvent = edgeInformation_subscriber.waitEvent(100); // wait event
+
+        if(edgeInformation_rxEvent) {
+            adcm::Log::Verbose() << "[EVENT] RiskAssessment Edge Information received";
+
+            while(!edgeInformation_subscriber.isEventQueueEmpty()) {
+                auto data = edgeInformation_subscriber.getEvent();
+                gReceivedEvent_count_edge_information++;
+
+                edge_state = data->state;
+                adcm::Log::Verbose() << "state : " << edge_state;
+            }
+        }
+    }
+}
 
 void ThreadMonitor()
 {
@@ -666,8 +691,8 @@ int main(int argc, char *argv[])
     adcm::Log::Info() << "RiskAssessment: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
     adcm::Log::Info() << "Ok, let's produce some RiskAssessment data...";
-    adcm::Log::Info() << "SDK release_251209_interface v2.5 for sa8195";
-    // adcm::Log::Info() << "SDK release_250321_interface v2.1, AGX Orin version";
+    //adcm::Log::Info() << "SDK interface v2.6.1, SA8195";
+    adcm::Log::Info() << "SDK interface v2.6.1, AGX Orin version";
     adcm::Log::Info() << "RiskAssessment Build " << BUILD_TIMESTAMP;
 
     if (config.loadFromFile(iniFilePath))
@@ -709,7 +734,7 @@ int main(int argc, char *argv[])
     } else {
         adcm::Log::Info() << "AutoLabelWriter DISABLED";
     }
-
+    thread_list.push_back(std::thread(ThreadReceiveEdgeInformation));
     thread_list.push_back(std::thread(ThreadReceiveMapData));
     thread_list.push_back(std::thread(ThreadReceiveBuildPath));
     thread_list.push_back(std::thread(ThreadReceiveWorkInformation));
