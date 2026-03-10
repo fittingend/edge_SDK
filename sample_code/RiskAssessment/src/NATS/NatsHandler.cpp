@@ -11,10 +11,16 @@
 
 using namespace Poco::JSON;
 
-// 전역 변수 정의
-std::vector<const char*> subject = {};
-std::shared_ptr<adcm::etc::NatsConnManager> natsManager;
-std::mutex mtx;
+namespace {
+    bool firstTime = true;
+    natsStatus s = NATS_OK;
+    std::vector<const char*> subject = {"test1.*", "test2.*"};
+    std::shared_ptr<adcm::etc::NatsConnManager> natsManager;
+    std::mutex mtx;
+}
+
+static Poco::JSON::Object::Ptr buildRiskAssessmentJson(const adcm::risk_assessment_Objects& riskAssessment,
+                                                       const obstacleListVector& obstacle_list);
 
 void asyncCb(natsConnection* nc, natsSubscription* sub, natsStatus err, void* closure)
 {
@@ -33,25 +39,21 @@ void onMsg(natsConnection* nc, natsSubscription* sub, natsMsg* msg, void* closur
 
 void NatsSend(const adcm::risk_assessment_Objects& riskAssessment, const obstacleListVector& obstacle_list)
 {
-    static bool firstTime = true;
-    static natsStatus s = NATS_OK;
     if (firstTime) {
         adcm::Log::Info() << "NATS first time setup!";
         natsManager = std::make_shared<adcm::etc::NatsConnManager>(
             nats_server_url.c_str(), subject, onMsg, asyncCb,
-            adcm::etc::NatsConnManager::Mode::Publish_Only);
+            adcm::etc::NatsConnManager::Mode::Default);
         s = natsManager->NatsExecute();
         firstTime = false;
     }
 
     if (s == NATS_OK) {
-        //const char* pubSubject = "riskAssessment.json";
         const char* pubSubject = "riskAssessmentObjects.create";
         natsManager->ClearJsonData();
-        std::string riskToStr = convertRiskAssessmentToJsonString(riskAssessment, obstacle_list);
-        adcm::Log::Info() << "RiskAssessment JSON created (size=" << riskToStr.size() << ")";
-        natsManager->addJsonData("riskAssessment", riskToStr);
-        adcm::Log::Info() << "RiskAssessment JSON added to NATS payload";
+        Poco::JSON::Object::Ptr riskObj = buildRiskAssessmentJson(riskAssessment, obstacle_list);
+        natsManager->addJsonData("riskAssessment", riskObj);
+        adcm::Log::Info() << "RiskAssessment JSON object added to NATS payload";
         natsStatus pubStatus = natsManager->NatsPublishJson(pubSubject);
         if (pubStatus == NATS_OK) {
             adcm::Log::Info() << "NATS publish OK: " << pubSubject;
@@ -110,11 +112,12 @@ void saveToJsonFile(const std::string& key, const std::string& value, int& fileC
     }
     ++fileCount;
 }
-std::string convertRiskAssessmentToJsonString(const adcm::risk_assessment_Objects& riskAssessment, const obstacleListVector& obstacle_list)
+static Poco::JSON::Object::Ptr buildRiskAssessmentJson(const adcm::risk_assessment_Objects& riskAssessment,
+                                                       const obstacleListVector& obstacle_list)
 {
     using namespace Poco::JSON;
 
-    Object root;
+    Object::Ptr root = new Object;
     Array::Ptr riskList = new Array;
 
     //uint64_t timestamp_map = 111;
@@ -168,15 +171,24 @@ std::string convertRiskAssessmentToJsonString(const adcm::risk_assessment_Object
         riskList->add(obj);
     }
 
-    root.set("riskAssessmentList", riskList);
-
-    std::ostringstream oss;
-    root.stringify(oss, 2);  // 2 = 들여쓰기 (pretty print)
-    return oss.str();
+    root->set("riskAssessmentList", riskList);
+    return root;
 }
 
 std::string convertRiskAssessmentToJsonString(const adcm::risk_assessment_Objects& riskAssessment)
 {
     static const obstacleListVector empty;
-    return convertRiskAssessmentToJsonString(riskAssessment, empty);
+    Poco::JSON::Object::Ptr root = buildRiskAssessmentJson(riskAssessment, empty);
+    std::ostringstream oss;
+    root->stringify(oss, 2);  // 2 = 들여쓰기 (pretty print)
+    return oss.str();
+}
+
+std::string convertRiskAssessmentToJsonString(const adcm::risk_assessment_Objects& riskAssessment,
+                                              const obstacleListVector& obstacle_list)
+{
+    Poco::JSON::Object::Ptr root = buildRiskAssessmentJson(riskAssessment, obstacle_list);
+    std::ostringstream oss;
+    root->stringify(oss, 2);  // 2 = 들여쓰기 (pretty print)
+    return oss.str();
 }

@@ -4,13 +4,8 @@
 #include <vector>
 #include <memory>
 #include <string>
-#include <mutex>
 #include "NatsConnManager.h"
 #include "../main_riskassessment.hpp"  // 필요한 데이터 타입 참조
-
-// 전역 변수 (extern 선언)
-extern std::vector<const char*> subject;
-extern std::shared_ptr<adcm::etc::NatsConnManager> natsManager;
 
 // 콜백 함수 및 NATS 관련 함수 선언
 void asyncCb(natsConnection* nc, natsSubscription* sub, natsStatus err, void* closure);
