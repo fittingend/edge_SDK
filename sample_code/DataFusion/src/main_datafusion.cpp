@@ -1418,12 +1418,49 @@ void processFusionForVehiclePair(
     const std::vector<ObstacleData> &prevList,
     const std::vector<int> &assignment)
 {
+    std::vector<int> validatedAssignment = assignment;
+
+    // 0. 매칭 유효성 검사 (클래스 불일치 또는 거리 초과 시 매칭 취소)
+    for (size_t i = 0; i < validatedAssignment.size(); ++i)
+    {
+        const int j = validatedAssignment[i];
+        if (j < 0)
+        {
+            continue;
+        }
+
+        if (i >= prevList.size() || static_cast<size_t>(j) >= presList.size())
+        {
+            validatedAssignment[i] = -1;
+            continue;
+        }
+
+        const auto &prevObstacle = prevList[i];
+        const auto &currentObstacle = presList[j];
+
+        if (prevObstacle.obstacle_class != currentObstacle.obstacle_class)
+        {
+            validatedAssignment[i] = -1;
+            continue;
+        }
+
+        const double distance = euclideanDistance(prevObstacle, currentObstacle); 
+        const bool isStatic = isStaticObstacle(currentObstacle.obstacle_class);
+        const double threshold = isStatic ? STATIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD
+                                          : DYNAMIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD;
+
+        if (distance >= threshold)
+        {
+            validatedAssignment[i] = -1;
+        }
+    }
+
     std::vector<ObstacleData> newList;
 
     // 1. 매칭된 장애물 처리
-    for (size_t i = 0; i < assignment.size(); ++i)
+    for (size_t i = 0; i < validatedAssignment.size(); ++i)
     {
-        int j = assignment[i];
+        int j = validatedAssignment[i];
         if (j >= 0)
         {
             if (presList[j].obstacle_id == 0 && prevList[i].obstacle_id != 0)
@@ -1437,7 +1474,7 @@ void processFusionForVehiclePair(
     // 2. prevList에서 매칭되지 않은 장애물 처리
     for (size_t i = 0; i < prevList.size(); ++i)
     {
-        int j = assignment[i];
+        int j = (i < validatedAssignment.size()) ? validatedAssignment[i] : -1;
         if (j < 0)
         {
             newList.push_back(prevList[i]);
@@ -1447,7 +1484,7 @@ void processFusionForVehiclePair(
     // 3. presList에서 매칭되지 않은 장애물 처리
     for (size_t i = 0; i < presList.size(); ++i)
     {
-        if (std::find(assignment.begin(), assignment.end(), static_cast<int>(i)) == assignment.end())
+        if (std::find(validatedAssignment.begin(), validatedAssignment.end(), static_cast<int>(i)) == validatedAssignment.end())
         {
             auto &currentObstacle = presList[i];
             if (currentObstacle.obstacle_id == 0)
@@ -2057,6 +2094,14 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
 // road_z -> road_list
 std::vector<adcm::roadListStruct> ConvertRoadZToRoadList(const VehicleData &vehicle)
 {
+    const std::string prefix = framePrefix();
+    constexpr std::uint8_t ROADZ_LOG_THRESHOLD = 15;
+    constexpr double ROADZ_LOG_MIN_X = 350.0;
+    constexpr double ROADZ_LOG_MAX_X = 600.0;
+    constexpr double ROADZ_LOG_MIN_Y = 600.0;
+    constexpr double ROADZ_LOG_MAX_Y = 800.0;
+    std::size_t roadzLoggedCount = 0;
+
     std::vector<adcm::roadListStruct> result(24); // 0~22, 255
     for (int i = 0; i < 23; ++i)
     {
@@ -2101,8 +2146,25 @@ std::vector<adcm::roadListStruct> ConvertRoadZToRoadList(const VehicleData &vehi
         double map_x = car_x + rotated_x;
         double map_y = car_y + rotated_y;
 
+        const bool inLogArea = (map_x >= ROADZ_LOG_MIN_X && map_x <= ROADZ_LOG_MAX_X &&
+                                map_y >= ROADZ_LOG_MIN_Y && map_y <= ROADZ_LOG_MAX_Y);
+
+        if (rz >= ROADZ_LOG_THRESHOLD && inLogArea)
+        {
+            adcm::Log::Info() << prefix << "[ROADZ][>=15] level=" << static_cast<int>(rz)
+                              << " map=(" << map_x << ", " << map_y << ")"
+                              << " row=" << row << " col=" << col;
+            roadzLoggedCount += 1;
+        }
+
         adcm::map2dIndex idx = {map_x, map_y};
         result[idx_struct].map_2d_location.push_back(idx);
+    }
+
+    if (roadzLoggedCount > 0)
+    {
+        adcm::Log::Info() << prefix << "[ROADZ][>=15] total logged cells=" << roadzLoggedCount
+                          << " vehicle=" << vehicle.vehicle_class;
     }
 
     return result;
@@ -2956,8 +3018,8 @@ int main(int argc, char *argv[])
                                                              ara::com::e2exf::ConfigurationFormat::JSON);
     adcm::Log::Info() << "DataFusion: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
-    adcm::Log::Info() << "SDK release_251209_interface v2.5 for sa8195";
-    // adcm::Log::Info() << "SDK release_251211_interface v2.5 for orin";
+    adcm::Log::Info() << "SDK release_260306_interface v2.6 for sa8195";
+    // adcm::Log::Info() << "SDK release_260309_interface v2.6 for orin";
     adcm::Log::Info() << "DataFusion Build " << BUILD_TIMESTAMP;
 
     // 파일 경로 얻
