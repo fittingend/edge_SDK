@@ -85,8 +85,9 @@ condition_variable someipReady;
 condition_variable natsReady;
 std::uint8_t send_map = 0;
 
-queue<adcm::map_data_Objects> map_someip_queue;
 queue<adcm::map_data_Objects> map_nats_queue;
+adcm::map_data_Objects latest_map_someip;
+bool latest_map_someip_ready = false;
 
 mutex mtx;
 
@@ -235,8 +236,6 @@ bool isStaticObstacle(const ObstacleData &obstacle);
 // moodycamel::ConcurrentQueue<FusionData> sub1_vehicle_queue;
 // moodycamel::ConcurrentQueue<FusionData> sub2_vehicle_queue;
 
-queue<int> order;
-
 // 허브데이터 수신 시 사용하는 임시 데이터
 VehicleData main_vehicle_temp;
 VehicleData sub1_vehicle_temp;
@@ -354,11 +353,11 @@ std::vector<ObstacleData> mergeAndCompareListsDynamic(
 // 장애물 리스트 융합 및 이전 데이터와 비교
 std::vector<ObstacleData> mergeAndCompareLists(
     const std::vector<ObstacleData> &previousFusionList,
-    std::vector<ObstacleData> listMain,
-    std::vector<ObstacleData> listSub1,
-    std::vector<ObstacleData> listSub2,
-    std::vector<ObstacleData> listSub3,
-    std::vector<ObstacleData> listSub4,
+    const std::vector<ObstacleData> &listMain,
+    const std::vector<ObstacleData> &listSub1,
+    const std::vector<ObstacleData> &listSub2,
+    const std::vector<ObstacleData> &listSub3,
+    const std::vector<ObstacleData> &listSub4,
     const VehicleData &mainVehicle,
     const VehicleData &sub1Vehicle,
     const VehicleData &sub2Vehicle,

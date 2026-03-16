@@ -2,7 +2,6 @@
 #define OCCUPANCY_ALGORITHM_HPP
 
 #include <vector>
-#include <set>
 
 namespace occupancy
 {
@@ -19,7 +18,7 @@ bool overlap1D(double aMin, double aMax, double bMin, double bMax);
 std::vector<Pt> aabbCorners(double x0, double y0, double x1, double y1);
 bool convexPolyIntersectsAabbSAT(const std::vector<Pt> &poly,
                                  double x0, double y0, double x1, double y1);
-std::set<std::pair<int, int>> rasterizePolygonToCells(
+std::vector<std::pair<int, int>> rasterizePolygonToCells(
     const std::vector<Pt> &poly, double cellSize);
 } // namespace occupancy
 
