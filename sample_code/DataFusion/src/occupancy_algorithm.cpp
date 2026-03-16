@@ -79,9 +79,14 @@ bool convexPolyIntersectsAabbSAT(const std::vector<Pt> &poly,
     return true;
 }
 
-std::set<std::pair<int, int>> rasterizePolygonToCells(
+std::vector<std::pair<int, int>> rasterizePolygonToCells(
     const std::vector<Pt> &poly, double cellSize)
 {
+    if (poly.empty())
+    {
+        return {};
+    }
+
     double minx = std::numeric_limits<double>::infinity();
     double maxx = -std::numeric_limits<double>::infinity();
     double miny = std::numeric_limits<double>::infinity();
@@ -100,18 +105,55 @@ std::set<std::pair<int, int>> rasterizePolygonToCells(
     int iy0 = static_cast<int>(std::floor(miny / cellSize));
     int iy1 = static_cast<int>(std::ceil(maxy / cellSize)) - 1;
 
-    std::set<std::pair<int, int>> cells;
+    std::vector<std::pair<int, int>> cells;
+    if (ix1 < ix0 || iy1 < iy0)
+    {
+        return cells;
+    }
+
+    const std::size_t estimated = static_cast<std::size_t>(ix1 - ix0 + 1) * static_cast<std::size_t>(iy1 - iy0 + 1);
+    cells.reserve(estimated);
+
+    // 다각형 방향(시계/반시계)
+    double signedArea2 = 0.0;
+    for (std::size_t i = 0; i < poly.size(); ++i)
+    {
+        const auto &a = poly[i];
+        const auto &b = poly[(i + 1) % poly.size()];
+        signedArea2 += (a.x * b.y - b.x * a.y);
+    }
+    const bool ccw = (signedArea2 >= 0.0);
+
+    auto insideConvex = [&](double px, double py) -> bool
+    {
+        for (std::size_t i = 0; i < poly.size(); ++i)
+        {
+            const auto &a = poly[i];
+            const auto &b = poly[(i + 1) % poly.size()];
+            const double cross = (b.x - a.x) * (py - a.y) - (b.y - a.y) * (px - a.x);
+            if (ccw)
+            {
+                if (cross < -EPS)
+                    return false;
+            }
+            else
+            {
+                if (cross > EPS)
+                    return false;
+            }
+        }
+        return true;
+    };
+
     for (int ix = ix0; ix <= ix1; ix++)
     {
-        double x0 = ix * cellSize;
-        double x1 = (ix + 1) * cellSize;
+        const double cx = (static_cast<double>(ix) + 0.5) * cellSize;
         for (int iy = iy0; iy <= iy1; iy++)
         {
-            double y0 = iy * cellSize;
-            double y1 = (iy + 1) * cellSize;
-            if (convexPolyIntersectsAabbSAT(poly, x0, y0, x1, y1))
+            const double cy = (static_cast<double>(iy) + 0.5) * cellSize;
+            if (insideConvex(cx, cy))
             {
-                cells.insert({ix, iy});
+                cells.push_back({ix, iy});
             }
         }
     }

@@ -789,6 +789,31 @@ bool checkAllVehicleRange(const std::vector<VehicleData *> &vehicles)
     return true;
 }
 
+// 최종 장애물 리스트에서 class 1은 특정 영역(x>=800, y>=450)만 유지
+void filterClass1ByRegion(std::vector<ObstacleData> &mergedList)
+{
+    constexpr std::uint8_t TARGET_CLASS = 1;
+    constexpr double MIN_X = 800.0;
+    constexpr double MIN_Y = 450.0;
+
+    const auto oldSize = mergedList.size();
+    mergedList.erase(std::remove_if(mergedList.begin(), mergedList.end(),
+                                    [&](const ObstacleData &obs)
+                                    {
+                                        if (obs.obstacle_class != TARGET_CLASS)
+                                            return false;
+
+                                        return !(obs.fused_position_x >= MIN_X && obs.fused_position_y >= MIN_Y);
+                                    }),
+                     mergedList.end());
+
+    const auto removed = oldSize - mergedList.size();
+    if (removed > 0)
+    {
+        adcm::Log::Info() << framePrefix() << "[KATECH] class-1 region filter removed=" << removed;
+    }
+}
+
 void processVehicleData(FusionData &vehicleData,
                         VehicleData &vehicle,
                         std::vector<ObstacleData> &obstacleList)
@@ -2136,10 +2161,10 @@ std::vector<adcm::roadListStruct> ConvertRoadZToRoadList(const VehicleData &vehi
 {
     const std::string prefix = framePrefix();
     constexpr std::uint8_t ROADZ_LOG_THRESHOLD = 15;
-    constexpr double ROADZ_LOG_MIN_X = 350.0;
-    constexpr double ROADZ_LOG_MAX_X = 500.0;
-    constexpr double ROADZ_LOG_MIN_Y = 400.0;
-    constexpr double ROADZ_LOG_MAX_Y = 700.0;
+    constexpr double ROADZ_LOG_MIN_X = 340.0;
+    constexpr double ROADZ_LOG_MAX_X = 380.0;
+    constexpr double ROADZ_LOG_MIN_Y = 500.0;
+    constexpr double ROADZ_LOG_MAX_Y = 540.0;
     std::size_t roadzLoggedCount = 0;
 
     std::vector<adcm::roadListStruct> result(24); // 0~22, 255
@@ -2186,10 +2211,11 @@ std::vector<adcm::roadListStruct> ConvertRoadZToRoadList(const VehicleData &vehi
         double map_x = car_x + rotated_x;
         double map_y = car_y + rotated_y;
 
-        const bool inLogArea = (map_x >= ROADZ_LOG_MIN_X && map_x <= ROADZ_LOG_MAX_X &&
-                                map_y >= ROADZ_LOG_MIN_Y && map_y <= ROADZ_LOG_MAX_Y);
+        // 언덕 영역 판정 (x:340~380, y:500~540)
+        const bool inHillArea = (map_x >= ROADZ_LOG_MIN_X && map_x <= ROADZ_LOG_MAX_X &&
+                                 map_y >= ROADZ_LOG_MIN_Y && map_y <= ROADZ_LOG_MAX_Y);
 
-        if (rz >= ROADZ_LOG_THRESHOLD && inLogArea)
+        if (rz >= ROADZ_LOG_THRESHOLD && inHillArea)
         {
             adcm::Log::Info() << prefix << "[ROADZ][>=15] level=" << static_cast<int>(rz)
                               << " map=(" << map_x << ", " << map_y << ")"
@@ -2197,8 +2223,19 @@ std::vector<adcm::roadListStruct> ConvertRoadZToRoadList(const VehicleData &vehi
             roadzLoggedCount += 1;
         }
 
-        adcm::map2dIndex idx = {map_x, map_y};
-        result[idx_struct].map_2d_location.push_back(idx);
+        // 언덕 영역: 들어온 road_z 데이터 그대로 반영
+        // 언덕 외 영역: road_index 11로 고정 반영
+        //   (장애물이 있는 위치는 merge 단계에서 obstacle_cells 필터로 제외 → unscanned 유지)
+        if (inHillArea)
+        {
+            adcm::map2dIndex idx = {map_x, map_y};
+            result[idx_struct].map_2d_location.push_back(idx);
+        }
+        else
+        {
+            adcm::map2dIndex idx = {map_x, map_y};
+            result[11].map_2d_location.push_back(idx);
+        }
     }
 
     if (roadzLoggedCount > 0)
@@ -2528,31 +2565,26 @@ void ThreadReceiveHubData()
                 {
                 case EGO_VEHICLE:
                     main_vehicle_data = fusionData;
-                    order.push(EGO_VEHICLE);
                     ego = true;
                     break;
 
                 case SUB_VEHICLE_1:
                     sub1_vehicle_data = fusionData;
-                    order.push(SUB_VEHICLE_1);
                     sub1 = true;
                     break;
 
                 case SUB_VEHICLE_2:
                     sub2_vehicle_data = fusionData;
-                    order.push(SUB_VEHICLE_2);
                     sub2 = true;
                     break;
 
                 case SUB_VEHICLE_3:
                     sub3_vehicle_data = fusionData;
-                    order.push(SUB_VEHICLE_3);
                     sub3 = true;
                     break;
 
                 case SUB_VEHICLE_4:
                     sub4_vehicle_data = fusionData;
-                    order.push(SUB_VEHICLE_4);
                     sub4 = true;
                     break;
 
@@ -2784,6 +2816,7 @@ void ThreadKatech()
         const auto stage2Start = std::chrono::high_resolution_clock::now();
         obstacle_list = mergeAndCompareLists(previous_obstacle_list, obstacle_list_main, obstacle_list_sub1,
                                              obstacle_list_sub2, obstacle_list_sub3, obstacle_list_sub4, main_vehicle, sub1_vehicle, sub2_vehicle, sub3_vehicle, sub4_vehicle);
+        filterClass1ByRegion(obstacle_list);
         stage2_merge_ms = std::chrono::duration<double, std::milli>(
                               std::chrono::high_resolution_clock::now() - stage2Start)
                               .count();
@@ -2819,8 +2852,6 @@ void ThreadKatech()
                                  std::chrono::high_resolution_clock::now() - stage4Start)
                                  .count();
 
-        order.pop();
-
         // 차량이 맵 범위 내에 있는지 체크
         const auto stage5Start = std::chrono::high_resolution_clock::now();
         bool result = checkAllVehicleRange(vehicles);
@@ -2832,18 +2863,92 @@ void ThreadKatech()
         {
             //==============6. 장애물과 차량의 occupancy 계산해 map_2d_location 값 업데이트 ========
             const auto stage6Start = std::chrono::high_resolution_clock::now();
+            double stage6_obstacle_ms = 0.0;
+            double stage6_vehicle_ms = 0.0;
+
+            std::size_t obstacle_total_count = obstacle_list.size();
+            std::size_t obstacle_skipped_41_42_count = 0;
+            std::size_t obstacle_occupancy_target_count = 0;
+            std::size_t obstacle_occ_cells_before = 0;
+            for (const auto &obs : obstacle_list)
+            {
+                obstacle_occ_cells_before += obs.map_2d_location.size();
+                if (obs.obstacle_class == 41 || obs.obstacle_class == 42)
+                {
+                    obstacle_skipped_41_42_count += 1;
+                }
+                else
+                {
+                    obstacle_occupancy_target_count += 1;
+                }
+            }
 
             if (!obstacle_list.empty())
+            {
+                const auto stage6ObstacleStart = std::chrono::high_resolution_clock::now();
                 find4VerticesObstacle(obstacle_list);
+                stage6_obstacle_ms = std::chrono::duration<double, std::milli>(
+                                         std::chrono::high_resolution_clock::now() - stage6ObstacleStart)
+                                         .count();
+            }
 
+            std::size_t vehicle_occupancy_target_count = 0;
+            std::size_t vehicle_occ_cells_before = 0;
+            for (const auto &vehicle : vehicles)
+            {
+                if (vehicle->vehicle_class != 0)
+                {
+                    vehicle_occupancy_target_count += 1;
+                    vehicle_occ_cells_before += vehicle->map_2d_location.size();
+                }
+            }
+
+            const auto stage6VehicleStart = std::chrono::high_resolution_clock::now();
             for (const auto &vehicle : vehicles)
             {
                 if (vehicle->vehicle_class != 0)
                     find4VerticesVehicle(*vehicle);
             }
+            stage6_vehicle_ms = std::chrono::duration<double, std::milli>(
+                                    std::chrono::high_resolution_clock::now() - stage6VehicleStart)
+                                    .count();
+
+            std::size_t obstacle_occ_cells_after = 0;
+            for (const auto &obs : obstacle_list)
+            {
+                obstacle_occ_cells_after += obs.map_2d_location.size();
+            }
+
+            std::size_t vehicle_occ_cells_after = 0;
+            for (const auto &vehicle : vehicles)
+            {
+                if (vehicle->vehicle_class != 0)
+                {
+                    vehicle_occ_cells_after += vehicle->map_2d_location.size();
+                }
+            }
+
             stage6_occupancy_ms = std::chrono::duration<double, std::milli>(
                                       std::chrono::high_resolution_clock::now() - stage6Start)
                                       .count();
+
+            if (shouldLogHeavyFrame())
+            {
+                adcm::Log::Info() << prefix << "[KATECH][OCCUPANCY] obstacles_total=" << obstacle_total_count
+                                  << " targets=" << obstacle_occupancy_target_count
+                                  << " skipped_41_42=" << obstacle_skipped_41_42_count
+                                  << " cells_before=" << obstacle_occ_cells_before
+                                  << " cells_after=" << obstacle_occ_cells_after
+                                  << " delta=" << (obstacle_occ_cells_after - obstacle_occ_cells_before)
+                                  << " obstacle_ms=" << stage6_obstacle_ms;
+
+                adcm::Log::Info() << prefix << "[KATECH][OCCUPANCY] vehicles_targets=" << vehicle_occupancy_target_count
+                                  << " cells_before=" << vehicle_occ_cells_before
+                                  << " cells_after=" << vehicle_occ_cells_after
+                                  << " delta=" << (vehicle_occ_cells_after - vehicle_occ_cells_before)
+                                  << " vehicle_ms=" << stage6_vehicle_ms
+                                  << " stage6_total_ms=" << stage6_occupancy_ms;
+            }
 
             //==============7. 현재까지의 데이터를 adcm mapData 형식으로 재구성해서 업데이트 ================
 
@@ -2881,7 +2986,8 @@ void ThreadKatech()
 
             {
                 lock_guard<mutex> map_lock(mtx_map_someip);
-                map_someip_queue.push(mapData);
+                latest_map_someip = mapData;
+                latest_map_someip_ready = true;
             }
             someipReady.notify_one();
 
@@ -2950,7 +3056,7 @@ void ThreadSend()
             unique_lock<mutex> lock(mtx_map_someip);
             someipReady.wait(lock, []
                              { return sendEmptyMap == true ||
-                                      !map_someip_queue.empty(); });
+                                      latest_map_someip_ready; });
 
             if (sendEmptyMap)
             {
@@ -2959,8 +3065,8 @@ void ThreadSend()
             }
             else
             {
-                tempMap = map_someip_queue.front();
-                map_someip_queue.pop();
+                tempMap = latest_map_someip;
+                latest_map_someip_ready = false;
                 currentSendVer = sendVer++;
             }
         }
