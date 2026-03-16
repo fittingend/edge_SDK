@@ -96,19 +96,6 @@ int mapVer = 1; // 현재 맵이 몇 번째 맵인지 확인
 int sendVer = 1; // 전송 맵 버전 카운터
 std::atomic<std::uint64_t> last_hub_timestamp{0};
 
-// 좌표가 10 cm 단위이므로 게이트도 10배 확대(0.5 m -> 5, 1.0 m -> 10)
-constexpr double STATIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD = 15.0;  // 1.5 m in 10 cm units (temporal match)
-constexpr double DYNAMIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD = 25.0; // 2.5 m in 10 cm units (temporal match)
-// 차량 간 동일 장애물 매칭 임계값 (지나친 병합을 방지하기 위해 축소)
-// 기존 2.0m/3.5m → 1.2m/2.5m 수준으로 감소 (10cm 단위)
-constexpr double CROSS_STATIC_MATCH_DISTANCE_THRESHOLD = 12.0;  // 1.2 m in 10 cm units
-constexpr double CROSS_DYNAMIC_MATCH_DISTANCE_THRESHOLD = 25.0; // 2.5 m in 10 cm units
-constexpr double HUNGARIAN_MAX_COST = 999999.0;
-constexpr std::size_t STATIC_OBSTACLE_HISTORY_WINDOW = 10;
-constexpr int STATIC_OBSTACLE_MAX_UNMATCHED_FRAMES = 3;
-constexpr int DYNAMIC_OBSTACLE_MAX_UNMATCHED_FRAMES = 3;
-constexpr int STOP_COUNT_REMOVE_THRESHOLD = 3;
-
 enum VehicleClass
 {
     EGO_VEHICLE = 0xF0,
@@ -177,11 +164,6 @@ struct VehicleData
     double velocity_ang;
 };
 
-struct StaticObstacleHistory
-{
-    std::deque<Point2D> positions;
-};
-
 enum ObstacleClass
 {
     NO_OBSTACLE,
@@ -208,29 +190,6 @@ struct FusionData
     VehicleData vehicle;
     std::vector<ObstacleData> obstacle_list;
 };
-
-class ObstacleTracker
-{
-public:
-    std::vector<ObstacleData> update(const std::vector<ObstacleData> &detections);
-
-private:
-    struct Track
-    {
-        ObstacleData data;
-        int unmatchedFrames{0};
-        StaticObstacleHistory history;
-    };
-
-    std::vector<Track> staticTracks_;
-    std::vector<Track> dynamicTracks_;
-
-    void updateStaticTracks(const std::vector<ObstacleData> &detections, std::vector<ObstacleData> &output);
-    void updateDynamicTracks(const std::vector<ObstacleData> &detections, std::vector<ObstacleData> &output);
-    void smoothStaticPosition(Track &track);
-};
-
-bool isStaticObstacle(const ObstacleData &obstacle);
 
 // moodycamel::ConcurrentQueue<FusionData> main_vehicle_queue;
 // moodycamel::ConcurrentQueue<FusionData> sub1_vehicle_queue;
@@ -309,10 +268,6 @@ void generateRoadZValue(VehicleData target_vehicle, std::vector<adcm::map_2dList
 void find4VerticesVehicle(VehicleData &target_vehicle);
 void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered);
 
-void splitObstaclesByType(const std::vector<ObstacleData> &input,
-                          std::vector<ObstacleData> &statics,
-                          std::vector<ObstacleData> &dynamics);
-                          
 // map_2d_location 계산
 void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, VehicleData &vehicle);
 void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std::vector<ObstacleData>::iterator iter);
@@ -345,10 +300,6 @@ void processFusion(
     const std::vector<ObstacleData> &prevList,
     const std::vector<int> &assignment);
 // void processFusion(std::vector<ObstacleData> &fusedList, const std::vector<ObstacleData> &listB, const std::vector<int> &assignment);
-
-std::vector<ObstacleData> mergeAndCompareListsDynamic(
-    const std::vector<ObstacleData> &previousFusionList,
-    const std::vector<ObstacleData> &currentFusionList);
 
 // 장애물 리스트 융합 및 이전 데이터와 비교
 std::vector<ObstacleData> mergeAndCompareLists(

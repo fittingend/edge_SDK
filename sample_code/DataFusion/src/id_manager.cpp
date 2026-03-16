@@ -1,36 +1,26 @@
 #include "id_manager.hpp"
 
-// 생성자: 풀을 1~OBSTACLE_MAX까지 역순으로 채워 스택처럼 사용
+// 생성자 id_counter:256, id_notused 일련번호 대입
 IDManager::IDManager()
 {
-    pool_.reserve(OBSTACLE_MAX);
-    for (int i = OBSTACLE_MAX; i >= 1; --i)
+    id_Counter = OBSTACLE_MAX;
+    for (int i = 0; i < OBSTACLE_MAX; i++)
     {
         id_Notused[i] = static_cast<std::uint16_t>(OBSTACLE_MAX - i);
     }
-    top_ = pool_.size();
 }
 
 int IDManager::allocID()
 {
-    if (top_ == 0)
-    {
-        return -1; // exhausted
-    }
-    return pool_[--top_];
+    return id_Notused[--id_Counter];
 }
 
 void IDManager::retID(int id)
 {
-    if (id <= 0 || id > OBSTACLE_MAX)
-        return; // ignore invalid
-    if (top_ < pool_.size())
-    {
-        pool_[top_++] = static_cast<std::uint16_t>(id);
-    }
+    id_Notused[id_Counter++] = id;
 }
 
 int IDManager::getNum()
 {
-    return static_cast<int>(pool_.size() - top_);
+    return OBSTACLE_MAX-id_Counter;
 }
