@@ -1259,6 +1259,28 @@ function solveAssignment(costMatrix: number[][]): number[] {
 function processFusionForVehiclePair(presList: ObstacleData[], prevList: ObstacleData[], assignment: number[]): void {
   const newList: ObstacleData[] = [];
   
+  // 0. 매칭 유효성 검사 (거리가 너무 멀거나 클래스가 다르면 매칭 취소)
+  for (let i = 0; i < assignment.length; i += 1) {
+    const j = assignment[i];
+    if (j >= 0) {
+      const prevObstacle = prevList[i];
+      const currentObstacle = presList[j];
+      
+      if (prevObstacle.obstacle_class !== currentObstacle.obstacle_class) {
+        assignment[i] = -1;
+        continue;
+      }
+      
+      const distance = euclideanDistance(prevObstacle, currentObstacle);
+      const isStatic = isStaticObstacle(currentObstacle.obstacle_class);
+      const threshold = isStatic ? STATIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD : DYNAMIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD;
+      
+      if (distance >= threshold) {
+        assignment[i] = -1;
+      }
+    }
+  }
+
   // 1. 매칭된 장애물 처리
   for (let i = 0; i < assignment.length; i += 1) {
     const j = assignment[i];
