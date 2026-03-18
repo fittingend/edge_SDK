@@ -949,6 +949,11 @@ void evaluateScenario7(const std::vector<double>& path_x,
 
     const int kMinUnscanned = std::max(1, config.scenario7MinUnscanned);
     const double vehicle_width_m = std::max(0.0, config.scenario7VehicleWidthM);
+    constexpr bool kRoiEnabled = true;
+    constexpr double kRoiMinX = 350.0;
+    constexpr double kRoiMaxX = 850.0;
+    constexpr double kRoiMinY = 300.0;
+    constexpr double kRoiMaxY = 850.0;
     constexpr double kCellResolutionM = 0.1; // 1 cell = 0.1 m (dm)
     const int half_width_cells =
         static_cast<int>(std::ceil((vehicle_width_m * 0.5) / kCellResolutionM));
@@ -961,9 +966,23 @@ void evaluateScenario7(const std::vector<double>& path_x,
     SCENARIO_LOG_INFO() << "[시나리오7] Min unscanned cells per segment: " << kMinUnscanned
                         << " | vehicle_width_m=" << vehicle_width_m
                         << " | half_width_cells=" << half_width_cells;
+    if (kRoiEnabled) {
+        SCENARIO_LOG_INFO() << "[시나리오7] ROI enabled: X=["
+                            << kRoiMinX << ", " << kRoiMaxX
+                            << "] Y=[" << kRoiMinY << ", " << kRoiMaxY << "]";
+    }
 
     const int map_width  = static_cast<int>(map_2d.size());
     const int map_height = map_width ? static_cast<int>(map_2d[0].size()) : 0;
+
+    auto isInsideRoi = [&](double x, double y) -> bool
+    {
+        if (!kRoiEnabled) {
+            return true;
+        }
+        return x >= kRoiMinX && x <= kRoiMaxX &&
+               y >= kRoiMinY && y <= kRoiMaxY;
+    };
 
     auto hasUnscannedInCorridor = [&](int center_x, int center_y,
                                       double normal_x, double normal_y) -> bool
@@ -1009,6 +1028,8 @@ void evaluateScenario7(const std::vector<double>& path_x,
         int y = y_start;
         int consecutive_unknown = 0;
         int max_consecutive_unknown = 0;
+        double run_start_x = 0.0;
+        double run_start_y = 0.0;
 
         const double seg_dx = static_cast<double>(x_end - x_start);
         const double seg_dy = static_cast<double>(y_end - y_start);
@@ -1021,33 +1042,44 @@ void evaluateScenario7(const std::vector<double>& path_x,
             int gridX = steep ? y : x;
             int gridY = steep ? x : y;
 
-            if (gridX < 0 || gridX >= map_width ||
-                gridY < 0 || gridY >= map_height)
-                continue;
+            const bool inside_map =
+                gridX >= 0 && gridX < map_width &&
+                gridY >= 0 && gridY < map_height;
+            const bool inside_roi = inside_map && isInsideRoi(gridX, gridY);
 
-            const bool corridor_has_unscanned = hasUnscannedInCorridor(gridX, gridY, nx, ny);
-            if (corridor_has_unscanned)
+            if (inside_roi)
             {
-                ++consecutive_unknown;
-                max_consecutive_unknown = std::max(max_consecutive_unknown, consecutive_unknown);
-                if (consecutive_unknown == 1) {
-                    SCENARIO_LOG_INFO() << "[시나리오7] center=(" << gridX << "," << gridY << ")"
-                                        << " half_width_cells=" << half_width_cells
-                                        << " corridor_has_unscanned=true";
-                }
-                if (max_consecutive_unknown >= kMinUnscanned)
+                const bool corridor_has_unscanned = hasUnscannedInCorridor(gridX, gridY, nx, ny);
+                if (corridor_has_unscanned)
                 {
-                    adcm::globalPathPosition start{path_x[count], path_y[count]};
-                    adcm::globalPathPosition end{path_x[count+1], path_y[count+1]};
-                    r.hazard_path_start.push_back(start);
-                    r.hazard_path_end.push_back(end);
-                    has_unscanned = true;
+                    ++consecutive_unknown;
+                    max_consecutive_unknown = std::max(max_consecutive_unknown, consecutive_unknown);
+                    if (consecutive_unknown == 1) {
+                        run_start_x = static_cast<double>(gridX);
+                        run_start_y = static_cast<double>(gridY);
+                        SCENARIO_LOG_INFO() << "[시나리오7] center=(" << gridX << "," << gridY << ")"
+                                            << " half_width_cells=" << half_width_cells
+                                            << " corridor_has_unscanned=true";
+                    }
+                    if (max_consecutive_unknown >= kMinUnscanned)
+                    {
+                        adcm::globalPathPosition start{run_start_x, run_start_y};
+                        adcm::globalPathPosition end{static_cast<double>(gridX), static_cast<double>(gridY)};
+                        r.hazard_path_start.push_back(start);
+                        r.hazard_path_end.push_back(end);
+                        has_unscanned = true;
 
-                    SCENARIO_LOG_INFO() << "[시나리오7] Unscanned threshold reached: "
-                                      << "X=" << start.x << " Y=" << start.y
-                                      << " count=" << max_consecutive_unknown;
+                        SCENARIO_LOG_INFO() << "[시나리오7] Unscanned threshold reached: "
+                                          << "X=" << start.x << " Y=" << start.y
+                                          << " endX=" << end.x << " endY=" << end.y
+                                          << " count=" << max_consecutive_unknown;
 
-                    break; // 한 구간당 한 번만 리스크 등록
+                        break; // 한 구간당 한 번만 리스크 등록
+                    }
+                }
+                else
+                {
+                    consecutive_unknown = 0;
                 }
             }
             else
