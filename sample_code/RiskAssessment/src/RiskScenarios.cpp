@@ -960,7 +960,7 @@ void evaluateScenario7(const std::vector<double>& path_x,
     adcm::riskAssessmentStruct r{};
     bool has_unscanned = false;
     r.hazard_class = SCENARIO_7;
-    r.isHarzard = true;
+    r.hazard_path = true;
 
     SCENARIO_LOG_INFO() << "[시나리오7] Min unscanned cells per segment: " << kMinUnscanned
                         << " | vehicle_width_m=" << vehicle_width_m
@@ -1043,8 +1043,8 @@ void evaluateScenario7(const std::vector<double>& path_x,
                 {
                     adcm::globalPathPosition start{path_x[count], path_y[count]};
                     adcm::globalPathPosition end{path_x[count+1], path_y[count+1]};
-                    r.wgs84_xy_start.push_back(start);
-                    r.wgs84_xy_end.push_back(end);
+                    r.hazard_path_start.push_back(start);
+                    r.hazard_path_end.push_back(end);
                     has_unscanned = true;
 
                     SCENARIO_LOG_INFO() << "[시나리오7] Unscanned threshold reached: "
@@ -1067,7 +1067,7 @@ void evaluateScenario7(const std::vector<double>& path_x,
     if (has_unscanned)
     {
         SCENARIO_LOG_INFO() << "[시나리오7] Total unscanned segments: "
-                            << r.wgs84_xy_start.size();
+                            << r.hazard_path_start.size();
         riskAssessment.riskAssessmentList.push_back(r);
     }
 
@@ -1114,7 +1114,7 @@ void evaluateScenario8(const std::vector<double>& path_x,
     adcm::riskAssessmentStruct out{};
     bool has_uneven = false;
     out.hazard_class = SCENARIO_8;
-    out.isHarzard = true;
+    out.hazard_path = true;
 
     for (size_t i = 0; i + 1 < path_x.size(); ++i) {
 
@@ -1205,8 +1205,8 @@ void evaluateScenario8(const std::vector<double>& path_x,
             SCENARIO_LOG_INFO() << "Scenario 8 steep-slope hazard detected at segment " << i
                                 << " (hit=" << hit << ", bin_diff_th=" << BIN_DIFF_THRESHOLD << ")";
 
-            out.wgs84_xy_start.push_back(adcm::globalPathPosition{ path_x[i],     path_y[i]     });
-            out.wgs84_xy_end.push_back  (adcm::globalPathPosition{ path_x[i + 1], path_y[i + 1] });
+            out.hazard_path_start.push_back(adcm::globalPathPosition{ path_x[i],     path_y[i]     });
+            out.hazard_path_end.push_back  (adcm::globalPathPosition{ path_x[i + 1], path_y[i + 1] });
             has_uneven = true;
             // break; // 필요 시 첫 검출 후 종료
         }
@@ -1214,7 +1214,7 @@ void evaluateScenario8(const std::vector<double>& path_x,
 
     if (has_uneven)
     {
-        SCENARIO_LOG_INFO() << "Scenario 8 total hazard segments: " << out.wgs84_xy_start.size();
+        SCENARIO_LOG_INFO() << "Scenario 8 total hazard segments: " << out.hazard_path_start.size();
         riskAssessment.riskAssessmentList.push_back(std::move(out));
     }
 
@@ -1362,10 +1362,10 @@ void evaluateScenario8(const std::vector<double>& path_x,
             SCENARIO_LOG_INFO() << "Scenario 8 hazard detected at segment " << i;
 
             adcm::riskAssessmentStruct out;
-            out.wgs84_xy_start.push_back(adcm::globalPathPosition{ path_x[i],     path_y[i]     });
-            out.wgs84_xy_end.push_back  (adcm::globalPathPosition{ path_x[i + 1], path_y[i + 1] });
+            out.hazard_path_start.push_back(adcm::globalPathPosition{ path_x[i],     path_y[i]     });
+            out.hazard_path_end.push_back  (adcm::globalPathPosition{ path_x[i + 1], path_y[i + 1] });
             out.hazard_class = SCENARIO_8;
-            out.isHarzard = true;
+            out.hazard_path = true;
 
             SCENARIO_LOG_INFO() << "Risk assessment generated for #8 at X: " 
                                 << path_x[i] << ", Y: " << path_y[i];

@@ -486,20 +486,20 @@ void ThreadRASS()
                               << "riskAssessment[" << i
                               << "] " << " 위험시나리오 #" << static_cast<int>(r.hazard_class)
                               << formatObstacleBriefById(r.obstacle_id)
-                              << " isHazard flag=" << (r.isHarzard ? "true" : "false")
+                              << " isHazard flag=" << (r.hazard_path ? "true" : "false")
                               << " conf=" << r.confidence;
 
-            for (size_t s = 0; s < r.wgs84_xy_start.size(); ++s)
+            for (size_t s = 0; s < r.hazard_path_start.size(); ++s)
             {
                 adcm::Log::Info() << riskLogPrefix(riskSeq)
-                                  << "start[" << s << "]=(" << r.wgs84_xy_start[s].x
-                                  << ", " << r.wgs84_xy_start[s].y << ")";
+                                  << "start[" << s << "]=(" << r.hazard_path_start[s].x
+                                  << ", " << r.hazard_path_start[s].y << ")";
             }
-            for (size_t e = 0; e < r.wgs84_xy_end.size(); ++e)
+            for (size_t e = 0; e < r.hazard_path_end.size(); ++e)
             {
                 adcm::Log::Info() << riskLogPrefix(riskSeq)
-                                  << "end[" << e << "]=(" << r.wgs84_xy_end[e].x
-                                  << ", " << r.wgs84_xy_end[e].y << ")";
+                                  << "end[" << e << "]=(" << r.hazard_path_end[e].x
+                                  << ", " << r.hazard_path_end[e].y << ")";
             }
         }
 
