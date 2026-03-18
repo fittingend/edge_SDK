@@ -426,6 +426,15 @@ void ThreadReceiveWorkInformation()
                 }
                 adcm::Log::Info() << "map_2d initialized with size (" << map_2d.size() << ", " << map_2d[0].size() << ") and road_z set to UNSCANNED";
 
+                // 새 work information 수신 시 기존 map/path 플래그를 리셋하고
+                // 이후 새로운 map/path 수신을 기다리도록 함
+                {
+                    std::lock_guard<std::mutex> lock(mtx_cv);
+                    isMapAvailable = false;
+                    isPathAvailable = false;
+                    adcm::Log::Info() << "[WorkInfo] reset isMapAvailable/isPathAvailable";
+                }
+
             }
         }
     }
@@ -557,7 +566,12 @@ void ThreadSend()
         {
             auto t_start_nats = std::chrono::high_resolution_clock::now();
             adcm::Log::Info() << "→ NATS 전송 시작";
-            NatsSend(riskAssessment, obstacle_list);
+            obstacleListVector obstacle_list_snapshot;
+            {
+                std::lock_guard<std::mutex> lock_map(mtx_map);
+                obstacle_list_snapshot = obstacle_list;
+            }
+            NatsSend(riskAssessment, obstacle_list_snapshot);
             auto t_end_nats = std::chrono::high_resolution_clock::now();
             adcm::Log::Info() << "→ NATS 전송 완료";
 
@@ -571,9 +585,14 @@ void ThreadSend()
 
         if(labelWriter)
         {
+            obstacleListVector obstacle_list_snapshot;
+            {
+                std::lock_guard<std::mutex> lock_map(mtx_map);
+                obstacle_list_snapshot = obstacle_list;
+            }
             labelWriter->writeFrame(
                 riskAssessment.timestamp,
-                obstacle_list,
+                obstacle_list_snapshot,
                 ego_vehicle,
                 path_x,
                 path_y,
@@ -601,14 +620,14 @@ void ThreadReceiveEdgeInformation()
         bool edgeInformation_rxEvent = edgeInformation_subscriber.waitEvent(100); // wait event
 
         if(edgeInformation_rxEvent) {
-            adcm::Log::Verbose() << "[EVENT] RiskAssessment Edge Information received";
+            adcm::Log::Info() << "[EVENT] RiskAssessment Edge Information received";
 
             while(!edgeInformation_subscriber.isEventQueueEmpty()) {
                 auto data = edgeInformation_subscriber.getEvent();
                 gReceivedEvent_count_edge_information++;
 
                 edge_state = data->state;
-                adcm::Log::Verbose() << "state : " << edge_state;
+                adcm::Log::Info() << "state : " << edge_state;
             }
         }
     }

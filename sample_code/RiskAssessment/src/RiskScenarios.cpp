@@ -3,6 +3,7 @@
 namespace {
 inline bool scenarioLogEnabled() { return gScenarioLogEnabled; }
 
+/*
 double calculateFrontRearFactor(const adcm::obstacleListStruct& obs,
                                 const adcm::vehicleListStruct& ego_vehicle)
 {
@@ -32,6 +33,7 @@ double calculateFrontRearFactor(const adcm::obstacleListStruct& obs,
     const double dir_factor = kBase + kGain * alignment;
     return clampValue(dir_factor, kMin, kMax);
 }
+*/
 }
 
 #define SCENARIO_LOG_INFO() if (!scenarioLogEnabled()) ; else adcm::Log::Info()
@@ -46,12 +48,12 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
     SCENARIO_LOG_INFO() << "============= KATECH: Scenario 1 START =============";
 
     // 단위: 거리 dm(0.1 m), 시간 ms
-    constexpr double DIST_TO_EGO_MAX_DM  = 300.0; // 특장차와 30 m 이내
-    constexpr double DIST_TO_PATH_MAX_DM = 100.0; // 특장차의 전역경로와 10 m 이내
+    constexpr double DIST_TO_EGO_MAX_DM  = 300.0; // 장애물 <-> 특장차와 30 m 이내
+    constexpr double DIST_TO_PATH_MAX_DM = 300.0; // 장애물 <-> 전역경로와 30 m 이내
 
     // 컨피던스 파라미터
     constexpr double EGO_THRESH_DM  = 300.0;
-    constexpr double PATH_THRESH_DM = 100.0;
+    constexpr double PATH_THRESH_DM = 300.0;
     constexpr double W_EGO  = 0.6;
     constexpr double W_PATH = 0.4;
 
@@ -116,8 +118,8 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
         const double s_ego  = clampValue((EGO_THRESH_DM  - d_ego_dm) / EGO_THRESH_DM, 0.0, 1.0);
         const double s_path = clampValue((PATH_THRESH_DM - d_path_dm) / PATH_THRESH_DM, 0.0, 1.0);
         const double base_confidence = W_EGO * s_ego + W_PATH * s_path;
-        const double dir_factor = calculateFrontRearFactor(obs, ego_vehicle); // 전방/후방 가중치
-        double confidence   = clampValue(base_confidence * dir_factor, 0.0, 1.0); // 최종 confidence
+        // const double dir_factor = calculateFrontRearFactor(obs, ego_vehicle); // 전방/후방 가중치
+        double confidence   = clampValue(base_confidence, 0.0, 1.0); // 최종 confidence
 
         adcm::riskAssessmentStruct r{};
         r.obstacle_id  = obs.obstacle_id;
@@ -126,7 +128,6 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
 
         SCENARIO_LOG_INFO() << "[시나리오1 활성] ID=" << obs.obstacle_id
                           << " | s_ego=" << s_ego << ", s_path=" << s_path
-                          << " | dir_factor=" << dir_factor
                           << " | confidence=" << confidence;
 
         riskAssessment.riskAssessmentList.push_back(r);
@@ -146,11 +147,11 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
 
     // 단위: 거리 dm(0.1m)
     constexpr double DIST_TO_EGO_MAX_DM  = 400.0; // 특장차와 40 m 이내
-    constexpr double DIST_TO_PATH_MAX_DM = 100.0; // 특장차 전역경로에서 10 m 이내
+    constexpr double DIST_TO_PATH_MAX_DM = 300.0; // 특장차 전역경로에서 10 m 이내
 
     // 컨피던스 파라미터
     constexpr double EGO_THRESH_DM  = 400.0;
-    constexpr double PATH_THRESH_DM = 100.0;
+    constexpr double PATH_THRESH_DM = 300.0;
     constexpr double W_EGO  = 0.7;
     constexpr double W_PATH = 0.3;
 
@@ -219,8 +220,8 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
         const double s_ego  = clampValue((EGO_THRESH_DM  - d_ego_dm) / EGO_THRESH_DM, 0.0, 1.0);
         const double s_path = clampValue((PATH_THRESH_DM - d_path_dm) / PATH_THRESH_DM, 0.0, 1.0);
         const double base_confidence = W_EGO * s_ego + W_PATH * s_path;
-        const double dir_factor = calculateFrontRearFactor(obs, ego_vehicle); // 전방/후방 가중치
-        double confidence   = clampValue(base_confidence * dir_factor, 0.0, 1.0); // 최종 confidence
+        // const double dir_factor = calculateFrontRearFactor(obs, ego_vehicle); // 전방/후방 가중치
+        double confidence   = clampValue(base_confidence, 0.0, 1.0); // 최종 confidence
 
         adcm::riskAssessmentStruct r{};
         r.obstacle_id  = obs.obstacle_id;
@@ -229,7 +230,6 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
 
         SCENARIO_LOG_INFO() << "[시나리오2 활성] ID=" << obs.obstacle_id
                           << " | s_ego=" << s_ego << ", s_path=" << s_path
-                          << " | dir_factor=" << dir_factor
                           << " | confidence=" << confidence;
 
         riskAssessment.riskAssessmentList.push_back(r);
@@ -318,8 +318,8 @@ void evaluateScenario3(const obstacleListVector& obstacle_list,
         double s_dist = clampValue(1.0 - ((d_lin_dm - MIN_DIST_DM) / (MAX_DIST_DM - MIN_DIST_DM)), 0.0, 1.0);
 
         const double base_confidence = W_TTC * s_ttc + W_DIST * s_dist;
-        const double dir_factor = calculateFrontRearFactor(obs, ego_vehicle); // 전방/후방 가중치
-        double confidence = clampValue(base_confidence * dir_factor, 0.0, 1.0);
+        // const double dir_factor = calculateFrontRearFactor(obs, ego_vehicle); // 전방/후방 가중치
+        double confidence = clampValue(base_confidence, 0.0, 1.0);
 
         adcm::riskAssessmentStruct r{};
         r.obstacle_id  = obs.obstacle_id;
@@ -329,7 +329,6 @@ void evaluateScenario3(const obstacleListVector& obstacle_list,
         SCENARIO_LOG_INFO() << "[시나리오3 활성] ID=" << obs.obstacle_id
                           << " | s_ttc=" << s_ttc
                           << " | s_dist=" << s_dist
-                          << " | dir_factor=" << dir_factor
                           << " | confidence=" << confidence
                           << " (W_TTC=" << W_TTC << ", W_DIST=" << W_DIST << ")";
 
@@ -683,10 +682,10 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
     // (4) 트리거 처리
     const double pair_m   = best_pair_dm / 10.0;
     const double base_conf = clampValue((MAX_PAIR_DIST_DM - best_pair_dm) / MAX_PAIR_DIST_DM, 0.0, 1.0);
-    const double dir_factor_a = calculateFrontRearFactor(best_a, ego_vehicle); // 전방/후방 가중치
-    const double dir_factor_b = calculateFrontRearFactor(best_b, ego_vehicle); // 전방/후방 가중치
-    const double conf_a = clampValue(base_conf * dir_factor_a, 0.0, 1.0);
-    const double conf_b = clampValue(base_conf * dir_factor_b, 0.0, 1.0);
+    // const double dir_factor_a = calculateFrontRearFactor(best_a, ego_vehicle); // 전방/후방 가중치
+    // const double dir_factor_b = calculateFrontRearFactor(best_b, ego_vehicle); // 전방/후방 가중치
+    const double conf_a = clampValue(base_conf, 0.0, 1.0);
+    const double conf_b = clampValue(base_conf, 0.0, 1.0);
 
     adcm::riskAssessmentStruct s5a{ .obstacle_id=best_a.obstacle_id, .hazard_class=SCENARIO_5, .confidence=conf_a };
     adcm::riskAssessmentStruct s5b{ .obstacle_id=best_b.obstacle_id, .hazard_class=SCENARIO_5, .confidence=conf_b };
@@ -695,7 +694,6 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
                 << " | 페어 IDs=(" << s5a.obstacle_id << "," << s5b.obstacle_id << ")"
                 << " | 거리=" << pair_m << " m"
                 << " | base_conf=" << base_conf
-                << " | dir_factor=(" << dir_factor_a << "," << dir_factor_b << ")"
                 << " | confidence=(" << conf_a << "," << conf_b << ")";
 
     riskAssessment.riskAssessmentList.push_back(s5a);
@@ -902,8 +900,8 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
 
     // confidence = 400dm / (min_ego_dm) * 0.7  (단위 일치)
     const double base_confidence = (400.0 / std::max(min_ego_dm, 1.0)) * 0.7; // 0 보호
-    const double dir_factor = calculateFrontRearFactor(chosen, ego_vehicle); // 전방/후방 가중치
-    double confidence = clampValue(base_confidence * dir_factor, 0.0, 1.0);
+    // const double dir_factor = calculateFrontRearFactor(chosen, ego_vehicle); // 전방/후방 가중치
+    double confidence = clampValue(base_confidence, 0.0, 1.0);
 
     adcm::riskAssessmentStruct s6{};
     s6.obstacle_id  = chosen.obstacle_id;
@@ -916,7 +914,6 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
                 << " | Ego-가까운차 ID=" << chosen.obstacle_id
                 << " | Ego-가까운차 거리=" << min_ego_m << " m"
                 << " | base_conf=" << base_confidence
-                << " | dir_factor=" << dir_factor
                 << " | confidence=" << confidence
                 << " (계산식: 400dm/" << min_ego_dm << " *0.7)";
 
