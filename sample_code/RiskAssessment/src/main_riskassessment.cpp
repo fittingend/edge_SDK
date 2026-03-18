@@ -710,8 +710,8 @@ int main(int argc, char *argv[])
     adcm::Log::Info() << "RiskAssessment: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
     adcm::Log::Info() << "Ok, let's produce some RiskAssessment data...";
-    //adcm::Log::Info() << "SDK interface v2.6.1, SA8195";
-    adcm::Log::Info() << "SDK interface v2.6.1, AGX Orin version";
+    adcm::Log::Info() << "SDK interface v2.7, SA8195";
+    // adcm::Log::Info() << "SDK interface v2.7, AGX Orin version";
     adcm::Log::Info() << "RiskAssessment Build " << BUILD_TIMESTAMP;
 
     if (config.loadFromFile(iniFilePath))

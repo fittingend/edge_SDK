@@ -3251,8 +3251,8 @@ int main(int argc, char *argv[])
                                                              ara::com::e2exf::ConfigurationFormat::JSON);
     adcm::Log::Info() << "DataFusion: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
-    // adcm::Log::Info() << "SDK release_260306_interface v2.6 for sa8195";
-    adcm::Log::Info() << "SDK release_260309_interface v2.6 for orin";
+    // adcm::Log::Info() << "SDK release_260313_interface v2.7 for sa8195";
+    adcm::Log::Info() << "SDK release_260313_interface v2.7 for orin";
     adcm::Log::Info() << "DataFusion Build " << BUILD_TIMESTAMP;
 
     // 파일 경로 얻
