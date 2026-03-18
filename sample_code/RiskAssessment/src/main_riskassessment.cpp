@@ -733,7 +733,6 @@ int main(int argc, char *argv[])
     {
         nats_server_url = config.serverAddress + ":" + std::to_string(config.serverPort);
     }
-    adcm::Log::Info() << "NATS_SERVER_URL: " << nats_server_url;
 
     if (config.useNats)
         useNats = true;
@@ -741,8 +740,6 @@ int main(int argc, char *argv[])
         saveJson = true;
     gScenarioLogEnabled = config.scenarioLog;
     gStopValue = config.stopValue;
-
-    adcm::Log::Info() << (useNats ? "NATS ON" : "NATS OFF");
 
     if (config.labelWrite) {
         const std::string default_label_path = "auto_labels.csv";
