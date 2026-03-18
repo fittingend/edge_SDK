@@ -14,7 +14,7 @@ public:
     bool labelWrite = false;
     std::string labelOutputPath;
     int scenario7MinUnscanned = 10;
-    int stopValue = 30;
+    int stopValue = 1;
     double scenario7VehicleWidthM = 2.5;
 
     void setDefault(

@@ -127,6 +127,9 @@ static Poco::JSON::Object::Ptr buildRiskAssessmentJson(const adcm::risk_assessme
     for (const auto& item : riskAssessment.riskAssessmentList) {
         Object::Ptr obj = new Object;
         obj->set("obstacle_id", item.obstacle_id);
+        // default when no match
+        obj->set("obstacle_class", -1);
+        obj->set("obstacle_class_kr", std::string("알 수 없음"));
         const adcm::obstacleListStruct* matched = nullptr;
         for (const auto& obs : obstacle_list) {
             if (obs.obstacle_id == item.obstacle_id) {
@@ -139,6 +142,9 @@ static Poco::JSON::Object::Ptr buildRiskAssessmentJson(const adcm::risk_assessme
             xy->set("x", matched->fused_position_x);
             xy->set("y", matched->fused_position_y);
             obj->set("obstacle_xy", xy);
+            obj->set("obstacle_class", static_cast<int>(matched->obstacle_class));
+            obj->set("obstacle_class_kr",
+                     std::string(to_string(static_cast<ObstacleClass>(matched->obstacle_class))));
         }
 
         // hazard_path_start

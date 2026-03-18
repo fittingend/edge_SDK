@@ -28,7 +28,7 @@ void Config::setDefault(
     labelWrite = pt.get<bool>("label.LabelWrite", false);
     labelOutputPath = pt.get<std::string>("label.LabelOutputPath", "");
     scenario7MinUnscanned = pt.get<int>("Scenario.MinUnscanned7", 10);
-    stopValue = pt.get<int>("Scenario.StopValue", 30);
+    stopValue = pt.get<int>("Scenario.StopValue", 1);
     scenario7VehicleWidthM = pt.get<double>("Scenario.VehicleWidthM", 2.5);
 }
 

@@ -56,10 +56,6 @@ add_compile_definitions(DEFAULT_LOG_TAG="${PROC_NAME}")
 include(GNUInstallDirs)
 include(AUTOSAR/apd)
 
-# build Options
-option(sa "Build with sa SDK" OFF)
-option(orin "Build with orin SDK" OFF)
-
 #Build Time
 string(TIMESTAMP BUILD_TIMESTAMP "%Y-%m-%d %H:%M:%S")
 
@@ -70,16 +66,9 @@ add_definitions(-DBUILD_TIMESTAMP="${BUILD_TIMESTAMP}")
 # SDK common Path
 set(COMMON_DIR "")
 
-# set common directory by SDK
-if(sa)
-    message(STATUS "Building with SA SDK")
-    set(COMMON_DIR "${PROJECT_SOURCE_DIR}/../common_sa")
-elseif(orin)
-    message(STATUS "Building with ORIN SDK")
-    set(COMMON_DIR "${PROJECT_SOURCE_DIR}/../common_orin")
-else()
-    message(FATAL_ERROR "No SDK specified. Please enable either SA_SDK(-Dsa=ON) or ORIN_SDK(-Dorin=ON).")
-endif()
+# set common directory
+set(COMMON_DIR "${PROJECT_SOURCE_DIR}/../common")
+message(STATUS "Using common: ${COMMON_DIR}")
 
 #Build Time
 string(TIMESTAMP BUILD_TIMESTAMP "%Y-%m-%d %H:%M:%S")
@@ -214,6 +203,7 @@ set(APPLICATION_src
     ${COMMON_DIR}/service/src/build_path_subscriber.cpp
     ${COMMON_DIR}/service/src/work_information_subscriber.cpp
     ${COMMON_DIR}/service/src/map_data_subscriber.cpp
+    ${COMMON_DIR}/service/src/edge_information_subscriber.cpp
 )
 
 if(HAS_VSOMEIP_BINDING OR HAS_WRSOMEIP_BINDING)

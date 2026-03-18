@@ -80,6 +80,7 @@ adcm::vehicleListStruct ego_vehicle, sub_vehicle_1, sub_vehicle_2, sub_vehicle_3
 adcm::risk_assessment_Objects riskAssessment;
 uint64_t timestamp_map = 0; 
 std::string nats_server_url;
+std::uint8_t edge_state = 0; //(0 = idle / 1 = search / 2 = return / 3 = move / 4 = work )
 bool useNats = false;
 bool saveJson = false;
 bool gScenarioLogEnabled = false;
@@ -425,6 +426,15 @@ void ThreadReceiveWorkInformation()
                 }
                 adcm::Log::Info() << "map_2d initialized with size (" << map_2d.size() << ", " << map_2d[0].size() << ") and road_z set to UNSCANNED";
 
+                // 새 work information 수신 시 기존 map/path 플래그를 리셋하고
+                // 이후 새로운 map/path 수신을 기다리도록 함
+                {
+                    std::lock_guard<std::mutex> lock(mtx_cv);
+                    isMapAvailable = false;
+                    isPathAvailable = false;
+                    adcm::Log::Info() << "[WorkInfo] reset isMapAvailable/isPathAvailable";
+                }
+
             }
         }
     }
@@ -462,7 +472,7 @@ void ThreadRASS()
             evaluateScenario1(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
             evaluateScenario2(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
             evaluateScenario3(obstacle_list, ego_vehicle, riskAssessment);
-            evaluateScenario4(obstacle_list, ego_vehicle, riskAssessment);
+            evaluateScenario4(obstacle_list, ego_vehicle, riskAssessment, edge_state);
             evaluateScenario5(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
             evaluateScenario6(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
             evaluateScenario7(path_x, path_y, map_2d, config, riskAssessment);
@@ -556,7 +566,12 @@ void ThreadSend()
         {
             auto t_start_nats = std::chrono::high_resolution_clock::now();
             adcm::Log::Info() << "→ NATS 전송 시작";
-            NatsSend(riskAssessment, obstacle_list);
+            obstacleListVector obstacle_list_snapshot;
+            {
+                std::lock_guard<std::mutex> lock_map(mtx_map);
+                obstacle_list_snapshot = obstacle_list;
+            }
+            NatsSend(riskAssessment, obstacle_list_snapshot);
             auto t_end_nats = std::chrono::high_resolution_clock::now();
             adcm::Log::Info() << "→ NATS 전송 완료";
 
@@ -570,9 +585,14 @@ void ThreadSend()
 
         if(labelWriter)
         {
+            obstacleListVector obstacle_list_snapshot;
+            {
+                std::lock_guard<std::mutex> lock_map(mtx_map);
+                obstacle_list_snapshot = obstacle_list;
+            }
             labelWriter->writeFrame(
                 riskAssessment.timestamp,
-                obstacle_list,
+                obstacle_list_snapshot,
                 ego_vehicle,
                 path_x,
                 path_y,
@@ -586,6 +606,30 @@ void ThreadSend()
         // [4] 전송 완료 후 위험 판단 데이터 초기화
         riskAssessment.riskAssessmentList.clear();
         // std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+}
+void ThreadReceiveEdgeInformation()
+{
+    adcm::Log::Info() << "RiskAssessment ThreadReceiveEdgeInformation";
+    adcm::EdgeInformation_Subscriber edgeInformation_subscriber;
+    edgeInformation_subscriber.init("RiskAssessment/RiskAssessment/RPort_edge_information");
+
+    while (continueExecution) {
+        gMainthread_Loopcount++;
+        VERBOSE("[RiskAssessment] ThreadReceiveEdgeInformation loop");
+        bool edgeInformation_rxEvent = edgeInformation_subscriber.waitEvent(100); // wait event
+
+        if(edgeInformation_rxEvent) {
+            adcm::Log::Info() << "[EVENT] RiskAssessment Edge Information received";
+
+            while(!edgeInformation_subscriber.isEventQueueEmpty()) {
+                auto data = edgeInformation_subscriber.getEvent();
+                gReceivedEvent_count_edge_information++;
+
+                edge_state = data->state;
+                adcm::Log::Info() << "state : " << edge_state;
+            }
+        }
     }
 }
 
@@ -666,8 +710,8 @@ int main(int argc, char *argv[])
     adcm::Log::Info() << "RiskAssessment: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
     adcm::Log::Info() << "Ok, let's produce some RiskAssessment data...";
-    adcm::Log::Info() << "SDK release_251209_interface v2.5 for sa8195";
-    // adcm::Log::Info() << "SDK release_250321_interface v2.1, AGX Orin version";
+    //adcm::Log::Info() << "SDK interface v2.6.1, SA8195";
+    adcm::Log::Info() << "SDK interface v2.6.1, AGX Orin version";
     adcm::Log::Info() << "RiskAssessment Build " << BUILD_TIMESTAMP;
 
     if (config.loadFromFile(iniFilePath))
@@ -689,7 +733,6 @@ int main(int argc, char *argv[])
     {
         nats_server_url = config.serverAddress + ":" + std::to_string(config.serverPort);
     }
-    adcm::Log::Info() << "NATS_SERVER_URL: " << nats_server_url;
 
     if (config.useNats)
         useNats = true;
@@ -697,8 +740,6 @@ int main(int argc, char *argv[])
         saveJson = true;
     gScenarioLogEnabled = config.scenarioLog;
     gStopValue = config.stopValue;
-
-    adcm::Log::Info() << (useNats ? "NATS ON" : "NATS OFF");
 
     if (config.labelWrite) {
         const std::string default_label_path = "auto_labels.csv";
@@ -709,7 +750,7 @@ int main(int argc, char *argv[])
     } else {
         adcm::Log::Info() << "AutoLabelWriter DISABLED";
     }
-
+    thread_list.push_back(std::thread(ThreadReceiveEdgeInformation));
     thread_list.push_back(std::thread(ThreadReceiveMapData));
     thread_list.push_back(std::thread(ThreadReceiveBuildPath));
     thread_list.push_back(std::thread(ThreadReceiveWorkInformation));
