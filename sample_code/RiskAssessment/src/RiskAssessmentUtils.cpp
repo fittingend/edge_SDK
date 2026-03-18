@@ -525,17 +525,17 @@ void detectUnscannedPath(const std::vector<adcm::map_2dListVector>& map_2d,
                 if (map_2d[y][x].road_z != 1) // 스캔되지 않은 map 의 index - 노면정보 X
                 {
                     adcm::riskAssessmentStruct riskAssessment7;
-                    riskAssessment7.wgs84_xy_start.clear();
-                    riskAssessment7.wgs84_xy_end.clear();
+                    riskAssessment7.hazard_path_start.clear();
+                    riskAssessment7.hazard_path_end.clear();
                     adcm::globalPathPosition unscanned_start_path, unscanned_end_path;
                     unscanned_start_path.x = path_x[count];
                     unscanned_start_path.y = path_y[count];
                     unscanned_end_path.x = path_x[count + 1];
                     unscanned_end_path.y = path_y[count + 1];
-                    riskAssessment7.wgs84_xy_start.push_back(unscanned_start_path);
-                    riskAssessment7.wgs84_xy_end.push_back(unscanned_end_path);
+                    riskAssessment7.hazard_path_start.push_back(unscanned_start_path);
+                    riskAssessment7.hazard_path_end.push_back(unscanned_end_path);
                     riskAssessment7.hazard_class = SCENARIO_7;
-                    riskAssessment7.isHarzard = true;
+                    riskAssessment7.hazard_path = true;
                     adcm::Log::Info() << "Risk assessment generated for #7 is X: " << path_x[count] << " Y: " << path_y[count] << " with flag 1 ";
                     riskAssessment.riskAssessmentList.push_back(riskAssessment7);
                     break; // 한번만 들어가도 for loop break
@@ -547,18 +547,18 @@ void detectUnscannedPath(const std::vector<adcm::map_2dListVector>& map_2d,
                 adcm::riskAssessmentStruct riskAssessment7;
                 // adcm::Log::Info() << "detectUnscannedPath test else";
                 adcm::Log::Info() << "map_2d[" << x << "][" << y << "] is 0";
-                riskAssessment7.wgs84_xy_start.clear();
-                riskAssessment7.wgs84_xy_end.clear();
+                riskAssessment7.hazard_path_start.clear();
+                riskAssessment7.hazard_path_end.clear();
                 adcm::globalPathPosition unscanned_start_path, unscanned_end_path;
                 unscanned_start_path.x = path_x[count];
                 unscanned_start_path.y = path_y[count];
                 unscanned_end_path.x = path_x[count + 1];
                 unscanned_end_path.y = path_y[count + 1];
-                riskAssessment7.wgs84_xy_start.push_back(unscanned_start_path);
-                riskAssessment7.wgs84_xy_end.push_back(unscanned_end_path);
+                riskAssessment7.hazard_path_start.push_back(unscanned_start_path);
+                riskAssessment7.hazard_path_end.push_back(unscanned_end_path);
                 riskAssessment7.hazard_class = SCENARIO_7;
-                riskAssessment7.isHarzard = true;
-                adcm::Log::Info() << "Risk assessment generated for #7 is X: " << riskAssessment7.wgs84_xy_start[0].x << " Y: " << riskAssessment7.wgs84_xy_start[0].y << " with flag" << riskAssessment7.isHarzard;
+                riskAssessment7.hazard_path = true;
+                adcm::Log::Info() << "Risk assessment generated for #7 is X: " << riskAssessment7.hazard_path_start[0].x << " Y: " << riskAssessment7.hazard_path_start[0].y << " with flag" << riskAssessment7.hazard_path;
                 riskAssessment.riskAssessmentList.push_back(riskAssessment7);
                 break;
             }

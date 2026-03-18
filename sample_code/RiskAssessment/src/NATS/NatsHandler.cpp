@@ -141,28 +141,28 @@ static Poco::JSON::Object::Ptr buildRiskAssessmentJson(const adcm::risk_assessme
             obj->set("obstacle_xy", xy);
         }
 
-        // wgs84_xy_start
+        // hazard_path_start
         Array::Ptr startArr = new Array;
-        for (const auto& pt : item.wgs84_xy_start) {
+        for (const auto& pt : item.hazard_path_start) {
             Object::Ptr xy = new Object;
             xy->set("x", pt.x);
             xy->set("y", pt.y);
             startArr->add(xy);
         }
-        obj->set("wgs84_xy_start", startArr);
+        obj->set("hazard_path_start", startArr);
 
-        // wgs84_xy_end
+        // hazard_path_end
         Array::Ptr endArr = new Array;
-        for (const auto& pt : item.wgs84_xy_end) {
+        for (const auto& pt : item.hazard_path_end) {
             Object::Ptr xy = new Object;
             xy->set("x", pt.x);
             xy->set("y", pt.y);
             endArr->add(xy);
         }
-        obj->set("wgs84_xy_end", endArr);
+        obj->set("hazard_path_end", endArr);
 
         obj->set("hazard_class", static_cast<int>(item.hazard_class));
-        obj->set("isHazard", item.isHarzard);
+        obj->set("isHazard", item.hazard_path);
         obj->set("confidence", item.confidence);
         obj->set("timestamp_map", timestamp_map);
         obj->set("timestamp_risk", timestamp_risk);
