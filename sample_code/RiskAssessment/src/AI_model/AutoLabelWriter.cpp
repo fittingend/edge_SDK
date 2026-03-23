@@ -162,21 +162,36 @@ AutoLabelWriter::AutoLabelWriter(const Config& config, const std::string& csv_pa
     const bool has_config_path = !config.labelOutputPath.empty();
     std::string output_path = has_config_path ? config.labelOutputPath : "";
 
+    // timestamp for unique filename
+    const auto now = std::chrono::system_clock::now();
+    const std::time_t now_time = std::chrono::system_clock::to_time_t(now);
+    std::tm tm_buf{};
+#if defined(_WIN32)
+    localtime_s(&tm_buf, &now_time);
+#else
+    localtime_r(&now_time, &tm_buf);
+#endif
+    std::ostringstream ts;
+    ts << std::put_time(&tm_buf, "%Y%m%d_%H%M%S");
+    const std::string ts_str = ts.str();
+
     if (!has_config_path) {
         // Generate timestamped filename under CWD/log when no path is provided.
-        const auto now = std::chrono::system_clock::now();
-        const std::time_t now_time = std::chrono::system_clock::to_time_t(now);
-        std::tm tm_buf{};
-#if defined(_WIN32)
-        localtime_s(&tm_buf, &now_time);
-#else
-        localtime_r(&now_time, &tm_buf);
-#endif
-        std::ostringstream ts;
-        ts << std::put_time(&tm_buf, "%Y%m%d_%H%M%S");
-        output_path = cwd + "/log/auto_labels_" + ts.str() + ".csv";
+        output_path = cwd + "/log/auto_labels_" + ts_str + ".csv";
     } else if (!output_path.empty() && output_path[0] != '/') {
         output_path = cwd + "/" + output_path;
+    }
+
+    if (!output_path.empty()) {
+        // Always make filename unique (even when a fixed path is provided).
+        const size_t slash = output_path.find_last_of('/');
+        const size_t dot = output_path.find_last_of('.');
+        const bool has_ext = (dot != std::string::npos) && (slash == std::string::npos || dot > slash);
+        if (has_ext) {
+            output_path = output_path.substr(0, dot) + "_" + ts_str + output_path.substr(dot);
+        } else {
+            output_path = output_path + "_" + ts_str;
+        }
     }
 
     if (output_path.empty()) {
