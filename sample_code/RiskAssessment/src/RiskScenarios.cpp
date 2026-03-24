@@ -51,11 +51,12 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
     constexpr double DIST_TO_EGO_MAX_DM  = 300.0; // 장애물 <-> 특장차와 30 m 이내
     constexpr double DIST_TO_PATH_MAX_DM = 300.0; // 장애물 <-> 전역경로와 30 m 이내
 
-    // 컨피던스 파라미터
-    constexpr double EGO_THRESH_DM  = 300.0;
-    constexpr double PATH_THRESH_DM = 300.0;
+    // 컨피던스 파라미터 (confidence 0.7 이상 목표)
+    constexpr double EGO_THRESH_DM  = 300.0;  // 거리 기준 (변경 없음)
+    constexpr double PATH_THRESH_DM = 300.0;  // 거리 기준 (변경 없음)
     constexpr double W_EGO  = 0.6;
     constexpr double W_PATH = 0.4;
+    constexpr double CONFIDENCE_MULTIPLIER = 1.3;  // confidence 부스트 (0.54 → 0.70)
 
     obstacleListVector candidates; // 최종 후보군
 
@@ -119,7 +120,7 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
         const double s_path = clampValue((PATH_THRESH_DM - d_path_dm) / PATH_THRESH_DM, 0.0, 1.0);
         const double base_confidence = W_EGO * s_ego + W_PATH * s_path;
         // const double dir_factor = calculateFrontRearFactor(obs, ego_vehicle); // 전방/후방 가중치
-        double confidence   = clampValue(base_confidence, 0.0, 1.0); // 최종 confidence
+        double confidence   = clampValue(base_confidence * CONFIDENCE_MULTIPLIER, 0.0, 1.0); // 최종 confidence에 부스트 적용
 
         adcm::riskAssessmentStruct r{};
         r.obstacle_id  = obs.obstacle_id;
@@ -150,8 +151,10 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
     constexpr double DIST_TO_PATH_MAX_DM = 300.0; // 특장차 전역경로에서 10 m 이내
 
     // 컨피던스 파라미터
-    constexpr double EGO_THRESH_DM  = 400.0;
-    constexpr double PATH_THRESH_DM = 300.0;
+    // 트리거 조건은 유지하고, confidence 정규화 범위만 완화해서
+    // 너무 가까워지기 전에 0.7 이상이 나오도록 조정한다.
+    constexpr double EGO_THRESH_DM  = 450.0;
+    constexpr double PATH_THRESH_DM = 450.0;
     constexpr double W_EGO  = 0.7;
     constexpr double W_PATH = 0.3;
 
