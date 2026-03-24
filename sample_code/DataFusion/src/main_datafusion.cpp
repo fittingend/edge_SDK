@@ -789,12 +789,16 @@ bool checkAllVehicleRange(const std::vector<VehicleData *> &vehicles)
     return true;
 }
 
-// 최종 장애물 리스트에서 class 1은 특정 영역(x>=800, y>=450)만 유지
+// 최종 장애물 리스트에서 class 1은 지정된 영역들만 유지
 void filterClass1ByRegion(std::vector<ObstacleData> &mergedList)
 {
     constexpr std::uint8_t TARGET_CLASS = 1;
-    constexpr double MIN_X = 800.0;
-    constexpr double MIN_Y = 450.0;
+    constexpr double REGION1_MIN_X = 800.0;
+    constexpr double REGION1_MIN_Y = 450.0;
+    constexpr double REGION2_MIN_X = 700.0;
+    constexpr double REGION2_MAX_X = 800.0;
+    constexpr double REGION2_MIN_Y = 150.0;
+    constexpr double REGION2_MAX_Y = 300.0;
 
     const auto oldSize = mergedList.size();
     mergedList.erase(std::remove_if(mergedList.begin(), mergedList.end(),
@@ -803,7 +807,13 @@ void filterClass1ByRegion(std::vector<ObstacleData> &mergedList)
                                         if (obs.obstacle_class != TARGET_CLASS)
                                             return false;
 
-                                        return !(obs.fused_position_x >= MIN_X && obs.fused_position_y >= MIN_Y);
+                                        const bool inRegion1 =
+                                            (obs.fused_position_x >= REGION1_MIN_X && obs.fused_position_y >= REGION1_MIN_Y);
+                                        const bool inRegion2 =
+                                            (obs.fused_position_x >= REGION2_MIN_X && obs.fused_position_x <= REGION2_MAX_X &&
+                                             obs.fused_position_y >= REGION2_MIN_Y && obs.fused_position_y <= REGION2_MAX_Y);
+
+                                        return !(inRegion1 || inRegion2);
                                     }),
                      mergedList.end());
 
@@ -957,6 +967,9 @@ void find4VerticesVehicle(VehicleData &target_vehicle)
     checkRange(RU);
     checkRange(RL);
     checkRange(LL);
+
+    // Rebuild occupancy every frame to avoid stale/accumulated cells.
+    target_vehicle.map_2d_location.clear();
     // road_z -> road_index 변경
     // generateRoadZValue(target_vehicle, map_2d_test);
 
@@ -968,9 +981,12 @@ void find4VerticesObstacle(std::vector<ObstacleData> &obstacle_list_filtered)
     const std::string prefix = framePrefix();
     for (auto iter = obstacle_list_filtered.begin(); iter < obstacle_list_filtered.end(); iter++)
     {
-        // 성능 최적화: class 41/42는 occupancy 계산에서 제외
+        // Rebuild occupancy every frame to avoid stale/accumulated cells.
+        iter->map_2d_location.clear();
+
+        // 성능 최적화: class 41/42/40는 occupancy 계산에서 제외
         // (요구사항: 장애물 리스트 상세 로깅에서도 제외되는 클래스)
-        if (iter->obstacle_class == 41 || iter->obstacle_class == 42)
+        if (iter->obstacle_class == 41 || iter->obstacle_class == 42 || iter->obstacle_class == 40)
         {
             continue;
         }
@@ -1048,6 +1064,18 @@ bool isStaticObstacle(std::uint8_t obstacleClass)
     return obstacleClass >= 30 && obstacleClass <= 49;
 }
 
+static inline bool isPersistentClass1Obstacle(const ObstacleData &obstacle)
+{
+    return (obstacle.obstacle_class == 1 &&
+            obstacle.fused_position_x >= 800.0 &&
+            obstacle.fused_position_y >= 450.0);
+}
+
+static inline bool isStaticLikeObstacle(const ObstacleData &obstacle)
+{
+    return isStaticObstacle(obstacle.obstacle_class) || isPersistentClass1Obstacle(obstacle);
+}
+
 // 정적 장애물 위치 히스토리
 struct StaticObstacleHistory
 {
@@ -1091,7 +1119,7 @@ public:
         // 하나의 리스트에서 정적/동적 장애물 분기 처리
         for (const auto &currentObstacle : newList)
         {
-            const bool isStatic = isStaticObstacle(currentObstacle.obstacle_class);
+            const bool isStatic = isStaticLikeObstacle(currentObstacle);
             /*
                         adcm::Log::Info() << prefix << "[TRACK] input id=" << currentObstacle.obstacle_id
                                           << " class=" << static_cast<int>(currentObstacle.obstacle_class)
@@ -1156,6 +1184,9 @@ public:
                     trackedObstacle.fused_position_y = avgY;
                     trackedList.push_back(trackedObstacle);
 
+                    // 동적 -> 정적 전환된 객체는 동적 트래커에서 제거해 중복 유지를 방지한다.
+                    dynamicObstacles.erase(trackedObstacle.obstacle_id);
+
                     history.obstacle = trackedObstacle;
                     matchedStaticIds.insert(bestMatchId);
                 }
@@ -1172,6 +1203,7 @@ public:
                     }
 
                     trackedList.push_back(trackedObstacle);
+                    dynamicObstacles.erase(trackedObstacle.obstacle_id);
                     staticObstacles[trackedObstacle.obstacle_id] = {trackedObstacle, {{trackedObstacle.fused_position_x, trackedObstacle.fused_position_y}}};
                     matchedStaticIds.insert(trackedObstacle.obstacle_id);
                 }
@@ -1559,7 +1591,7 @@ void processFusion(
             }
 
             const double distance = euclideanDistance(prevObstacle, currentObstacle);
-            const double threshold = isStaticObstacle(currentObstacle.obstacle_class)
+            const double threshold = isStaticLikeObstacle(currentObstacle)
                                          ? STATIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD
                                          : DYNAMIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD;
 
@@ -1739,7 +1771,7 @@ std::vector<ObstacleData> mergeAndCompareLists(
 
         for (const auto &obs : previousFusionList)
         {
-            if (isStaticObstacle(obs.obstacle_class))
+            if (isStaticLikeObstacle(obs))
                 staticPrevList.push_back(obs);
             else
                 dynamicPrevList.push_back(obs);
@@ -1747,7 +1779,7 @@ std::vector<ObstacleData> mergeAndCompareLists(
 
         for (const auto &obs : mergedList)
         {
-            if (isStaticObstacle(obs.obstacle_class))
+            if (isStaticLikeObstacle(obs))
                 staticMergedList.push_back(obs);
             else
                 dynamicMergedList.push_back(obs);
@@ -1964,6 +1996,10 @@ adcm::obstacleListStruct ConvertToObstacleListStruct(const ObstacleData &obstacl
 void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleData> &obstacle_list, const std::vector<VehicleData *> &vehicles)
 {
     const std::string prefix = framePrefix();
+    constexpr double CLASS_41_42_FILTER_MIN_X = 200.0;
+    constexpr double CLASS_41_42_FILTER_MAX_X = 800.0;
+    constexpr double CLASS_41_42_FILTER_MIN_Y = 450.0;
+    constexpr double CLASS_41_42_FILTER_MAX_Y = 550.0;
     mapData.obstacle_list.clear();
     mapData.vehicle_list.clear();
     mapData.road_list.clear();
@@ -2020,8 +2056,25 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
         }
     }
 
+    std::size_t filteredClass404142ByRegionCount = 0;
     for (const auto &obstacle : obstacle_list)
     {
+        const bool isClass404142 = (obstacle.obstacle_class == 40 || obstacle.obstacle_class == 41 || obstacle.obstacle_class == 42);
+        const bool inClass4142FilterRegion = (obstacle.fused_position_x >= CLASS_41_42_FILTER_MIN_X &&
+                                              obstacle.fused_position_x <= CLASS_41_42_FILTER_MAX_X &&
+                                              obstacle.fused_position_y >= CLASS_41_42_FILTER_MIN_Y &&
+                                              obstacle.fused_position_y <= CLASS_41_42_FILTER_MAX_Y);
+        if (isClass404142 && inClass4142FilterRegion)
+        {
+            filteredClass404142ByRegionCount += 1;
+            adcm::Log::Info() << prefix << "[CLASS4142][FILTER] excluded obstacle in ROI: id="
+                              << obstacle.obstacle_id << ", class=" << static_cast<int>(obstacle.obstacle_class)
+                              << ", pos=(" << obstacle.fused_position_x << ", " << obstacle.fused_position_y << ")"
+                              << ", roi=[x:" << CLASS_41_42_FILTER_MIN_X << "~" << CLASS_41_42_FILTER_MAX_X
+                              << ", y:" << CLASS_41_42_FILTER_MIN_Y << "~" << CLASS_41_42_FILTER_MAX_Y << "]";
+            continue;
+        }
+
         if (cfgB255PolygonReady)
         {
             const Point2D point = {obstacle.fused_position_x, obstacle.fused_position_y};
@@ -2034,6 +2087,13 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
             }
         }
         mapData.obstacle_list.push_back(ConvertToObstacleListStruct(obstacle, mapData.map_2d));
+    }
+
+    if (filteredClass404142ByRegionCount > 0)
+    {
+        adcm::Log::Info() << prefix << "[CLASS4142][FILTER] total excluded in ROI=" << filteredClass404142ByRegionCount
+                          << ", roi=[x:" << CLASS_41_42_FILTER_MIN_X << "~" << CLASS_41_42_FILTER_MAX_X
+                          << ", y:" << CLASS_41_42_FILTER_MIN_Y << "~" << CLASS_41_42_FILTER_MAX_Y << "]";
     }
 
     for (const auto &vehicle : vehicles)
@@ -2162,9 +2222,9 @@ std::vector<adcm::roadListStruct> ConvertRoadZToRoadList(const VehicleData &vehi
     const std::string prefix = framePrefix();
     constexpr std::uint8_t ROADZ_LOG_THRESHOLD = 15;
     constexpr double ROADZ_LOG_MIN_X = 340.0;
-    constexpr double ROADZ_LOG_MAX_X = 380.0;
-    constexpr double ROADZ_LOG_MIN_Y = 500.0;
-    constexpr double ROADZ_LOG_MAX_Y = 540.0;
+    constexpr double ROADZ_LOG_MAX_X = 370.0;
+    constexpr double ROADZ_LOG_MIN_Y = 490.0;
+    constexpr double ROADZ_LOG_MAX_Y = 520.0;
     std::size_t roadzLoggedCount = 0;
 
     std::vector<adcm::roadListStruct> result(24); // 0~22, 255
