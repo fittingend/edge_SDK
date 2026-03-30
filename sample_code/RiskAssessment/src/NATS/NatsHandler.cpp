@@ -37,15 +37,35 @@ void onMsg(natsConnection* nc, natsSubscription* sub, natsMsg* msg, void* closur
     natsManager->NatsMsgDestroy(msg);
 }
 
-void NatsSend(const adcm::risk_assessment_Objects& riskAssessment, const obstacleListVector& obstacle_list)
+bool NatsConnectOnStartup()
+{
+    if (!firstTime)
+    {
+        return (s == NATS_OK);
+    }
+
+    adcm::Log::Info() << "NATS startup probe, target=" << nats_server_url;
+    natsManager = std::make_shared<adcm::etc::NatsConnManager>(
+        nats_server_url.c_str(), subject, onMsg, asyncCb,
+        adcm::etc::NatsConnManager::Mode::Default);
+    s = natsManager->NatsExecute();
+    firstTime = false;
+
+    if (s == NATS_OK)
+    {
+        adcm::Log::Info() << "NATS startup probe OK to " << nats_server_url;
+        return true;
+    }
+
+    adcm::Log::Error() << "NATS startup probe FAIL(" << s << ": "
+                       << natsStatus_GetText(s) << ") to " << nats_server_url;
+    return false;
+}
+
+bool NatsSend(const adcm::risk_assessment_Objects& riskAssessment, const obstacleListVector& obstacle_list)
 {
     if (firstTime) {
-        adcm::Log::Info() << "NATS first time setup!";
-        natsManager = std::make_shared<adcm::etc::NatsConnManager>(
-            nats_server_url.c_str(), subject, onMsg, asyncCb,
-            adcm::etc::NatsConnManager::Mode::Default);
-        s = natsManager->NatsExecute();
-        firstTime = false;
+        (void)NatsConnectOnStartup();
     }
 
     if (s == NATS_OK) {
@@ -57,20 +77,32 @@ void NatsSend(const adcm::risk_assessment_Objects& riskAssessment, const obstacl
         natsStatus pubStatus = natsManager->NatsPublishJson(pubSubject);
         if (pubStatus == NATS_OK) {
             adcm::Log::Info() << "NATS publish OK: " << pubSubject;
+            return true;
         } else {
             adcm::Log::Error() << "NATS publish FAIL(" << pubStatus << "): " << pubSubject;
+            return false;
         }
     } else {
-        adcm::Log::Info() << "Nats Connection error";
+        adcm::Log::Error() << "NATS connection state is not OK(" << s << ": "
+                           << natsStatus_GetText(s) << "), reconnect target=" << nats_server_url;
         try {
             natsManager = std::make_shared<adcm::etc::NatsConnManager>(
                 nats_server_url.c_str(), subject, onMsg, asyncCb,
                 adcm::etc::NatsConnManager::Mode::Publish_Only);
             s = natsManager->NatsExecute();
+            if (s == NATS_OK) {
+                adcm::Log::Info() << "NATS reconnect OK to " << nats_server_url;
+            } else {
+                adcm::Log::Error() << "NATS reconnect FAIL(" << s << ": "
+                                   << natsStatus_GetText(s) << ") to " << nats_server_url;
+            }
         } catch (std::exception& e) {
-            adcm::Log::Info() << "Nats reConnection error";
+            adcm::Log::Error() << "NATS reconnect exception to " << nats_server_url
+                               << ": " << e.what();
         }
     }
+
+    return false;
 }
 
 

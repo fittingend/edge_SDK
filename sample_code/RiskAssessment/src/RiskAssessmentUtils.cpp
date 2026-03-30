@@ -291,44 +291,73 @@ bool calculateMinDistanceToPath(const adcm::obstacleListStruct& obstacle,
         return false;
     }
 
+    constexpr double kEps = 1e-12;
+
     bool foundValid = false;
     double min_distance = std::numeric_limits<double>::max();
+    int skipped_non_finite = 0;
+    int degenerate_segment_count = 0;
+
+    const double obs_x = obstacle.fused_position_x;
+    const double obs_y = obstacle.fused_position_y;
+
+    if (!std::isfinite(obs_x) || !std::isfinite(obs_y)) {
+        adcm::Log::Error() << "calculateMinDistanceToPath failed: obstacle position is not finite."
+                           << " id=" << obstacle.obstacle_id
+                           << " pos=(" << obs_x << "," << obs_y << ")";
+        return false;
+    }
 
     for (size_t count = 0; count < path_x.size() - 1; ++count)
     {
-        double x_start = path_x[count];
-        double x_end   = path_x[count + 1];
-        double y_start = path_y[count];
-        double y_end   = path_y[count + 1];
+        const double x_start = path_x[count];
+        const double x_end   = path_x[count + 1];
+        const double y_start = path_y[count];
+        const double y_end   = path_y[count + 1];
 
-        Point2D vec_path = {x_end - x_start, y_end - y_start};
-        Point2D vec_obs  = {obstacle.fused_position_x - x_start, obstacle.fused_position_y - y_start};
+        if (!std::isfinite(x_start) || !std::isfinite(y_start) ||
+            !std::isfinite(x_end)   || !std::isfinite(y_end)) {
+            ++skipped_non_finite;
+            continue;
+        }
 
-        double mag_path = getMagnitude(vec_path);
-        double mag_obs  = getMagnitude(vec_obs);
+        const double ab_x = x_end - x_start;
+        const double ab_y = y_end - y_start;
+        const double ap_x = obs_x - x_start;
+        const double ap_y = obs_y - y_start;
+        const double ab_len_sq = ab_x * ab_x + ab_y * ab_y;
 
-        double dot_product = vec_path.x * vec_obs.x + vec_path.y * vec_obs.y;
+        double dist = std::numeric_limits<double>::max();
 
-        if (dot_product > 0 && dot_product < mag_path * mag_path)
-        {
-            double cos_theta = dot_product / (mag_path * mag_obs);
-            double perpendicular_distance = mag_obs * sqrt(1 - cos_theta * cos_theta);
+        if (ab_len_sq <= kEps) {
+            ++degenerate_segment_count;
+            dist = std::hypot(ap_x, ap_y);
+        } else {
+            double t = (ap_x * ab_x + ap_y * ab_y) / ab_len_sq;
+            t = std::max(0.0, std::min(1.0, t));
 
-            if (perpendicular_distance < min_distance) {
-                min_distance = perpendicular_distance;
-                foundValid = true;
-            }
+            const double closest_x = x_start + t * ab_x;
+            const double closest_y = y_start + t * ab_y;
+            dist = std::hypot(obs_x - closest_x, obs_y - closest_y);
+        }
+
+        if (std::isfinite(dist) && dist < min_distance) {
+            min_distance = dist;
+            foundValid = true;
         }
     }
 
     if (foundValid) {
         out_distance = min_distance;
-        //adcm::Log::Info() << "Min distance to path for Obstacle " << obstacle.obstacle_id 
-        //                  << " is " << out_distance;
         return true;
     }
 
-    //adcm::Log::Info() << "Obstacle " << obstacle.obstacle_id << " is not within any trajectory segment.";
+    adcm::Log::Error() << "calculateMinDistanceToPath failed: no valid segment distance."
+                       << " id=" << obstacle.obstacle_id
+                       << " path_points=" << path_x.size()
+                       << " skipped_non_finite=" << skipped_non_finite
+                       << " degenerate_segments=" << degenerate_segment_count
+                       << " obstacle_pos=(" << obs_x << "," << obs_y << ")";
     return false;
 }
 
