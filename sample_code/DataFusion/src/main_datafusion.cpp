@@ -75,7 +75,7 @@ static inline std::string framePrefix(int ver)
     return std::string("[F") + std::to_string(ver) + "]";
 }
 
-static constexpr int HEAVY_LOG_EVERY_N_FRAMES = 10;
+static constexpr int HEAVY_LOG_EVERY_N_FRAMES = 1;
 static inline bool shouldLogHeavyFrame()
 {
     return (mapVer % HEAVY_LOG_EVERY_N_FRAMES) == 0;
@@ -789,16 +789,11 @@ bool checkAllVehicleRange(const std::vector<VehicleData *> &vehicles)
     return true;
 }
 
-// 최종 장애물 리스트에서 class 1은 지정된 영역들만 유지
+// 최종 장애물 리스트에서 class 1은 특정 영역(x>=840)만 유지
 void filterClass1ByRegion(std::vector<ObstacleData> &mergedList)
 {
     constexpr std::uint8_t TARGET_CLASS = 1;
-    constexpr double REGION1_MIN_X = 800.0;
-    constexpr double REGION1_MIN_Y = 450.0;
-    constexpr double REGION2_MIN_X = 700.0;
-    constexpr double REGION2_MAX_X = 800.0;
-    constexpr double REGION2_MIN_Y = 150.0;
-    constexpr double REGION2_MAX_Y = 300.0;
+    constexpr double MIN_X = 840.0;
 
     const auto oldSize = mergedList.size();
     mergedList.erase(std::remove_if(mergedList.begin(), mergedList.end(),
@@ -807,13 +802,19 @@ void filterClass1ByRegion(std::vector<ObstacleData> &mergedList)
                                         if (obs.obstacle_class != TARGET_CLASS)
                                             return false;
 
-                                        const bool inRegion1 =
-                                            (obs.fused_position_x >= REGION1_MIN_X && obs.fused_position_y >= REGION1_MIN_Y);
-                                        const bool inRegion2 =
-                                            (obs.fused_position_x >= REGION2_MIN_X && obs.fused_position_x <= REGION2_MAX_X &&
-                                             obs.fused_position_y >= REGION2_MIN_Y && obs.fused_position_y <= REGION2_MAX_Y);
-
-                                        return !(inRegion1 || inRegion2);
+                                        const bool outOfRegion =
+                                            !(obs.fused_position_x >= MIN_X);
+                                        /*
+                                        if (outOfRegion)
+                                        {
+                                            adcm::Log::Info() << framePrefix()
+                                                              << "[KATECH] class-1 region filter drop id=" << obs.obstacle_id
+                                                              << " class=" << static_cast<int>(obs.obstacle_class)
+                                                              << " pos=(" << obs.fused_position_x << ", " << obs.fused_position_y << ")"
+                                                              << " threshold=(x>=" << MIN_X << ")";
+                                        }
+                                        */
+                                        return outOfRegion;
                                     }),
                      mergedList.end());
 
@@ -821,6 +822,51 @@ void filterClass1ByRegion(std::vector<ObstacleData> &mergedList)
     if (removed > 0)
     {
         adcm::Log::Info() << framePrefix() << "[KATECH] class-1 region filter removed=" << removed;
+    }
+}
+
+// 최종 장애물 리스트에서 class 40/41/42는 x>=730, y>=480 영역에서 제거
+void filterClass40To42ByRegion(std::vector<ObstacleData> &mergedList)
+{
+    constexpr double MIN_X = 730.0;
+    constexpr double MIN_Y = 480.0;
+    constexpr double BOX_MIN_X = 160.0;
+    constexpr double BOX_MAX_X = 810.0;
+    constexpr double BOX_MIN_Y = 500.0;
+    constexpr double BOX_MAX_Y = 550.0;
+
+    const auto oldSize = mergedList.size();
+    mergedList.erase(std::remove_if(mergedList.begin(), mergedList.end(),
+                                    [&](const ObstacleData &obs)
+                                    {
+                                        const uint8_t c = obs.obstacle_class;
+                                        if (c != 40 && c != 41 && c != 42)
+                                            return false;
+
+                                        const bool inUpperRightRegion =
+                                            (obs.fused_position_x >= MIN_X &&
+                                             obs.fused_position_y >= MIN_Y);
+                                        const bool inCenterBoxRegion =
+                                            (obs.fused_position_x >= BOX_MIN_X &&
+                                             obs.fused_position_x <= BOX_MAX_X &&
+                                             obs.fused_position_y >= BOX_MIN_Y &&
+                                             obs.fused_position_y <= BOX_MAX_Y);
+                                        const bool toRemove = inUpperRightRegion || inCenterBoxRegion;
+                                        adcm::Log::Info() << framePrefix()
+                                            << "[KATECH][class40-42 filter] id=" << obs.obstacle_id
+                                            << " class=" << static_cast<int>(c)
+                                            << " pos=(" << obs.fused_position_x << ", " << obs.fused_position_y << ")"
+                                            << (toRemove ? " => REMOVED" : " => KEPT")
+                                            << " reason="
+                                            << (inUpperRightRegion ? "upper-right" : (inCenterBoxRegion ? "center-box" : "out-of-region"));
+                                        return toRemove;
+                                    }),
+                     mergedList.end());
+
+    const auto removed = oldSize - mergedList.size();
+    if (removed > 0)
+    {
+        adcm::Log::Info() << framePrefix() << "[KATECH] class-40/41/42 region filter removed=" << removed;
     }
 }
 
@@ -931,6 +977,8 @@ void generateOccupancyIndex(Point2D p0, Point2D p1, Point2D p2, Point2D p3, std:
 
 void find4VerticesVehicle(VehicleData &target_vehicle)
 {
+    target_vehicle.map_2d_location.clear();
+
     Point2D LU, RU, RL, LL;
     double half_x;
     double half_y;
@@ -1057,6 +1105,9 @@ double euclideanDistance(const ObstacleData &a, const ObstacleData &b)
 const double STATIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD = 50.0;   // 0.5m (50cm)
 const double DYNAMIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD = 100.0; // 1m (100cm)
 const double HUNGARIAN_REJECT_COST = 999999.0;
+const double CLASS1_STATIC_MIN_X = 840.0;
+const double CLASS1_STATIC_DEDUP_DISTANCE = 120.0;
+const int MAX_UNMATCHED_FRAMES_CLASS1 = 200;  // class 1 공사차량 확장 유지 (약 6.6초)
 
 // 정적 장애물 판별 (class 30~49)
 bool isStaticObstacle(std::uint8_t obstacleClass)
@@ -1064,16 +1115,126 @@ bool isStaticObstacle(std::uint8_t obstacleClass)
     return obstacleClass >= 30 && obstacleClass <= 49;
 }
 
-static inline bool isPersistentClass1Obstacle(const ObstacleData &obstacle)
+// 정책: class 1은 항상 동적으로 취급 (TTC/거리 정확성 보장)
+bool isStaticObstacle(const ObstacleData &obs)
 {
-    return (obstacle.obstacle_class == 1 &&
-            obstacle.fused_position_x >= 800.0 &&
-            obstacle.fused_position_y >= 450.0);
+    return isStaticObstacle(obs.obstacle_class);
 }
 
-static inline bool isStaticLikeObstacle(const ObstacleData &obstacle)
+void dedupeCloseClass1StaticObstacles(std::vector<ObstacleData> &obstacles)
 {
-    return isStaticObstacle(obstacle.obstacle_class) || isPersistentClass1Obstacle(obstacle);
+    if (obstacles.size() < 2)
+    {
+        return;
+    }
+
+    const double dedupDist2 = CLASS1_STATIC_DEDUP_DISTANCE * CLASS1_STATIC_DEDUP_DISTANCE;
+    std::vector<ObstacleData> deduped;
+    deduped.reserve(obstacles.size());
+    std::vector<bool> consumed(obstacles.size(), false);
+    std::size_t mergedClusterCount = 0;
+    std::size_t removedCount = 0;
+
+    for (size_t i = 0; i < obstacles.size(); ++i)
+    {
+        if (consumed[i])
+        {
+            continue;
+        }
+
+        const auto &base = obstacles[i];
+        if (!(base.obstacle_class == 1 && base.fused_position_x >= CLASS1_STATIC_MIN_X))
+        {
+            deduped.push_back(base);
+            consumed[i] = true;
+            continue;
+        }
+
+        consumed[i] = true;
+        std::vector<size_t> clusterIndices = {i};
+        for (size_t j = i + 1; j < obstacles.size(); ++j)
+        {
+            if (consumed[j])
+            {
+                continue;
+            }
+
+            const auto &candidate = obstacles[j];
+            if (!(candidate.obstacle_class == 1 && candidate.fused_position_x >= CLASS1_STATIC_MIN_X))
+            {
+                continue;
+            }
+
+            const double dx = base.fused_position_x - candidate.fused_position_x;
+            const double dy = base.fused_position_y - candidate.fused_position_y;
+            if ((dx * dx + dy * dy) <= dedupDist2)
+            {
+                consumed[j] = true;
+                clusterIndices.push_back(j);
+            }
+        }
+
+        double centroidX = 0.0;
+        double centroidY = 0.0;
+        for (const auto idx : clusterIndices)
+        {
+            const auto &member = obstacles[idx];
+            centroidX += member.fused_position_x;
+            centroidY += member.fused_position_y;
+        }
+        centroidX /= static_cast<double>(clusterIndices.size());
+        centroidY /= static_cast<double>(clusterIndices.size());
+
+        size_t representativeIdx = clusterIndices.front();
+        auto betterRepresentative = [&](size_t candidateIdx, size_t currentIdx)
+        {
+            const auto &candidate = obstacles[candidateIdx];
+            const auto &current = obstacles[currentIdx];
+
+            if (candidate.stop_count != current.stop_count)
+                return candidate.stop_count > current.stop_count;
+
+            if (candidate.timestamp != current.timestamp)
+                return candidate.timestamp > current.timestamp;
+
+            const double candidateDx = candidate.fused_position_x - centroidX;
+            const double candidateDy = candidate.fused_position_y - centroidY;
+            const double currentDx = current.fused_position_x - centroidX;
+            const double currentDy = current.fused_position_y - centroidY;
+            const double candidateDist2 = candidateDx * candidateDx + candidateDy * candidateDy;
+            const double currentDist2 = currentDx * currentDx + currentDy * currentDy;
+            return candidateDist2 < currentDist2;
+        };
+
+        for (size_t idxPos = 1; idxPos < clusterIndices.size(); ++idxPos)
+        {
+            const size_t candidateIdx = clusterIndices[idxPos];
+            if (betterRepresentative(candidateIdx, representativeIdx))
+            {
+                representativeIdx = candidateIdx;
+            }
+        }
+
+        ObstacleData representative = obstacles[representativeIdx];
+        deduped.push_back(representative);
+
+        if (clusterIndices.size() > 1)
+        {
+            mergedClusterCount += 1;
+            removedCount += (clusterIndices.size() - 1);
+        }
+    }
+
+    if (removedCount > 0)
+    {
+        adcm::Log::Info() << framePrefix()
+                          << "[KATECH] class-1 static dedupe merged_clusters=" << mergedClusterCount
+                          << " removed=" << removedCount
+                          << " threshold=" << CLASS1_STATIC_DEDUP_DISTANCE
+                          << " x_min=" << CLASS1_STATIC_MIN_X;
+    }
+
+    obstacles = std::move(deduped);
 }
 
 // 정적 장애물 위치 히스토리
@@ -1119,7 +1280,7 @@ public:
         // 하나의 리스트에서 정적/동적 장애물 분기 처리
         for (const auto &currentObstacle : newList)
         {
-            const bool isStatic = isStaticLikeObstacle(currentObstacle);
+            const bool isStatic = isStaticObstacle(currentObstacle);
             /*
                         adcm::Log::Info() << prefix << "[TRACK] input id=" << currentObstacle.obstacle_id
                                           << " class=" << static_cast<int>(currentObstacle.obstacle_class)
@@ -1278,11 +1439,13 @@ public:
                 if (matchedDynamicIds.find(it->first) == matchedDynamicIds.end())
                 {
                     it->second.unmatchedFrames += 1;
-                    if (it->second.unmatchedFrames >= MAX_UNMATCHED_FRAMES)
+                    const int maxUnmatchedFrames = (it->second.obstacle.obstacle_class == 1) ? MAX_UNMATCHED_FRAMES_CLASS1 : MAX_UNMATCHED_FRAMES;
+                    if (it->second.unmatchedFrames >= maxUnmatchedFrames)
                     {
                         /*
                         adcm::Log::Info() << prefix << "[TRACK] dynamic drop id=" << it->first
-                                          << " unmatchedFrames=" << it->second.unmatchedFrames;
+                                          << " unmatchedFrames=" << it->second.unmatchedFrames
+                                          << " class=" << static_cast<int>(it->second.obstacle.obstacle_class);
                         */
                         it = dynamicObstacles.erase(it);
                         continue;
@@ -1292,6 +1455,7 @@ public:
                         /*
                         adcm::Log::Info() << prefix << "[TRACK] dynamic keep id=" << it->first
                                           << " unmatchedFrames=" << it->second.unmatchedFrames
+                                          << " class=" << static_cast<int>(it->second.obstacle.obstacle_class)
                                           << " pos=(" << it->second.obstacle.fused_position_x << ", " << it->second.obstacle.fused_position_y << ")";
                         */
                         trackedList.push_back(it->second.obstacle);
@@ -1509,7 +1673,7 @@ void processFusionForVehiclePair(
         }
 
         const double distance = euclideanDistance(prevObstacle, currentObstacle);
-        const bool isStatic = isStaticObstacle(currentObstacle.obstacle_class);
+        const bool isStatic = isStaticObstacle(currentObstacle);
         const double threshold = isStatic ? STATIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD
                                           : DYNAMIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD;
 
@@ -1591,7 +1755,7 @@ void processFusion(
             }
 
             const double distance = euclideanDistance(prevObstacle, currentObstacle);
-            const double threshold = isStaticLikeObstacle(currentObstacle)
+            const double threshold = isStaticObstacle(currentObstacle)
                                          ? STATIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD
                                          : DYNAMIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD;
 
@@ -1739,10 +1903,6 @@ std::vector<ObstacleData> mergeAndCompareLists(
         else
             adcm::Log::Info() << prefix << "[MERGELIST] 현재 TimeStamp 장애물 X, 이전 TimeStamp 장애물리스트 그대로 사용 및 출력";
 
-        for (const auto &obs : previousFusionList)
-        {
-            adcm::Log::Info() << prefix << "ID " << obs.obstacle_id << "(" << obs.obstacle_class << ") : [" << obs.fused_position_x << ", " << obs.fused_position_y << "]";
-        }
         logDuplicateSummary(prefix + "[MERGELIST] use previous list", previousFusionList, 1.0);
         return previousFusionList;
     }
@@ -1771,7 +1931,7 @@ std::vector<ObstacleData> mergeAndCompareLists(
 
         for (const auto &obs : previousFusionList)
         {
-            if (isStaticLikeObstacle(obs))
+            if (isStaticObstacle(obs))
                 staticPrevList.push_back(obs);
             else
                 dynamicPrevList.push_back(obs);
@@ -1779,7 +1939,7 @@ std::vector<ObstacleData> mergeAndCompareLists(
 
         for (const auto &obs : mergedList)
         {
-            if (isStaticLikeObstacle(obs))
+            if (isStaticObstacle(obs))
                 staticMergedList.push_back(obs);
             else
                 dynamicMergedList.push_back(obs);
@@ -2100,24 +2260,6 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
     {
         if (vehicle->vehicle_class != 0)
         {
-            /*
-            {
-                std::unordered_map<std::uint8_t, std::size_t> rz_counts;
-                rz_counts.reserve(32);
-                for (const auto &rz : vehicle->road_z)
-                {
-                    rz_counts[rz] += 1;
-                }
-
-                adcm::Log::Info() << prefix << "[ROADZ] vehicle=" << vehicle->vehicle_class
-                                  << " size=" << vehicle->road_z.size();
-                for (const auto &entry : rz_counts)
-                {
-                    adcm::Log::Info() << prefix << "[ROADZ] value=" << static_cast<int>(entry.first)
-                                      << " count=" << entry.second;
-                }
-            }
-                */
             mapData.vehicle_list.push_back(ConvertToVehicleListStruct(*vehicle, mapData.map_2d));
             if (vehicle->road_z.size() > 1) // 시뮬레이션에선 road_z size가 1이므로 예외 처리
             {
@@ -2219,13 +2361,10 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
 // road_z -> road_list
 std::vector<adcm::roadListStruct> ConvertRoadZToRoadList(const VehicleData &vehicle)
 {
-    const std::string prefix = framePrefix();
-    constexpr std::uint8_t ROADZ_LOG_THRESHOLD = 15;
     constexpr double ROADZ_LOG_MIN_X = 340.0;
-    constexpr double ROADZ_LOG_MAX_X = 370.0;
-    constexpr double ROADZ_LOG_MIN_Y = 490.0;
-    constexpr double ROADZ_LOG_MAX_Y = 520.0;
-    std::size_t roadzLoggedCount = 0;
+    constexpr double ROADZ_LOG_MAX_X = 380.0;
+    constexpr double ROADZ_LOG_MIN_Y = 500.0;
+    constexpr double ROADZ_LOG_MAX_Y = 540.0;
 
     std::vector<adcm::roadListStruct> result(24); // 0~22, 255
     for (int i = 0; i < 23; ++i)
@@ -2275,14 +2414,6 @@ std::vector<adcm::roadListStruct> ConvertRoadZToRoadList(const VehicleData &vehi
         const bool inHillArea = (map_x >= ROADZ_LOG_MIN_X && map_x <= ROADZ_LOG_MAX_X &&
                                  map_y >= ROADZ_LOG_MIN_Y && map_y <= ROADZ_LOG_MAX_Y);
 
-        if (rz >= ROADZ_LOG_THRESHOLD && inHillArea)
-        {
-            adcm::Log::Info() << prefix << "[ROADZ][>=15] level=" << static_cast<int>(rz)
-                              << " map=(" << map_x << ", " << map_y << ")"
-                              << " row=" << row << " col=" << col;
-            roadzLoggedCount += 1;
-        }
-
         // 언덕 영역: 들어온 road_z 데이터 그대로 반영
         // 언덕 외 영역: road_index 11로 고정 반영
         //   (장애물이 있는 위치는 merge 단계에서 obstacle_cells 필터로 제외 → unscanned 유지)
@@ -2296,12 +2427,6 @@ std::vector<adcm::roadListStruct> ConvertRoadZToRoadList(const VehicleData &vehi
             adcm::map2dIndex idx = {map_x, map_y};
             result[11].map_2d_location.push_back(idx);
         }
-    }
-
-    if (roadzLoggedCount > 0)
-    {
-        adcm::Log::Info() << prefix << "[ROADZ][>=15] total logged cells=" << roadzLoggedCount
-                          << " vehicle=" << vehicle.vehicle_class;
     }
 
     return result;
@@ -2877,6 +3002,8 @@ void ThreadKatech()
         obstacle_list = mergeAndCompareLists(previous_obstacle_list, obstacle_list_main, obstacle_list_sub1,
                                              obstacle_list_sub2, obstacle_list_sub3, obstacle_list_sub4, main_vehicle, sub1_vehicle, sub2_vehicle, sub3_vehicle, sub4_vehicle);
         filterClass1ByRegion(obstacle_list);
+        filterClass40To42ByRegion(obstacle_list);
+        dedupeCloseClass1StaticObstacles(obstacle_list);
         stage2_merge_ms = std::chrono::duration<double, std::milli>(
                               std::chrono::high_resolution_clock::now() - stage2Start)
                               .count();
@@ -2893,21 +3020,6 @@ void ThreadKatech()
         previous_obstacle_list = obstacle_list;
         appendListObstaclesToMergedList(obstacle_list);
 
-        if (shouldLogHeavyFrame())
-        {
-            adcm::Log::Info() << prefix << "[KATECH] 최종 장애물 리스트 출력(후처리 반영): size=" << obstacle_list.size();
-            for (const auto &obs : obstacle_list)
-            {
-                if (obs.obstacle_class == 41 || obs.obstacle_class == 42)
-                {
-                    continue;
-                }
-
-                adcm::Log::Info() << prefix << "ID " << obs.obstacle_id << "(" << static_cast<int>(obs.obstacle_class) << ") : ["
-                                  << obs.fused_position_x << ", " << obs.fused_position_y << "]"
-                                  << " stop_count=" << static_cast<int>(obs.stop_count);
-            }
-        }
         stage4_append_ms = std::chrono::duration<double, std::milli>(
                                  std::chrono::high_resolution_clock::now() - stage4Start)
                                  .count();
@@ -3025,6 +3137,21 @@ void ThreadKatech()
             stage7_updateMap_ms = std::chrono::duration<double, std::milli>(
                                       std::chrono::high_resolution_clock::now() - stage7Start)
                                       .count();
+
+            if (shouldLogHeavyFrame())
+            {
+                adcm::Log::Info() << prefix << "[KATECH] 전송 mapData 장애물 리스트: size=" << mapData.obstacle_list.size();
+                for (const auto &obs : mapData.obstacle_list)
+                {
+                    adcm::Log::Info() << prefix << "ID " << obs.obstacle_id
+                                      << "(" << static_cast<int>(obs.obstacle_class) << ")"
+                                      << " : [" << obs.fused_position_x << ", " << obs.fused_position_y << "]"
+                                      << " stop_count=" << static_cast<int>(obs.stop_count)
+                                      << " cuboid=(" << obs.fused_cuboid_x << ", " << obs.fused_cuboid_y << ", " << obs.fused_cuboid_z << ")"
+                                      << " map_2d_cells=" << obs.map_2d_location.size();
+                }
+            }
+
             auto endTime = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> duration = endTime - startTime;
             double elapsed_ms = duration.count();
