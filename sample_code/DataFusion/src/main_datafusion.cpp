@@ -130,9 +130,8 @@ struct ListObstacleEntry
 {
     std::uint16_t obstacle_id = 0;
     std::uint8_t obstacle_class = 0;
-    double lon = 0.0;
-    double lat = 0.0;
-    std::uint16_t assigned_id = 0;
+    double map_x = 0.0;
+    double map_y = 0.0;
 };
 
 static std::vector<ListObstacleEntry> list_obstacles;
@@ -143,6 +142,21 @@ static std::vector<BoundaryData> cfgB255Pts;
 static bool b255SendPending = false;
 static std::unordered_set<std::uint64_t> b255AddedCells;
 static bool isPointInsidePolygon(const Point2D &point, const std::vector<Point2D> &polygon);
+
+static constexpr std::uint8_t DYNAMIC_CLASS_MIN = 1;
+static constexpr std::uint8_t DYNAMIC_CLASS_MAX = 29;
+static constexpr std::uint8_t STATIC_CLASS_MIN = 30;
+static constexpr std::uint8_t STATIC_CLASS_MAX = 49;
+
+static inline bool isDynamicObstacleClassPolicy(std::uint8_t obstacleClass)
+{
+    return obstacleClass >= DYNAMIC_CLASS_MIN && obstacleClass <= DYNAMIC_CLASS_MAX;
+}
+
+static inline bool isStaticObstacleClassPolicy(std::uint8_t obstacleClass)
+{
+    return obstacleClass >= STATIC_CLASS_MIN && obstacleClass <= STATIC_CLASS_MAX;
+}
 
 static inline std::uint64_t nowMilliseconds()
 {
@@ -179,6 +193,7 @@ static bool loadListObstacles(const std::string &filePath)
         Poco::Dynamic::Var result = parser.parse(jsonStr);
         Poco::JSON::Array::Ptr arr = result.extract<Poco::JSON::Array::Ptr>();
 
+        size_t skipped_non_static = 0;
         for (size_t i = 0; i < arr->size(); ++i)
         {
             Poco::JSON::Object::Ptr obj = arr->getObject(i);
@@ -188,9 +203,33 @@ static bool loadListObstacles(const std::string &filePath)
             ListObstacleEntry entry;
             entry.obstacle_class = static_cast<std::uint8_t>(obj->getValue<int>("obstacle_class"));
             entry.obstacle_id = static_cast<std::uint16_t>(obj->getValue<int>("obstacle_id"));
-            entry.lon = obj->getValue<double>("lon");
-            entry.lat = obj->getValue<double>("lat");
+            // lists.ini 좌표는 map_data 좌표계(10cm grid)로 사용한다.
+            if (obj->has("x") && obj->has("y"))
+            {
+                entry.map_x = obj->getValue<double>("x");
+                entry.map_y = obj->getValue<double>("y");
+            }
+            else
+            {
+                // 하위 호환: 기존 lon/lat 키를 그대로 사용하되 의미는 map 좌표로 본다.
+                entry.map_x = obj->getValue<double>("lon");
+                entry.map_y = obj->getValue<double>("lat");
+            }
+
+            // lists.ini는 정적 장애물(class 30~49)만 최종 리스트로 편입한다.
+            if (!isStaticObstacleClassPolicy(entry.obstacle_class))
+            {
+                skipped_non_static += 1;
+                continue;
+            }
+
             list_obstacles.push_back(entry);
+        }
+        
+
+        if (skipped_non_static > 0)
+        {
+            adcm::Log::Info() << "List obstacles skipped(non-static class): " << skipped_non_static;
         }
     }
     catch (const std::exception &ex)
@@ -203,7 +242,7 @@ static bool loadListObstacles(const std::string &filePath)
     adcm::Log::Info() << "List obstacles loaded: " << list_obstacles.size();
     for (const auto &entry : list_obstacles)
         adcm::Log::Info() << "  id=" << entry.obstacle_id << ", class=" << static_cast<int>(entry.obstacle_class)
-                          << ", lon=" << entry.lon << ", lat=" << entry.lat;
+                          << ", map_x=" << entry.map_x << ", map_y=" << entry.map_y;
     return list_obstacles_loaded;
 }
 
@@ -640,27 +679,18 @@ void appendListObstaclesToMergedList(std::vector<ObstacleData> &mergedList)
 
     for (auto &entry : list_obstacles)
     {
-        if (entry.assigned_id == 0)
-        {
-            entry.assigned_id = id_manager.allocID();
-        }
-
-        double utm_x = 0.0;
-        double utm_y = 0.0;
-        GPStoUTM(entry.lon, entry.lat, utm_x, utm_y);
-
-        const double map_pos_x = (utm_x - origin_x) * M_TO_10CM_PRECISION;
-        const double map_pos_y = (utm_y - origin_y) * M_TO_10CM_PRECISION;
+        const double map_pos_x = entry.map_x;
+        const double map_pos_y = entry.map_y;
 
         if (map_pos_x < 0 || map_pos_x >= map_x || map_pos_y < 0 || map_pos_y >= map_y)
         {
-            adcm::Log::Info() << prefix << "[KATECH] List obstacle out of range, skip. id=" << entry.assigned_id;
+            adcm::Log::Info() << prefix << "[KATECH] List obstacle out of range, skip. id=" << entry.obstacle_id;
             skipped_count++;
             continue;
         }
 
         ObstacleData obs;
-        obs.obstacle_id = entry.assigned_id;
+        obs.obstacle_id = entry.obstacle_id;
         obs.obstacle_class = entry.obstacle_class;
         obs.timestamp = nowMilliseconds();
         obs.stop_count = 0;
@@ -1112,7 +1142,7 @@ const int MAX_UNMATCHED_FRAMES_CLASS1 = 200;  // class 1 공사차량 확장 유
 // 정적 장애물 판별 (class 30~49)
 bool isStaticObstacle(std::uint8_t obstacleClass)
 {
-    return obstacleClass >= 30 && obstacleClass <= 49;
+    return isStaticObstacleClassPolicy(obstacleClass);
 }
 
 // 정책: class 1은 항상 동적으로 취급 (TTC/거리 정확성 보장)
@@ -1807,14 +1837,14 @@ void processFusion(
     logDuplicateSummary(prefix + "[FUSION] tracked out", presList, 1.0);
 }
 
-// 장애물 리스트에서 class 0, 특장차, 보조 차량 데이터를 제외
+// 차량 입력 장애물은 동적 class(1~29)만 사용한다.
 void filterVehicleData(std::vector<ObstacleData> &obstacles)
 {
     // erase 반복(O(n^2)) 대신 remove_if 1-pass(O(n))
     obstacles.erase(std::remove_if(obstacles.begin(), obstacles.end(),
                                    [](const ObstacleData &obs)
                                    {
-                                       return (obs.obstacle_class == 0 || obs.obstacle_class == 50 || obs.obstacle_class == 51);
+                                       return !isDynamicObstacleClassPolicy(obs.obstacle_class);
                                    }),
                     obstacles.end());
 }
