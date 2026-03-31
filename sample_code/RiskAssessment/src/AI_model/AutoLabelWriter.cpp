@@ -22,19 +22,11 @@
 
 
 // ===== 보조 함수 =====
+// 값 범위를 [lo, hi]로 제한
 static inline double clamp(double v, double lo, double hi) {
     return (v < lo) ? lo : (v > hi) ? hi : v;
 }
-static inline double wrapDeg(double deg) {
-    // [-180, 180)
-    while (deg >= 180.0) deg -= 360.0;
-    while (deg < -180.0) deg += 360.0;
-    return deg;
-}
-static inline double hypot2(double x, double y) {
-    return std::sqrt(x*x + y*y);
-}
-
+// 현재 작업 디렉터리(CWD) 문자열 반환
 static std::string getCwdString() {
     char buf[PATH_MAX] = {0};
     if (getcwd(buf, sizeof(buf)) == nullptr) {
@@ -43,6 +35,7 @@ static std::string getCwdString() {
     return std::string(buf);
 }
 
+// 경로가 없으면 재귀적으로 생성 (성공/실패 반환)
 static bool ensureDirExists(const std::string& path) {
     if (path.empty() || path == ".") {
         return true;
@@ -73,6 +66,7 @@ static bool ensureDirExists(const std::string& path) {
 // path polyline에 대해 obstacle의 (최소거리, along_s) 계산
 // - along_s: path 시작점부터 projection 지점까지 누적 거리 (path_xy 단위 그대로)
 // - 반환 false: path가 너무 짧음
+// path polyline 기준으로 (최소거리, along_s, heading) 계산
 static bool computeDistAndAlongS(
     double px, double py,
     const std::vector<double>& path_x,
@@ -132,6 +126,7 @@ static bool computeDistAndAlongS(
 }
 
 // hazard_class는 0(없음), 1~10(시나리오 번호)
+// 시나리오 번호를 라벨 인덱스로 매핑
 static inline int labelIndexFromHazardClass(uint8_t hazard_class) {
     switch (hazard_class) {
         case 1:  return 0; // S1
@@ -155,6 +150,7 @@ AutoLabelWriter::AutoLabelWriter(const Config& config, const std::string& csv_pa
     const std::string cwd = getCwdString();
     adcm::Log::Info() << "AutoLabelWriter CWD: " << cwd;
 
+    // 설정에서 라벨 출력 비활성화면 바로 종료
     if (!config.labelWrite) {
         return;
     }
@@ -162,7 +158,7 @@ AutoLabelWriter::AutoLabelWriter(const Config& config, const std::string& csv_pa
     const bool has_config_path = !config.labelOutputPath.empty();
     std::string output_path = has_config_path ? config.labelOutputPath : "";
 
-    // timestamp for unique filename
+    // 고유 파일명을 위한 타임스탬프
     const auto now = std::chrono::system_clock::now();
     const std::time_t now_time = std::chrono::system_clock::to_time_t(now);
     std::tm tm_buf{};
@@ -176,14 +172,15 @@ AutoLabelWriter::AutoLabelWriter(const Config& config, const std::string& csv_pa
     const std::string ts_str = ts.str();
 
     if (!has_config_path) {
-        // Generate timestamped filename under CWD/log when no path is provided.
+        // 경로가 없으면 CWD/log 아래에 타임스탬프 파일 생성
         output_path = cwd + "/log/auto_labels_" + ts_str + ".csv";
     } else if (!output_path.empty() && output_path[0] != '/') {
+        // 상대 경로는 CWD 기준으로 보정
         output_path = cwd + "/" + output_path;
     }
 
     if (!output_path.empty()) {
-        // Always make filename unique (even when a fixed path is provided).
+        // 고정 경로라도 타임스탬프를 붙여 파일명 중복 방지
         const size_t slash = output_path.find_last_of('/');
         const size_t dot = output_path.find_last_of('.');
         const bool has_ext = (dot != std::string::npos) && (slash == std::string::npos || dot > slash);
@@ -205,12 +202,14 @@ AutoLabelWriter::AutoLabelWriter(const Config& config, const std::string& csv_pa
         parent_dir = output_path.substr(0, slash);
         if (parent_dir.empty()) parent_dir = "/";
     }
+    // 상위 디렉터리 보장
     if (!ensureDirExists(parent_dir)) {
         adcm::Log::Error() << "Failed to create directory: " << parent_dir
                            << " (" << std::strerror(errno) << "). AutoLabelWriter disabled.";
         return;
     }
 
+    // CSV 파일 오픈
     ofs_.open(output_path, std::ios::out);
     if (!ofs_) {
         adcm::Log::Error() << "Failed to open csv: " << output_path
@@ -219,6 +218,7 @@ AutoLabelWriter::AutoLabelWriter(const Config& config, const std::string& csv_pa
     }
 
     enabled_ = true;
+    // 헤더 기록 및 출력 포맷 설정
     writeHeader();
 }
 
@@ -228,14 +228,18 @@ void AutoLabelWriter::writeFrame(
     const adcm::vehicleListStruct& ego,
     const std::vector<double>& path_x,
     const std::vector<double>& path_y,
-    const adcm::risk_assessment_Objects& risk
+    const adcm::risk_assessment_Objects& risk,
+    std::uint8_t edge_state
 ) {
     if (!enabled_) return;
     // 1) riskAssessmentList로부터 obstacle_id별 라벨(멀티) 생성
     struct Lbl {
         std::array<int, 8> y{};             // 0/1
-        std::array<double, 8> conf{};       // confidence (없으면 0)
-        Lbl() { y.fill(0); conf.fill(0.0); }
+        std::array<double, 8> c{};          // confidence
+        Lbl() {
+            y.fill(0);
+            c.fill(0.0);
+        }
     };
     std::unordered_map<uint16_t, Lbl> lbl_map;
 
@@ -244,37 +248,33 @@ void AutoLabelWriter::writeFrame(
         if (li < 0) continue;
         auto& entry = lbl_map[r.obstacle_id];
         entry.y[li] = 1;
-        // 같은 라벨이 여러 번 들어오면 confidence max로 저장
-        entry.conf[li] = std::max(entry.conf[li], static_cast<double>(r.confidence));
+        entry.c[li] = r.confidence;
+        // 같은 라벨이 여러 번 들어오면 마지막 confidence로 갱신
     }
 
-    // 2) obstacle_list를 순회하며 (피처 + 라벨) 한 행씩 기록
-    const double ego_x = ego.position_x;
-    const double ego_y = ego.position_y;
+    // 2) obstacle_list를 순회하며 (필수 피처 + 라벨) 한 행씩 기록
+    // ego 차량 상태
+    const double ego_x  = ego.position_x;
+    const double ego_y  = ego.position_y;
     const double ego_vx = ego.velocity_x;
     const double ego_vy = ego.velocity_y;
-    const double ego_speed = hypot2(ego_vx, ego_vy);
-    const double ego_heading = ego.heading_angle; // deg
+
+    double goal_x = std::numeric_limits<double>::quiet_NaN();
+    double goal_y = std::numeric_limits<double>::quiet_NaN();
+    // 경로의 마지막 점을 목표점으로 사용
+    if (!path_x.empty() && path_x.size() == path_y.size()) {
+        goal_x = path_x.back();
+        goal_y = path_y.back();
+    }
 
     for (const auto& obs : obstacle_list) {
         const uint16_t oid = obs.obstacle_id;
 
-        // ===== 피처 =====
-        const double ox = obs.fused_position_x;
-        const double oy = obs.fused_position_y;
-
+        // ===== 필수 피처 =====
+        const double ox  = obs.fused_position_x;
+        const double oy  = obs.fused_position_y;
         const double ovx = obs.fused_velocity_x;
         const double ovy = obs.fused_velocity_y;
-        const double ospeed = hypot2(ovx, ovy);
-
-        const double rel_x = ox - ego_x;
-        const double rel_y = oy - ego_y;
-        const double dist_ego = hypot2(rel_x, rel_y);
-
-        const double rel_vx = ovx - ego_vx;
-        const double rel_vy = ovy - ego_vy;
-
-        const double heading_diff = wrapDeg(obs.fused_heading_angle - ego_heading);
 
         double dist_path = std::numeric_limits<double>::quiet_NaN();
         double along_s   = std::numeric_limits<double>::quiet_NaN();
@@ -282,9 +282,6 @@ void AutoLabelWriter::writeFrame(
         if (!computeDistAndAlongS(ox, oy, path_x, path_y, dist_path, along_s, path_heading)) {
             // path가 없으면 NaN 유지
         }
-        const double heading_vs_path =
-            std::isnan(path_heading) ? std::numeric_limits<double>::quiet_NaN()
-                                     : wrapDeg(obs.fused_heading_angle - path_heading);
 
         // ===== 라벨 =====
         auto it = lbl_map.find(oid);
@@ -292,52 +289,50 @@ void AutoLabelWriter::writeFrame(
         std::array<double, 8> c{}; c.fill(0.0);
         if (it != lbl_map.end()) {
             y = it->second.y;
-            c = it->second.conf;
+            c = it->second.c;
         }
 
         // ===== CSV 출력 =====
+        // 한 obstacle 당 한 행 기록
         ofs_ << frame_id << ','
+             << obs.timestamp << ','
              << oid << ','
              << static_cast<int>(obs.obstacle_class) << ','
              << static_cast<int>(obs.stop_count) << ','
-             << obs.fused_cuboid_x << ','
-             << obs.fused_cuboid_y << ','
-             << obs.fused_cuboid_z << ','
-             << obs.fused_heading_angle << ','
              << ox << ',' << oy << ','
              << ovx << ',' << ovy << ','
-             << ospeed << ','
-             << rel_x << ',' << rel_y << ','
-             << dist_ego << ','
-             << rel_vx << ',' << rel_vy << ','
-             << ego_speed << ','
-             << ego.heading_angle << ','
-             << ego.velocity_ang << ','
-             << dist_path << ','
-             << along_s << ','
-             << heading_vs_path << ',';
+             << obs.fused_cuboid_z << ','
+             << ego_x << ',' << ego_y << ','
+             << ego_vx << ',' << ego_vy << ','
+             << static_cast<int>(edge_state) << ','
+             << goal_x << ',' << goal_y << ','
+             << dist_path << ',';
 
         // labels 8개
         for (int i = 0; i < 8; ++i) {
-            ofs_ << y[i] << (i == 7 ? ',' : ',');
+            ofs_ << y[i];
+            if (i != 7) ofs_ << ',';
         }
-        // confidences 8개(옵션: 학습에 쓰기 싫으면 제거 가능)
+
+        ofs_ << ',';
+        // confidence 8개 (라벨과 동일한 순서)
         for (int i = 0; i < 8; ++i) {
             ofs_ << c[i];
             if (i != 7) ofs_ << ',';
         }
-        ofs_ << '\n';
+        ofs_ << "\n";
+
     }
 }
 
 void AutoLabelWriter::writeHeader() {
-    ofs_ << "frame_id,obstacle_id,obstacle_class,stop_count,"
-         << "cuboid_x,cuboid_y,cuboid_z,obs_heading,"
-         << "obs_x,obs_y,obs_vx,obs_vy,obs_speed,"
-         << "rel_x,rel_y,dist_to_ego,rel_vx,rel_vy,"
-         << "ego_speed,ego_heading,ego_yaw_rate,"
-         << "dist_to_path,along_path_s,heading_vs_path,"
+    // CSV 컬럼 헤더
+    ofs_ << "frame_id,obs_timestamp_ms,obstacle_id,obstacle_class,stop_count,"
+         << "obs_x,obs_y,obs_vx,obs_vy,cuboid_z,"
+         << "ego_x,ego_y,ego_vx,ego_vy,edge_state,"
+         << "goal_x,goal_y,dist_to_path,"
          << "y_s1,y_s2,y_s3,y_s4,y_s5,y_s6,y_s9,y_s10,"
          << "c_s1,c_s2,c_s3,c_s4,c_s5,c_s6,c_s9,c_s10\n";
+    // 숫자 출력 포맷 고정
     ofs_ << std::fixed << std::setprecision(6);
 }

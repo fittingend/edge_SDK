@@ -48,6 +48,7 @@
 #include "main_riskassessment.hpp"
 #include "NATS/NatsHandler.hpp"
 #include "AI_model/AutoLabelWriter.hpp"
+#include "AI_model/AIInferencePipeline.hpp"
 #include "config.hpp"
 #include <unistd.h>
 #include <sstream>
@@ -89,6 +90,7 @@ int gStopValue = 1;
 std::unique_ptr<AutoLabelWriter> labelWriter;
 Config config;
 std::atomic<uint64_t> gRiskLogSeq{0};
+std::atomic<uint64_t> gAiFrameSeq{0};
 
 namespace {
 std::string formatObstacleBriefById(std::uint64_t id)
@@ -115,32 +117,30 @@ std::string riskLogPrefix(uint64_t seq)
     return oss.str();
 }
 
-void TryLoadOnnxModelOnce()
+std::string getCwdString()
 {
-    if (!config.aiModelAnalysis) {
-        return;
+    char buf[PATH_MAX] = {0};
+    if (getcwd(buf, sizeof(buf)) == nullptr) {
+        return ".";
     }
+    return std::string(buf);
+}
+}
 
-    static std::once_flag once;
-    std::call_once(once, []() {
-        if (config.aiModelPath.empty()) {
-            adcm::Log::Info() << "[AI] ModelPath is empty. ONNX load skipped.";
-            return;
-        }
+std::string resolvePath(const std::string& path, const std::string& default_rel)
+{
+    std::string p = path.empty() ? default_rel : path;
+    if (!p.empty() && p[0] != '/') {
+        return getCwdString() + "/" + p;
+    }
+    return p;
+}
 
-        try {
-            Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "risk_onload");
-            Ort::SessionOptions opts;
-            opts.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
-            opts.SetIntraOpNumThreads(1);
-            Ort::Session session(env, config.aiModelPath.c_str(), opts);
-            adcm::Log::Info() << "[AI] ONNX load OK";
-        } catch (const Ort::Exception& e) {
-            adcm::Log::Info() << "[AI] ONNX load failed: " << e.what();
-        } catch (const std::exception& e) {
-            adcm::Log::Info() << "[AI] ONNX load error: " << e.what();
-        }
-    });
+std::string makeTmpPath(const std::string& prefix, uint64_t frame_id, const std::string& suffix)
+{
+    std::ostringstream oss;
+    oss << "/tmp/" << prefix << "_" << getpid() << "_" << frame_id << suffix;
+    return oss.str();
 }
 }
 
@@ -560,6 +560,142 @@ void ThreadRASS()
  * - cv_rass 조건변수로 riskAssessment 생성 완료 알림을 받음
  * - SOME/IP 및 NATS로 전송 수행
  */
+void ThreadRASSAI()
+{
+    adcm::Log::Info() << "Thread ThreadRASSAI start...";
+
+    AIInputBuilder input_builder;
+
+    const std::string model_path = resolvePath(config.aiModelPath, "risk_mlp.onnx");
+    const std::string meta_path = resolvePath(config.aiMetaPath, "risk_meta.json");
+        OnnxRiskInfer infer;
+
+    std::string err;
+    bool ai_ready = infer.init(model_path, meta_path, &err);
+    if (!ai_ready) {
+        adcm::Log::Error() << "[AI] ONNX init failed: " << err;
+    } else {
+        adcm::Log::Info() << "[AI] ONNX ready. feature_dim=" << infer.featureDim()
+                          << " labels=" << infer.labelCols().size();
+    }
+
+    while (continueExecution)
+    {
+        std::unique_lock<std::mutex> lock(mtx_cv);
+        cv_mapData.wait(lock, []
+                        { return !continueExecution || (isMapAvailable && isPathAvailable); });
+        if (!continueExecution)
+            break;
+        lock.unlock();
+
+        obstacleListVector obstacle_list_snapshot;
+        std::vector<double> path_x_snapshot;
+        std::vector<double> path_y_snapshot;
+        std::vector<adcm::map_2dListVector> map_snapshot;
+        adcm::vehicleListStruct ego_snapshot;
+        std::uint8_t edge_state_snapshot = 0;
+
+        {
+            std::lock_guard<std::mutex> lock_map(mtx_map);
+            std::lock_guard<std::mutex> lock_path(mtx_path);
+            obstacle_list_snapshot = obstacle_list;
+            path_x_snapshot = path_x;
+            path_y_snapshot = path_y;
+            map_snapshot = map_2d;
+            ego_snapshot = ego_vehicle;
+            edge_state_snapshot = edge_state;
+        }
+
+        adcm::risk_assessment_Objects local_risk;
+        bool ai_ok = false;
+        const uint64_t frame_id = ++gAiFrameSeq;
+        if (ai_ready) {
+            std::vector<AIRawRow> raw_rows;
+            if (!input_builder.buildRawRows(frame_id, obstacle_list_snapshot, ego_snapshot,
+                                            path_x_snapshot, path_y_snapshot, edge_state_snapshot,
+                                            raw_rows, &err)) {
+                adcm::Log::Error() << "[AI] raw feature build failed: " << err;
+            } else {
+                std::vector<AIInferenceRow> rows;
+                if (!infer.inferFromRawRows(raw_rows, rows, &err)) {
+                    adcm::Log::Error() << "[AI] inference failed: " << err;
+                } else {
+                    AIResultMapper mapper(config.aiThreshold);
+                    if (!mapper.mapToRiskAssessment(rows, infer.labelCols(), local_risk, &err)) {
+                        adcm::Log::Error() << "[AI] mapping failed: " << err;
+                    } else {
+                        ai_ok = true;
+                        adcm::Log::Info() << "[AI] inference done. rows=" << rows.size()
+                                          << " outputs=" << infer.labelCols().size();
+                    }
+                }
+            }
+        }
+
+        if (!ai_ok && config.aiFallbackToRule) {
+            adcm::Log::Info() << "[AI] fallback to rule-based evaluation";
+            local_risk.riskAssessmentList.clear();
+            evaluateScenario1(obstacle_list_snapshot, ego_snapshot, path_x_snapshot, path_y_snapshot, local_risk);
+            evaluateScenario2(obstacle_list_snapshot, ego_snapshot, path_x_snapshot, path_y_snapshot, local_risk);
+            evaluateScenario3(obstacle_list_snapshot, ego_snapshot, local_risk);
+            evaluateScenario4(obstacle_list_snapshot, ego_snapshot, local_risk, edge_state_snapshot);
+            evaluateScenario5(obstacle_list_snapshot, ego_snapshot, path_x_snapshot, path_y_snapshot, local_risk);
+            evaluateScenario6(obstacle_list_snapshot, ego_snapshot, path_x_snapshot, path_y_snapshot, local_risk);
+            evaluateScenario7(path_x_snapshot, path_y_snapshot, map_snapshot, config, local_risk);
+            evaluateScenario8(path_x_snapshot, path_y_snapshot, map_snapshot, local_risk);
+            evaluateScenario9(obstacle_list_snapshot, ego_snapshot, path_x_snapshot, path_y_snapshot, local_risk);
+            evaluateScenario10(obstacle_list_snapshot, ego_snapshot, path_x_snapshot, path_y_snapshot, local_risk);
+        }
+
+        {
+            std::lock_guard<std::mutex> lock_rass(mtx_rass);
+            riskAssessment = local_risk;
+        }
+
+        uint64_t riskSeq = 0;
+        if (!local_risk.riskAssessmentList.empty()) {
+            riskSeq = ++gRiskLogSeq;
+        }
+
+        auto formatObs = [&](std::uint64_t id) {
+            for (const auto& obs : obstacle_list_snapshot) {
+                if (obs.obstacle_id == id) {
+                    std::ostringstream oss;
+                    oss << " obstacle_id=" << obs.obstacle_id
+                        << " obstacle_class=" << static_cast<int>(obs.obstacle_class)
+                        << " (" << to_string(static_cast<ObstacleClass>(obs.obstacle_class)) << ")"
+                        << " pos=(" << obs.fused_position_x << ", " << obs.fused_position_y << ")";
+                    return oss.str();
+                }
+            }
+            std::ostringstream oss;
+            oss << "id=" << id;
+            return oss.str();
+        };
+
+        adcm::Log::Info() << riskLogPrefix(riskSeq)
+                          << "[AI] 위험판단 생성 완료 size " << local_risk.riskAssessmentList.size();
+        for (size_t i = 0; i < local_risk.riskAssessmentList.size(); ++i) {
+            const auto& r = local_risk.riskAssessmentList[i];
+            adcm::Log::Info() << riskLogPrefix(riskSeq)
+                              << (r.confidence > config.aiThreshold ? "[TRIGGER]" : "")
+                              << "riskAssessment[" << i
+                              << "] " << " 위험시나리오 #" << static_cast<int>(r.hazard_class)
+                              << formatObs(r.obstacle_id)
+                              << " isHazard flag=" << (r.hazard_path ? "true" : "false")
+                              << " conf=" << r.confidence;
+        }
+
+        if (!local_risk.riskAssessmentList.empty()) {
+            cv_rass.notify_one();
+        }
+
+        isMapAvailable = false;
+    }
+
+    adcm::Log::Info() << "Thread ThreadRASSAI end...";
+}
+
 void ThreadSend()
 {
     adcm::Log::Info() << "ThreadSend start...";
@@ -628,7 +764,8 @@ void ThreadSend()
                 ego_vehicle,
                 path_x,
                 path_y,
-                riskAssessment
+                riskAssessment,
+                edge_state
             );
         }
         //auto t_end_total = std::chrono::high_resolution_clock::now();
@@ -787,7 +924,11 @@ int main(int argc, char *argv[])
     thread_list.push_back(std::thread(ThreadReceiveBuildPath));
     thread_list.push_back(std::thread(ThreadReceiveWorkInformation));
     thread_list.push_back(std::thread(ThreadMonitor));
-    thread_list.push_back(std::thread(ThreadRASS));
+    if (config.aiModelAnalysis) {
+        thread_list.push_back(std::thread(ThreadRASSAI));
+    } else {
+        thread_list.push_back(std::thread(ThreadRASS));
+    }
     thread_list.push_back(std::thread(ThreadSend));
 
     adcm::Log::Info() << "Thread join";

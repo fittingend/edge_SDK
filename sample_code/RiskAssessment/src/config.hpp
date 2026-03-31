@@ -19,6 +19,14 @@ public:
     bool aiModelAnalysis = false;
     std::string aiModelPath;
 
+    bool aiModelAnalysis = false;
+    std::string aiModelPath;
+    std::string aiMetaPath;
+    std::string aiPreprocessScript;
+    std::string aiPythonBin = "python3";
+    float aiThreshold = 0.5f;
+    bool aiFallbackToRule = true;
+
     void setDefault(
         boost::property_tree::ptree &pt,
         std::string &serverAddress,
@@ -32,7 +40,12 @@ public:
         int &stopValue,
         double &scenario7VehicleWidthM,
         bool &aiModelAnalysis,
-        std::string &aiModelPath
+        std::string &aiModelPath,
+        std::string &aiMetaPath,
+        std::string &aiPreprocessScript,
+        std::string &aiPythonBin,
+        float &aiThreshold,
+        bool &aiFallbackToRule
     );
 
     bool loadFromFile(const std::string &filePath);

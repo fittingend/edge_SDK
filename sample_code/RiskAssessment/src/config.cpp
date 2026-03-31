@@ -20,7 +20,12 @@ void Config::setDefault(
     int &stopValue,
     double &scenario7VehicleWidthM,
     bool &aiModelAnalysis,
-    std::string &aiModelPath
+    std::string &aiModelPath,
+    std::string &aiMetaPath,
+    std::string &aiPreprocessScript,
+    std::string &aiPythonBin,
+    float &aiThreshold,
+    bool &aiFallbackToRule
 ) {
     serverAddress = pt.get<std::string>("Network.NATSServerAddress", "https://nats.beyless.com");
     serverPort = pt.get<int>("Network.ServerPort", 0);
@@ -32,8 +37,13 @@ void Config::setDefault(
     scenario7MinUnscanned = pt.get<int>("Scenario.MinUnscanned7", 10);
     stopValue = pt.get<int>("Scenario.StopValue", 1);
     scenario7VehicleWidthM = pt.get<double>("Scenario.VehicleWidthM", 2.5);
-    aiModelAnalysis = pt.get<bool>("AI.aiModelAnalysis", false);
-    aiModelPath = pt.get<std::string>("AI.aiModelPath", "");
+    aiModelAnalysis = pt.get<bool>("AI.AIModelAnalysis", false);
+    aiModelPath = pt.get<std::string>("AI.ModelPath", "");
+    aiMetaPath = pt.get<std::string>("AI.MetaPath", "");
+    aiPreprocessScript = pt.get<std::string>("AI.PreprocessScript", "");
+    aiPythonBin = pt.get<std::string>("AI.PythonBin", "python3");
+    aiThreshold = pt.get<float>("AI.Threshold", 0.5f);
+    aiFallbackToRule = pt.get<bool>("AI.FallbackToRule", true);
 }
 
 bool Config::loadFromFile(const std::string &filePath)
@@ -42,13 +52,13 @@ bool Config::loadFromFile(const std::string &filePath)
     try
     {
         boost::property_tree::ini_parser::read_ini(filePath, pt);
-        setDefault(pt, serverAddress, serverPort, useNats, saveJson, scenarioLog, labelWrite, labelOutputPath, scenario7MinUnscanned, stopValue, scenario7VehicleWidthM, aiModelAnalysis, aiModelPath);
+        setDefault(pt, serverAddress, serverPort, useNats, saveJson, scenarioLog, labelWrite, labelOutputPath, scenario7MinUnscanned, stopValue, scenario7VehicleWidthM, aiModelAnalysis, aiModelPath, aiMetaPath, aiPreprocessScript, aiPythonBin, aiThreshold, aiFallbackToRule);
         return true;
     }
     catch (const std::exception &ex)
     {
         adcm::Log::Info() << "Error reading INI file: " << ex.what();
-        setDefault(pt, serverAddress, serverPort, useNats, saveJson, scenarioLog, labelWrite, labelOutputPath, scenario7MinUnscanned, stopValue, scenario7VehicleWidthM, aiModelAnalysis, aiModelPath);
+        setDefault(pt, serverAddress, serverPort, useNats, saveJson, scenarioLog, labelWrite, labelOutputPath, scenario7MinUnscanned, stopValue, scenario7VehicleWidthM, aiModelAnalysis, aiModelPath, aiMetaPath, aiPreprocessScript, aiPythonBin, aiThreshold, aiFallbackToRule);
         return false;
     }
 }
@@ -65,6 +75,11 @@ void Config::print() const
     adcm::Log::Info() << "Scenario7 Min Unscanned: " << scenario7MinUnscanned;
     adcm::Log::Info() << "Stop Value: " << stopValue;
     adcm::Log::Info() << "Scenario7 Vehicle Width (m): " << scenario7VehicleWidthM;
-    adcm::Log::Info() << "AI Model Analysis: " << (aiModelAnalysis ? "true" : "false");
+    adcm::Log::Info() << "AIModelAnalysis: " << (aiModelAnalysis ? "true" : "false");
     adcm::Log::Info() << "AI Model Path: " << aiModelPath;
+    adcm::Log::Info() << "AI Meta Path: " << aiMetaPath;
+    adcm::Log::Info() << "AI Preprocess Script: " << aiPreprocessScript;
+    adcm::Log::Info() << "AI Python Bin: " << aiPythonBin;
+    adcm::Log::Info() << "AI Threshold: " << aiThreshold;
+    adcm::Log::Info() << "AI FallbackToRule: " << (aiFallbackToRule ? "true" : "false");
 }
