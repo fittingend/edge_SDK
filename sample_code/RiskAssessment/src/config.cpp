@@ -18,7 +18,9 @@ void Config::setDefault(
     std::string &labelOutputPath,
     int &scenario7MinUnscanned,
     int &stopValue,
-    double &scenario7VehicleWidthM
+    double &scenario7VehicleWidthM,
+    bool &aiModelAnalysis,
+    std::string &aiModelPath
 ) {
     serverAddress = pt.get<std::string>("Network.NATSServerAddress", "https://nats.beyless.com");
     serverPort = pt.get<int>("Network.ServerPort", 0);
@@ -30,6 +32,8 @@ void Config::setDefault(
     scenario7MinUnscanned = pt.get<int>("Scenario.MinUnscanned7", 10);
     stopValue = pt.get<int>("Scenario.StopValue", 1);
     scenario7VehicleWidthM = pt.get<double>("Scenario.VehicleWidthM", 2.5);
+    aiModelAnalysis = pt.get<bool>("AI.aiModelAnalysis", false);
+    aiModelPath = pt.get<std::string>("AI.aiModelPath", "");
 }
 
 bool Config::loadFromFile(const std::string &filePath)
@@ -38,13 +42,13 @@ bool Config::loadFromFile(const std::string &filePath)
     try
     {
         boost::property_tree::ini_parser::read_ini(filePath, pt);
-        setDefault(pt, serverAddress, serverPort, useNats, saveJson, scenarioLog, labelWrite, labelOutputPath, scenario7MinUnscanned, stopValue, scenario7VehicleWidthM);
+        setDefault(pt, serverAddress, serverPort, useNats, saveJson, scenarioLog, labelWrite, labelOutputPath, scenario7MinUnscanned, stopValue, scenario7VehicleWidthM, aiModelAnalysis, aiModelPath);
         return true;
     }
     catch (const std::exception &ex)
     {
         adcm::Log::Info() << "Error reading INI file: " << ex.what();
-        setDefault(pt, serverAddress, serverPort, useNats, saveJson, scenarioLog, labelWrite, labelOutputPath, scenario7MinUnscanned, stopValue, scenario7VehicleWidthM);
+        setDefault(pt, serverAddress, serverPort, useNats, saveJson, scenarioLog, labelWrite, labelOutputPath, scenario7MinUnscanned, stopValue, scenario7VehicleWidthM, aiModelAnalysis, aiModelPath);
         return false;
     }
 }
@@ -61,4 +65,6 @@ void Config::print() const
     adcm::Log::Info() << "Scenario7 Min Unscanned: " << scenario7MinUnscanned;
     adcm::Log::Info() << "Stop Value: " << stopValue;
     adcm::Log::Info() << "Scenario7 Vehicle Width (m): " << scenario7VehicleWidthM;
+    adcm::Log::Info() << "AI Model Analysis: " << (aiModelAnalysis ? "true" : "false");
+    adcm::Log::Info() << "AI Model Path: " << aiModelPath;
 }

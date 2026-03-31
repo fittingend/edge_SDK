@@ -16,6 +16,8 @@ public:
     int scenario7MinUnscanned = 10;
     int stopValue = 1;
     double scenario7VehicleWidthM = 2.5;
+    bool aiModelAnalysis = false;
+    std::string aiModelPath;
 
     void setDefault(
         boost::property_tree::ptree &pt,
@@ -28,7 +30,9 @@ public:
         std::string &labelOutputPath,
         int &scenario7MinUnscanned,
         int &stopValue,
-        double &scenario7VehicleWidthM
+        double &scenario7VehicleWidthM,
+        bool &aiModelAnalysis,
+        std::string &aiModelPath
     );
 
     bool loadFromFile(const std::string &filePath);

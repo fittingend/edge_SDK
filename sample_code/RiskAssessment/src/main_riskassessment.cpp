@@ -51,6 +51,7 @@
 #include "config.hpp"
 #include <unistd.h>
 #include <sstream>
+#include <onnxruntime_cxx_api.h>
 /**
   * 쓰레드간 관계
 [ThreadReceiveMapData]
@@ -113,6 +114,34 @@ std::string riskLogPrefix(uint64_t seq)
     oss << "[R" << seq << "] ";
     return oss.str();
 }
+
+void TryLoadOnnxModelOnce()
+{
+    if (!config.aiModelAnalysis) {
+        return;
+    }
+
+    static std::once_flag once;
+    std::call_once(once, []() {
+        if (config.aiModelPath.empty()) {
+            adcm::Log::Info() << "[AI] ModelPath is empty. ONNX load skipped.";
+            return;
+        }
+
+        try {
+            Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "risk_onload");
+            Ort::SessionOptions opts;
+            opts.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+            opts.SetIntraOpNumThreads(1);
+            Ort::Session session(env, config.aiModelPath.c_str(), opts);
+            adcm::Log::Info() << "[AI] ONNX load OK";
+        } catch (const Ort::Exception& e) {
+            adcm::Log::Info() << "[AI] ONNX load failed: " << e.what();
+        } catch (const std::exception& e) {
+            adcm::Log::Info() << "[AI] ONNX load error: " << e.what();
+        }
+    });
+}
 }
 
 std::uint8_t type = 0; // 시뮬레이션 = 0, 실증 = 1
@@ -159,6 +188,9 @@ void ThreadReceiveMapData()
     adcm::MapData_Subscriber mapData_subscriber;
     mapData_subscriber.init("RiskAssessment/RiskAssessment/RPort_map_data");
     INFO("Thread ThreadReceiveMapData start...");
+
+    // Load ONNX model once if enabled in config.ini
+    TryLoadOnnxModelOnce();
 
     while (continueExecution)
     {

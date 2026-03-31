@@ -247,9 +247,11 @@ if(HAS_VSOMEIP_BINDING OR HAS_WRSOMEIP_BINDING)
         ${GEN_DEST}/includes
         ${ARA_INCLUDE_DIRS}
         ${PROJECT_SOURCE_DIR}/include
+        ${PROJECT_SOURCE_DIR}/src
         ${COMMON_DIR}/service/inc
         ${COMMON_DIR}/e2e
         SYSTEM ${COMMON_DIR}/logger/inc
+        /opt/onnxruntime/include
     )
 endif()
 
@@ -263,9 +265,11 @@ if(HAS_OPENDDS_BINDING)
         ${GEN_DEST}/includes
         ${ARA_INCLUDE_DIRS}
         ${PROJECT_SOURCE_DIR}/include
+        ${PROJECT_SOURCE_DIR}/src
         ${COMMON_DIR}/service/inc
         ${COMMON_DIR}/e2e
         SYSTEM ${COMMON_DIR}/logger/inc
+        /opt/onnxruntime/include
     )
 endif()
 
@@ -285,6 +289,12 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     Poco::JSON
     Boost::filesystem
     Boost::system
+    /opt/onnxruntime/lib/libonnxruntime.so
+)
+
+set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES
+    BUILD_RPATH "/opt/onnxruntime/lib"
+    INSTALL_RPATH "/opt/onnxruntime/lib"
 )
 
 #add_dependencies(${PROJECT_NAME} ${INTERFACES_MAKE_TARGET} ${PROCESS_ARTIFACTS_MAKE_TARGET})
