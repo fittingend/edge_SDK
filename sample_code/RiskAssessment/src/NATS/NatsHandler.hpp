@@ -14,7 +14,8 @@ void saveToJsonFile(const std::string& key, const std::string& value, int& fileC
 std::string convertRiskAssessmentToJsonString(const adcm::risk_assessment_Objects& riskAssessment);
 std::string convertRiskAssessmentToJsonString(const adcm::risk_assessment_Objects& riskAssessment,
                                               const obstacleListVector& obstacle_list);
-void NatsSend(const adcm::risk_assessment_Objects& riskAssessment, const obstacleListVector& obstacle_list);
+bool NatsConnectOnStartup();
+bool NatsSend(const adcm::risk_assessment_Objects& riskAssessment, const obstacleListVector& obstacle_list);
 
 void SaveAsJson(const adcm::risk_assessment_Objects& riskAssessment);
 

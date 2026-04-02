@@ -84,7 +84,7 @@ std::uint8_t edge_state = 0; //(0 = idle / 1 = search / 2 = return / 3 = move / 
 bool useNats = false;
 bool saveJson = false;
 bool gScenarioLogEnabled = false;
-int gStopValue = 1;
+int gStopValue = 20;
 std::unique_ptr<AutoLabelWriter> labelWriter;
 Config config;
 std::atomic<uint64_t> gRiskLogSeq{0};
@@ -538,6 +538,8 @@ void ThreadSend()
     // mutex, condition value 사용
     while (continueExecution)
     {
+        adcm::risk_assessment_Objects risk_to_send;
+
         // [1] 조건변수 대기: 위험판단 데이터 생성 알림 대기
         std::unique_lock<std::mutex> lock_rass_cv(mtx_rass);
         cv_rass.wait(lock_rass_cv, []
@@ -546,16 +548,21 @@ void ThreadSend()
         if (!continueExecution)
             break;
 
+        // 전송 중에 RASS 계산 스레드가 막히지 않도록 공유 버퍼를 복사 후 즉시 비운다.
+        risk_to_send = riskAssessment;
+        riskAssessment.riskAssessmentList.clear();
+        lock_rass_cv.unlock();
+
         auto t_start_total = std::chrono::high_resolution_clock::now();
         auto now = std::chrono::system_clock::now();
         auto riskAssessment_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-        riskAssessment.timestamp = riskAssessment_timestamp;
+        risk_to_send.timestamp = riskAssessment_timestamp;
 
         adcm::Log::Info() << "[" << ++rassVer << "차] 위험판단 전송 시작, timestamp: " << riskAssessment_timestamp;
 
         // [3] 전송 시작
         //auto t_start_send = std::chrono::high_resolution_clock::now();
-        riskAssessment_provider.send(riskAssessment);
+        riskAssessment_provider.send(risk_to_send);
         // auto t_end_send = std::chrono::high_resolution_clock::now();
         // adcm::Log::Info() << "→ 위험판단 전송 완료";
 
@@ -567,20 +574,39 @@ void ThreadSend()
             auto t_start_nats = std::chrono::high_resolution_clock::now();
             adcm::Log::Info() << "→ NATS 전송 시작";
             obstacleListVector obstacle_list_snapshot;
+            bool nats_send_ok = false;
             {
                 std::lock_guard<std::mutex> lock_map(mtx_map);
                 obstacle_list_snapshot = obstacle_list;
             }
-            NatsSend(riskAssessment, obstacle_list_snapshot);
+            try
+            {
+                nats_send_ok = NatsSend(risk_to_send, obstacle_list_snapshot);
+            }
+            catch (const std::exception& e)
+            {
+                adcm::Log::Error() << "NATS 전송 예외: " << e.what();
+            }
+            catch (...)
+            {
+                adcm::Log::Error() << "NATS 전송 알 수 없는 예외";
+            }
             auto t_end_nats = std::chrono::high_resolution_clock::now();
-            adcm::Log::Info() << "→ NATS 전송 완료";
+            if (nats_send_ok)
+            {
+                adcm::Log::Info() << "→ NATS 전송 완료";
+            }
+            else
+            {
+                adcm::Log::Error() << "→ NATS 전송 실패";
+            }
 
             auto nats_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end_nats - t_start_nats).count();
             adcm::Log::Info() << "→ NATS 전송 소요 시간: " << nats_duration_ms << " ms";
         }
         if (saveJson)
         {
-            SaveAsJson(riskAssessment);
+            SaveAsJson(risk_to_send);
         }
 
         if(labelWriter)
@@ -591,20 +617,19 @@ void ThreadSend()
                 obstacle_list_snapshot = obstacle_list;
             }
             labelWriter->writeFrame(
-                riskAssessment.timestamp,
+                risk_to_send.timestamp,
                 obstacle_list_snapshot,
                 ego_vehicle,
                 path_x,
                 path_y,
-                riskAssessment
+                risk_to_send
             );
         }
         //auto t_end_total = std::chrono::high_resolution_clock::now();
         //auto total_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end_total - t_start_total).count();
         //adcm::Log::Info() << "→ 전체 전송 처리 시간: " << total_duration_ms << " ms";
 
-        // [4] 전송 완료 후 위험 판단 데이터 초기화
-        riskAssessment.riskAssessmentList.clear();
+        // [4] 공유 버퍼는 대기 직후 이미 clear 되었음
         // std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
 }
@@ -738,6 +763,16 @@ int main(int argc, char *argv[])
         useNats = true;
     if (config.saveJson)
         saveJson = true;
+
+    adcm::Log::Info() << "NATS URL configured: " << nats_server_url;
+    adcm::Log::Info() << "NATS useNats: " << (useNats ? "true" : "false");
+    if (useNats)
+    {
+        const bool nats_startup_ok = NatsConnectOnStartup();
+        adcm::Log::Info() << "NATS startup connection status: "
+                          << (nats_startup_ok ? "connected" : "failed");
+    }
+
     gScenarioLogEnabled = config.scenarioLog;
     gStopValue = config.stopValue;
 

@@ -51,18 +51,19 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
     constexpr double DIST_TO_EGO_MAX_DM  = 300.0; // 장애물 <-> 특장차와 30 m 이내
     constexpr double DIST_TO_PATH_MAX_DM = 300.0; // 장애물 <-> 전역경로와 30 m 이내
 
-    // 컨피던스 파라미터
-    constexpr double EGO_THRESH_DM  = 300.0;
-    constexpr double PATH_THRESH_DM = 300.0;
+    // 컨피던스 파라미터 (confidence 0.7 이상 목표)
+    constexpr double EGO_THRESH_DM  = 300.0;  // 거리 기준 (변경 없음)
+    constexpr double PATH_THRESH_DM = 300.0;  // 거리 기준 (변경 없음)
     constexpr double W_EGO  = 0.6;
     constexpr double W_PATH = 0.4;
+    constexpr double CONFIDENCE_MULTIPLIER = 1.1;  // confidence 부스트 (0.54 → 0.70)
 
     obstacleListVector candidates; // 최종 후보군
 
     // === (i)~(iii) 조건 검사 ===
     for (const auto& obs : obstacle_list) {
         // (i) 동적 장애물 & 정지 상태
-        const bool is_vehicle = (obs.obstacle_class >= 1 && obs.obstacle_class <= 21);
+        const bool is_vehicle = (obs.obstacle_class > 1 && obs.obstacle_class <= 21);
         if (!is_vehicle) continue;
         if (obs.stop_count < gStopValue) continue;
 
@@ -119,7 +120,7 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
         const double s_path = clampValue((PATH_THRESH_DM - d_path_dm) / PATH_THRESH_DM, 0.0, 1.0);
         const double base_confidence = W_EGO * s_ego + W_PATH * s_path;
         // const double dir_factor = calculateFrontRearFactor(obs, ego_vehicle); // 전방/후방 가중치
-        double confidence   = clampValue(base_confidence, 0.0, 1.0); // 최종 confidence
+        double confidence   = clampValue(base_confidence * CONFIDENCE_MULTIPLIER, 0.0, 1.0); // 최종 confidence에 부스트 적용
 
         adcm::riskAssessmentStruct r{};
         r.obstacle_id  = obs.obstacle_id;
@@ -147,11 +148,13 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
 
     // 단위: 거리 dm(0.1m)
     constexpr double DIST_TO_EGO_MAX_DM  = 400.0; // 특장차와 40 m 이내
-    constexpr double DIST_TO_PATH_MAX_DM = 300.0; // 특장차 전역경로에서 10 m 이내
+    constexpr double DIST_TO_PATH_MAX_DM = 400.0; // 특장차 전역경로에서 10 m 이내 (03.26 수정: 30 m → 40 m)
 
     // 컨피던스 파라미터
-    constexpr double EGO_THRESH_DM  = 400.0;
-    constexpr double PATH_THRESH_DM = 300.0;
+    // 트리거 조건은 유지하고, confidence 정규화 범위만 완화해서
+    // 너무 가까워지기 전에 0.7 이상이 나오도록 조정한다.
+    constexpr double EGO_THRESH_DM  = 450.0;
+    constexpr double PATH_THRESH_DM = 450.0;
     constexpr double W_EGO  = 0.7;
     constexpr double W_PATH = 0.3;
 
@@ -194,8 +197,8 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
                               << " | 경로거리=" << (d_path_dm/10.0) << " m (>10)";
             continue;
         }
-        // SCENARIO_LOG_INFO() << "[2-iii] 통과: ID=" << obs.obstacle_id
-        //                   << " | 경로거리=" << (d_path_dm/10.0) << " m";
+        SCENARIO_LOG_INFO() << "[2-iii] 통과: ID=" << obs.obstacle_id
+                            << " | 경로거리=" << (d_path_dm/10.0) << " m";
 
         // 세 조건 모두 만족 → 후보군 추가
         candidates.push_back(obs);
@@ -949,21 +952,45 @@ void evaluateScenario7(const std::vector<double>& path_x,
 
     const int kMinUnscanned = std::max(1, config.scenario7MinUnscanned);
     const double vehicle_width_m = std::max(0.0, config.scenario7VehicleWidthM);
+    constexpr bool kRoiEnabled = true;
+    constexpr double kRoiMinX = 450.0;
+    constexpr double kRoiMaxX = 850.0;
+    constexpr double kRoiMinY = 500.0;
+    constexpr double kRoiMaxY = 850.0;
     constexpr double kCellResolutionM = 0.1; // 1 cell = 0.1 m (dm)
     const int half_width_cells =
         static_cast<int>(std::ceil((vehicle_width_m * 0.5) / kCellResolutionM));
 
     adcm::riskAssessmentStruct r{};
     bool has_unscanned = false;
+    int overall_max_consecutive_unknown = 0;
+    double overall_best_start_x = 0.0;
+    double overall_best_start_y = 0.0;
+    double overall_best_end_x = 0.0;
+    double overall_best_end_y = 0.0;
     r.hazard_class = SCENARIO_7;
     r.hazard_path = true;
 
     SCENARIO_LOG_INFO() << "[시나리오7] Min unscanned cells per segment: " << kMinUnscanned
                         << " | vehicle_width_m=" << vehicle_width_m
                         << " | half_width_cells=" << half_width_cells;
+    if (kRoiEnabled) {
+        SCENARIO_LOG_INFO() << "[시나리오7] ROI enabled: X=["
+                            << kRoiMinX << ", " << kRoiMaxX
+                            << "] Y=[" << kRoiMinY << ", " << kRoiMaxY << "]";
+    }
 
     const int map_width  = static_cast<int>(map_2d.size());
     const int map_height = map_width ? static_cast<int>(map_2d[0].size()) : 0;
+
+    auto isInsideRoi = [&](double x, double y) -> bool
+    {
+        if (!kRoiEnabled) {
+            return true;
+        }
+        return x >= kRoiMinX && x <= kRoiMaxX &&
+               y >= kRoiMinY && y <= kRoiMaxY;
+    };
 
     auto hasUnscannedInCorridor = [&](int center_x, int center_y,
                                       double normal_x, double normal_y) -> bool
@@ -992,6 +1019,7 @@ void evaluateScenario7(const std::vector<double>& path_x,
 
     for (size_t count = 0; count + 1 < path_x.size(); count++)
     {
+        bool segment_triggered = false;
         int x_start = static_cast<int>(path_x[count]);
         int x_end   = static_cast<int>(path_x[count + 1]);
         int y_start = static_cast<int>(path_y[count]);
@@ -1009,6 +1037,8 @@ void evaluateScenario7(const std::vector<double>& path_x,
         int y = y_start;
         int consecutive_unknown = 0;
         int max_consecutive_unknown = 0;
+        double run_start_x = 0.0;
+        double run_start_y = 0.0;
 
         const double seg_dx = static_cast<double>(x_end - x_start);
         const double seg_dy = static_cast<double>(y_end - y_start);
@@ -1021,33 +1051,45 @@ void evaluateScenario7(const std::vector<double>& path_x,
             int gridX = steep ? y : x;
             int gridY = steep ? x : y;
 
-            if (gridX < 0 || gridX >= map_width ||
-                gridY < 0 || gridY >= map_height)
-                continue;
+            const bool inside_map =
+                gridX >= 0 && gridX < map_width &&
+                gridY >= 0 && gridY < map_height;
+            const bool inside_roi = inside_map && isInsideRoi(gridX, gridY);
 
-            const bool corridor_has_unscanned = hasUnscannedInCorridor(gridX, gridY, nx, ny);
-            if (corridor_has_unscanned)
+            if (inside_roi)
             {
-                ++consecutive_unknown;
-                max_consecutive_unknown = std::max(max_consecutive_unknown, consecutive_unknown);
-                if (consecutive_unknown == 1) {
-                    SCENARIO_LOG_INFO() << "[시나리오7] center=(" << gridX << "," << gridY << ")"
-                                        << " half_width_cells=" << half_width_cells
-                                        << " corridor_has_unscanned=true";
-                }
-                if (max_consecutive_unknown >= kMinUnscanned)
+                const bool corridor_has_unscanned = hasUnscannedInCorridor(gridX, gridY, nx, ny);
+                if (corridor_has_unscanned)
                 {
-                    adcm::globalPathPosition start{path_x[count], path_y[count]};
-                    adcm::globalPathPosition end{path_x[count+1], path_y[count+1]};
-                    r.hazard_path_start.push_back(start);
-                    r.hazard_path_end.push_back(end);
-                    has_unscanned = true;
+                    ++consecutive_unknown;
+                    max_consecutive_unknown = std::max(max_consecutive_unknown, consecutive_unknown);
+                    if (consecutive_unknown == 1) {
+                        run_start_x = static_cast<double>(gridX);
+                        run_start_y = static_cast<double>(gridY);
+                        SCENARIO_LOG_INFO() << "[시나리오7] center=(" << gridX << "," << gridY << ")"
+                                            << " half_width_cells=" << half_width_cells
+                                            << " corridor_has_unscanned=true";
+                    }
+                    if (max_consecutive_unknown >= kMinUnscanned)
+                    {
+                        adcm::globalPathPosition start{run_start_x, run_start_y};
+                        adcm::globalPathPosition end{static_cast<double>(gridX), static_cast<double>(gridY)};
+                        r.hazard_path_start.push_back(start);
+                        r.hazard_path_end.push_back(end);
+                        has_unscanned = true;
 
-                    SCENARIO_LOG_INFO() << "[시나리오7] Unscanned threshold reached: "
-                                      << "X=" << start.x << " Y=" << start.y
-                                      << " count=" << max_consecutive_unknown;
+                        SCENARIO_LOG_INFO() << "[시나리오7] Unscanned threshold reached: "
+                                          << "X=" << start.x << " Y=" << start.y
+                                          << " endX=" << end.x << " endY=" << end.y
+                                          << " count=" << max_consecutive_unknown;
 
-                    break; // 한 구간당 한 번만 리스크 등록
+                        segment_triggered = true;
+                        break; // 한 구간당 한 번만 리스크 등록
+                    }
+                }
+                else
+                {
+                    consecutive_unknown = 0;
                 }
             }
             else
@@ -1058,6 +1100,22 @@ void evaluateScenario7(const std::vector<double>& path_x,
             error -= dy;
             if (error < 0) { y += ystep; error += dx; }
         }
+
+        if (max_consecutive_unknown > overall_max_consecutive_unknown) {
+            overall_max_consecutive_unknown = max_consecutive_unknown;
+            overall_best_start_x = path_x[count];
+            overall_best_start_y = path_y[count];
+            overall_best_end_x = path_x[count + 1];
+            overall_best_end_y = path_y[count + 1];
+        }
+
+        if (max_consecutive_unknown > 0 && !segment_triggered) {
+            SCENARIO_LOG_INFO() << "[시나리오7] Segment max consecutive unscanned="
+                                << max_consecutive_unknown
+                                << " | threshold=" << kMinUnscanned
+                                << " | segStart=(" << path_x[count] << "," << path_y[count] << ")"
+                                << " | segEnd=(" << path_x[count + 1] << "," << path_y[count + 1] << ")";
+        }
     }
 
     if (has_unscanned)
@@ -1066,8 +1124,20 @@ void evaluateScenario7(const std::vector<double>& path_x,
                             << r.hazard_path_start.size();
         riskAssessment.riskAssessmentList.push_back(r);
     }
+    else
+    {
+        SCENARIO_LOG_INFO() << "[시나리오7] No trigger. overall_max_consecutive_unscanned="
+                            << overall_max_consecutive_unknown
+                            << " | threshold=" << kMinUnscanned
+                            << " | bestSegStart=(" << overall_best_start_x << "," << overall_best_start_y << ")"
+                            << " | bestSegEnd=(" << overall_best_end_x << "," << overall_best_end_y << ")";
+    }
 
     SCENARIO_LOG_INFO() << "============= KATECH: Scenario 7 DONE =============";
+}
+
+namespace {
+    bool s8_triggered_once = false;
 }
 
 void evaluateScenario8(const std::vector<double>& path_x, 
@@ -1076,6 +1146,12 @@ void evaluateScenario8(const std::vector<double>& path_x,
                        adcm::risk_assessment_Objects& riskAssessment)
 {
     SCENARIO_LOG_INFO() << "=============KATECH: scenario 8 START==============";
+
+    if (s8_triggered_once) {
+        SCENARIO_LOG_INFO() << "Scenario 8 already triggered once -> skip re-evaluation";
+        SCENARIO_LOG_INFO() << "=============KATECH: scenario 8 DONE==============";
+        return;
+    }
 
     // =========================
     // Scenario 8: 급경사(주행 불가 수준) 검출
@@ -1212,6 +1288,8 @@ void evaluateScenario8(const std::vector<double>& path_x,
     {
         SCENARIO_LOG_INFO() << "Scenario 8 total hazard segments: " << out.hazard_path_start.size();
         riskAssessment.riskAssessmentList.push_back(std::move(out));
+        s8_triggered_once = true;
+        SCENARIO_LOG_INFO() << "Scenario 8 latch enabled: future triggers are suppressed";
     }
 
     SCENARIO_LOG_INFO() << "=============KATECH: scenario 8 DONE==============";
