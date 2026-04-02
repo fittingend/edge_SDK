@@ -194,6 +194,7 @@ set(APPLICATION_src
     src/config.cpp
     src/RiskAssessmentUtils.cpp 
     src/RiskScenarios.cpp
+    src/AI_model/AIInferencePipeline.cpp
     src/AI_model/AutoLabelWriter.cpp
     src/NATS/NatsConnManager.cpp
     src/NATS/NatsHandler.cpp

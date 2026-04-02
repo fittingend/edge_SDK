@@ -409,20 +409,15 @@ bool OnnxRiskInfer::inferFromRawRows(const std::vector<AIRawRow>& rows,
     return true;
 }
 
-AIResultMapper::AIResultMapper(float threshold)
-    : threshold_(threshold) {}
-
 int AIResultMapper::labelToHazardClass(const std::string& label) const {
-    const std::string prefix = "y_s";
-    if (label.rfind(prefix, 0) != 0) {
-        return -1;
-    }
     try {
-        int v = std::stoi(label.substr(prefix.size()));
-        return v;
+        if (label.rfind("y_s", 0) == 0 || label.rfind("c_s", 0) == 0) {
+            return std::stoi(label.substr(3));
+        }
     } catch (...) {
         return -1;
     }
+    return -1;
 }
 
 bool AIResultMapper::mapToRiskAssessment(const std::vector<AIInferenceRow>& rows,
@@ -443,8 +438,6 @@ bool AIResultMapper::mapToRiskAssessment(const std::vector<AIInferenceRow>& rows
         }
         for (size_t i = 0; i < label_cols.size(); ++i) {
             const float prob = row.probs[i];
-            if (prob < threshold_) continue;
-
             const int hazard_class = labelToHazardClass(label_cols[i]);
             if (hazard_class <= 0) continue;
 

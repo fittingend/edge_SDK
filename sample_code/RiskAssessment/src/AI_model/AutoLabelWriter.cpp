@@ -234,10 +234,8 @@ void AutoLabelWriter::writeFrame(
     if (!enabled_) return;
     // 1) riskAssessmentList로부터 obstacle_id별 라벨(멀티) 생성
     struct Lbl {
-        std::array<int, 8> y{};             // 0/1
         std::array<double, 8> c{};          // confidence
         Lbl() {
-            y.fill(0);
             c.fill(0.0);
         }
     };
@@ -247,7 +245,6 @@ void AutoLabelWriter::writeFrame(
         const int li = labelIndexFromHazardClass(r.hazard_class);
         if (li < 0) continue;
         auto& entry = lbl_map[r.obstacle_id];
-        entry.y[li] = 1;
         entry.c[li] = r.confidence;
         // 같은 라벨이 여러 번 들어오면 마지막 confidence로 갱신
     }
@@ -285,10 +282,8 @@ void AutoLabelWriter::writeFrame(
 
         // ===== 라벨 =====
         auto it = lbl_map.find(oid);
-        std::array<int, 8> y{}; y.fill(0);
         std::array<double, 8> c{}; c.fill(0.0);
         if (it != lbl_map.end()) {
-            y = it->second.y;
             c = it->second.c;
         }
 
@@ -308,13 +303,6 @@ void AutoLabelWriter::writeFrame(
              << goal_x << ',' << goal_y << ','
              << dist_path << ',';
 
-        // labels 8개
-        for (int i = 0; i < 8; ++i) {
-            ofs_ << y[i];
-            if (i != 7) ofs_ << ',';
-        }
-
-        ofs_ << ',';
         // confidence 8개 (라벨과 동일한 순서)
         for (int i = 0; i < 8; ++i) {
             ofs_ << c[i];
@@ -331,7 +319,6 @@ void AutoLabelWriter::writeHeader() {
          << "obs_x,obs_y,obs_vx,obs_vy,cuboid_z,"
          << "ego_x,ego_y,ego_vx,ego_vy,edge_state,"
          << "goal_x,goal_y,dist_to_path,"
-         << "y_s1,y_s2,y_s3,y_s4,y_s5,y_s6,y_s9,y_s10,"
          << "c_s1,c_s2,c_s3,c_s4,c_s5,c_s6,c_s9,c_s10\n";
     // 숫자 출력 포맷 고정
     ofs_ << std::fixed << std::setprecision(6);

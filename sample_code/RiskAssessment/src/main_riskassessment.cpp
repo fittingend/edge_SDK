@@ -125,7 +125,6 @@ std::string getCwdString()
     }
     return std::string(buf);
 }
-}
 
 std::string resolvePath(const std::string& path, const std::string& default_rel)
 {
@@ -136,12 +135,6 @@ std::string resolvePath(const std::string& path, const std::string& default_rel)
     return p;
 }
 
-std::string makeTmpPath(const std::string& prefix, uint64_t frame_id, const std::string& suffix)
-{
-    std::ostringstream oss;
-    oss << "/tmp/" << prefix << "_" << getpid() << "_" << frame_id << suffix;
-    return oss.str();
-}
 }
 
 std::uint8_t type = 0; // 시뮬레이션 = 0, 실증 = 1
@@ -188,9 +181,6 @@ void ThreadReceiveMapData()
     adcm::MapData_Subscriber mapData_subscriber;
     mapData_subscriber.init("RiskAssessment/RiskAssessment/RPort_map_data");
     INFO("Thread ThreadReceiveMapData start...");
-
-    // Load ONNX model once if enabled in config.ini
-    TryLoadOnnxModelOnce();
 
     while (continueExecution)
     {
@@ -620,7 +610,7 @@ void ThreadRASSAI()
                 if (!infer.inferFromRawRows(raw_rows, rows, &err)) {
                     adcm::Log::Error() << "[AI] inference failed: " << err;
                 } else {
-                    AIResultMapper mapper(config.aiThreshold);
+                    AIResultMapper mapper;
                     if (!mapper.mapToRiskAssessment(rows, infer.labelCols(), local_risk, &err)) {
                         adcm::Log::Error() << "[AI] mapping failed: " << err;
                     } else {
@@ -632,7 +622,11 @@ void ThreadRASSAI()
             }
         }
 
-        if (!ai_ok && config.aiFallbackToRule) {
+        if (ai_ok) {
+            // Scenario 7/8 are rule-based only (AI model does not cover them)
+            evaluateScenario7(path_x_snapshot, path_y_snapshot, map_snapshot, config, local_risk);
+            evaluateScenario8(path_x_snapshot, path_y_snapshot, map_snapshot, local_risk);
+        } else {
             adcm::Log::Info() << "[AI] fallback to rule-based evaluation";
             local_risk.riskAssessmentList.clear();
             evaluateScenario1(obstacle_list_snapshot, ego_snapshot, path_x_snapshot, path_y_snapshot, local_risk);
@@ -677,8 +671,9 @@ void ThreadRASSAI()
                           << "[AI] 위험판단 생성 완료 size " << local_risk.riskAssessmentList.size();
         for (size_t i = 0; i < local_risk.riskAssessmentList.size(); ++i) {
             const auto& r = local_risk.riskAssessmentList[i];
+            constexpr float kTriggerThreshold = 0.7f;
             adcm::Log::Info() << riskLogPrefix(riskSeq)
-                              << (r.confidence > config.aiThreshold ? "[TRIGGER]" : "")
+                              << (r.confidence > kTriggerThreshold ? "[TRIGGER]" : "")
                               << "riskAssessment[" << i
                               << "] " << " 위험시나리오 #" << static_cast<int>(r.hazard_class)
                               << formatObs(r.obstacle_id)

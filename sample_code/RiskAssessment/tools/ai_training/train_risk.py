@@ -75,8 +75,8 @@ for cls in valid_classes:
 # 유효하지 않은 클래스값 명시적으로 0 처리
 df.loc[~df["obstacle_class"].isin(valid_classes), [f"cls_{cls}" for cls in valid_classes]] = 0
 
-# 6) 학습할 라벨 선택 (1차: S1,S2,S3,S9)
-label_cols = ["y_s1", "y_s2", "y_s3", "y_s4", "y_s5", "y_s6", "y_s9", "y_s10"]
+# 6) 학습할 라벨 선택 (confidence scores)
+label_cols = ["c_s1", "c_s2", "c_s3", "c_s4", "c_s5", "c_s6", "c_s9", "c_s10"]
 # 라벨 NaN은 0으로 처리
 df[label_cols] = df[label_cols].fillna(0)
 y = df[label_cols].values.astype(np.float32)
@@ -192,15 +192,6 @@ class RiskDataset(Dataset):
 train_loader = DataLoader(RiskDataset(X_train, y_train), batch_size=256, shuffle=True)
 val_loader = DataLoader(RiskDataset(X_val, y_val), batch_size=512, shuffle=False)
 
-# 11) pos_weight 계산 (시나리오별)
-pos = y_train.sum(axis=0)
-neg = y_train.shape[0] - pos
-pos_weight = torch.tensor((neg / np.clip(pos, 1, None)).astype(np.float32))
-# 양성 샘플이 전혀 없는 라벨은 pos_weight=1로 고정
-if (pos == 0).any():
-    pos_weight[pos == 0] = 1.0
-pos_weight = torch.clamp(pos_weight, max=100.0)  # 과도한 값 방지
-
 # 12) Model
 class MLP(nn.Module):
     def __init__(self, in_dim, out_dim):
@@ -216,7 +207,7 @@ class MLP(nn.Module):
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model = MLP(X_train.shape[1], len(label_cols)).to(device)
 
-criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight.to(device))
+criterion = nn.BCEWithLogitsLoss()
 opt = torch.optim.Adam(model.parameters(), lr=1e-3)
 
 # 13) Train loop (간단)

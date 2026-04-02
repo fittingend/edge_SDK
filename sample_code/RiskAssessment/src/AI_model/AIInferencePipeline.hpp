@@ -97,7 +97,7 @@ private:
 
 class AIResultMapper {
 public:
-    explicit AIResultMapper(float threshold);
+    AIResultMapper() = default;
 
     bool mapToRiskAssessment(const std::vector<AIInferenceRow>& rows,
                              const std::vector<std::string>& label_cols,
@@ -105,6 +105,5 @@ public:
                              std::string* err) const;
 
 private:
-    float threshold_ = 0.5f;
     int labelToHazardClass(const std::string& label) const;
 };
