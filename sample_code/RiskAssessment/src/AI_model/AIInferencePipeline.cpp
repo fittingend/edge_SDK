@@ -436,8 +436,12 @@ bool AIResultMapper::mapToRiskAssessment(const std::vector<AIInferenceRow>& rows
             if (err) *err = "prob size mismatch";
             return false;
         }
+        constexpr float kMinConfidence = 0.1f; //컨피던스 값이 0.1 이하이면 굳이 위험판단으로 간주하지 않음 (노이즈로 인한 오탐 방지)
         for (size_t i = 0; i < label_cols.size(); ++i) {
             const float prob = row.probs[i];
+            if (prob <= kMinConfidence) {
+                continue;
+            }
             const int hazard_class = labelToHazardClass(label_cols[i]);
             if (hazard_class <= 0) continue;
 
