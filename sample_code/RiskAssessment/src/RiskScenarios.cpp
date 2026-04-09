@@ -612,56 +612,6 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
  * 이때 ego 차량과 가장 가까운 차량을 대상으로 confidence 값을 계산하여 평가 목록에 추가.
  * confidence 값은 min_distance = 0이면 1.0 (가장 위험)이며 min_distance = 300이면 0.0 (경계선), min_distance > 300이면 0으로 클램핑
  */
-namespace {
-    using namespace adcm;
-    static std::vector<std::pair<std::uint64_t, double>> s6_first_seen_vec;
-    static std::vector<std::pair<std::uint64_t, double>> s6_anchor_windows;
-
-    inline void s6_reset_state() {
-        s6_first_seen_vec.clear();
-        s6_anchor_windows.clear();
-        SCENARIO_LOG_INFO() << "[시나리오6] 상태 리셋";
-    }
-
-    inline double s6_getFirstSeen(std::uint64_t id) {
-        for (auto &p : s6_first_seen_vec)
-            if (p.first == id) return p.second;
-        return -1.0;
-    }
-    inline void s6_recordFirstSeen(std::uint64_t id, double ts) {
-        for (auto &p : s6_first_seen_vec)
-            if (p.first == id) { p.second = std::min(p.second, ts); return; }
-        s6_first_seen_vec.emplace_back(id, ts);
-    }
-    inline double s6_getAnchorStart(std::uint64_t id) {
-        for (auto &p : s6_anchor_windows)
-            if (p.first == id) return p.second;
-        return -1.0;
-    }
-    inline void s6_addAnchor(std::uint64_t id, double start_ts) {
-        if (s6_getAnchorStart(id) < 0.0) {
-            s6_anchor_windows.emplace_back(id, start_ts);
-            SCENARIO_LOG_INFO() << "  · [앵커 생성] 차량ID=" << id << " | start=" << start_ts;
-        }
-    }
-    inline void s6_pruneAnchors(double now, double window_ms) {
-        size_t kept=0;
-        for (size_t i=0;i<s6_anchor_windows.size();++i) {
-            if (now - s6_anchor_windows[i].second <= window_ms) {
-                if (i!=kept) s6_anchor_windows[kept]=s6_anchor_windows[i];
-                kept++;
-            } else {
-                SCENARIO_LOG_INFO() << "  · [만료] 앵커 차량ID="<< s6_anchor_windows[i].first;
-            }
-        }
-        s6_anchor_windows.resize(kept);
-    }
-    inline const adcm::obstacleListStruct* s6_findInCand(const obstacleListVector &cand, std::uint64_t id) {
-        for (auto &o : cand) if (o.obstacle_id==id) return &o;
-        return nullptr;
-    }
-}
-
 void evaluateScenario6(const obstacleListVector& obstacle_list,
                        const adcm::vehicleListStruct& ego_vehicle,
                        const std::vector<double>& path_x,
@@ -678,13 +628,10 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
         return;
     }
 
-    constexpr double EGO_MIN_DM          = 100.0;   // 50 m
+    constexpr double EGO_MIN_DM          = 100.0;   // 10 m
     constexpr double EGO_MAX_DM          = 600.0;   // 60 m
     constexpr double DIST_TO_PATH_MAX_DM = 150.0;   // 15 m
     constexpr double MAX_PAIR_DIST_DM    = 300.0;   // 30 m
-    constexpr double WINDOW_MS           = 10000.0; // 10초
-    constexpr double FRAME_GRACE_MS      = 120.0;
-    constexpr double EPS                 = 1e-6;
 
     if (obstacle_list.empty()) {
         SCENARIO_LOG_INFO() << "[시나리오6] 입력 없음 → 종료";
@@ -719,64 +666,33 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
                     << " ts=" << obs.timestamp
                     << " Ego거리=" << d_ego_dm/10.0 << "m"
                     << " 경로거리=" << path_dist_dm/10.0 << "m";
-
-        // 처음 조건을 만족했다면 first_seen 기록 & 앵커 시작
-        double prev = s6_getFirstSeen(obs.obstacle_id);
-        s6_recordFirstSeen(obs.obstacle_id, obs.timestamp);
-        if (prev<0.0) s6_addAnchor(obs.obstacle_id, obs.timestamp);
     }
 
-    if (cand.empty()) {
-        SCENARIO_LOG_INFO() << "[시나리오6] 후보차량 없음 → 종료";
+    if (cand.size() < 2) {
+        SCENARIO_LOG_INFO() << "[시나리오6] 후보차량 부족(2대 미만) → 종료";
         return;
     }
 
-    // (2) 앵커 윈도우 유지
-    s6_pruneAnchors(frame_ts_max, WINDOW_MS);
-    SCENARIO_LOG_INFO() << "[시나리오6] 활성 앵커 수=" << s6_anchor_windows.size();
-    if (s6_anchor_windows.empty()) {
-        SCENARIO_LOG_INFO() << "[시나리오6] 활성 앵커 없음";
-        return;
-    }
-
-    // (3) 페어 탐지: 앵커 × 현재 후보
-    bool triggered=false;
-    double best_pair_dm=std::numeric_limits<double>::max();
+    // (2) 현재 프레임 후보 내 페어 탐지
+    bool triggered = false;
+    double best_pair_dm = std::numeric_limits<double>::max();
     adcm::obstacleListStruct best_a{}, best_b{};
-    
-    SCENARIO_LOG_INFO() << "[시나리오6] 페어 탐지 시작: window=10s, 허용거리 ≤ 30 m";
 
-    for (auto &anc : s6_anchor_windows) {
-        auto anchor_id=anc.first; double t0=anc.second;
-        auto* anchor_ptr=s6_findInCand(cand,anchor_id);
-        if (!anchor_ptr) {
-            SCENARIO_LOG_INFO() << "  └─[스킵] 앵커 차량 ID="<<anchor_id<<" 현재 프레임 후보에 없음";
-            continue;
-        }
-        for (auto &obj:cand) {
-            if (obj.obstacle_id==anchor_id) continue;
-            double fs=s6_getFirstSeen(obj.obstacle_id);
-            if (fs<0.0) continue;
+    SCENARIO_LOG_INFO() << "[시나리오6] 페어 탐지 시작: 현재 프레임, 허용거리 ≤ 30 m";
+    for (size_t ai = 0; ai < cand.size(); ++ai) {
+        for (size_t bi = ai + 1; bi < cand.size(); ++bi) {
+            const auto &a = cand[ai];
+            const auto &b = cand[bi];
+            const double pair_dist_dm = calculateDistance(a, b);
 
-            bool both_start=(fs>=t0-EPS && fs<=t0+FRAME_GRACE_MS+EPS);
-            bool newcomer=(fs>t0+FRAME_GRACE_MS+EPS && fs<=t0+WINDOW_MS+EPS);
+            SCENARIO_LOG_INFO() << "    · [검사] 차량쌍(" << a.obstacle_id << "," << b.obstacle_id << ")"
+                                << " | 페어거리=" << (pair_dist_dm / 10.0) << " m";
 
-            if (!(both_start||newcomer)) {
-                SCENARIO_LOG_INFO() << "    · [무시] 앵커(ID="<<anchor_id<<", start="<<t0<<"ms)"
-                            << " vs 후보(ID="<<obj.obstacle_id<<", first_seen="<<fs<<"ms)"
-                            << " -> 시간조건 불일치"
-                            << " (동시등장="<<(both_start?"예":"아니오")
-                            << ", 10초내신규="<<(newcomer?"예":"아니오")<<")";
-                continue;
-            }
-            double dij=calculateDistance(*anchor_ptr,obj);
-            SCENARIO_LOG_INFO() << "    · [검사] 차량쌍(" << anchor_id << "," << obj.obstacle_id << ")"
-            << " | 유형=" << (both_start ? "동시등장" : "앵커-뉴커머")
-            << " | 페어거리=" << (dij/10.0) << " m";
-            if (dij<=MAX_PAIR_DIST_DM && dij<best_pair_dm){
-                best_pair_dm=dij;
-                best_a=*anchor_ptr; best_b=obj;
-                triggered=true;
+            if (pair_dist_dm <= MAX_PAIR_DIST_DM && pair_dist_dm < best_pair_dm) {
+                best_pair_dm = pair_dist_dm;
+                best_a = a;
+                best_b = b;
+                triggered = true;
             }
         }
     }
@@ -786,7 +702,7 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
         return;
     }
 
-    // (4) 트리거 처리
+    // (3) 트리거 처리
     // - 결과는 'Ego와 더 가까운 차량 1대'만 추가
     const double d_ego_a_dm = calculateDistance(best_a, ego_vehicle);
     const double d_ego_b_dm = calculateDistance(best_b, ego_vehicle);
@@ -817,15 +733,12 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
                 << " (계산식: 400dm/" << min_ego_dm << " *0.7)";
 
     riskAssessment.riskAssessmentList.push_back(s6);
-
-    // 정책: 한 번 트리거 후 상태 초기화 (원하면 유지 정책으로 변경 가능)
-    s6_reset_state();
     SCENARIO_LOG_INFO()<<"==================== [시나리오6 종료] ====================";
 }
 /**
  * @brief 시나리오 7: 특정 ROI 내부 미스캔 노면 비율 기반 위험 판단
  *
- * 고정 ROI( x:[600,750], y:[500,550] )를 순회하여
+ * 고정 ROI( x:[600,650], y:[520,540] )를 순회하여
  * UNSCANNED(0xFE) 셀 비율이 임계치 이상이면 시나리오7을 트리거한다.
  * 미스캔 비율은 매 평가마다 로깅한다.
  */
@@ -844,6 +757,13 @@ void evaluateScenario7(const std::vector<double>& path_x,
         return;
     }
 
+    static bool s7_triggered_once = false;
+    if (s7_triggered_once) {
+        SCENARIO_LOG_INFO() << "[시나리오7] 이미 1회 전송됨 -> 재평가/재전송 생략";
+        SCENARIO_LOG_INFO() << "============= KATECH: Scenario 7 DONE =============";
+        return;
+    }
+
     auto isUnscanned = [&](uint8_t road_z)
     {
         return road_z == static_cast<uint8_t>(IndexToValue::UNSCANNED);
@@ -858,9 +778,9 @@ void evaluateScenario7(const std::vector<double>& path_x,
     const double kMinUnscannedRatio =
         clampValue(config.scenario7MinUnscannedRatio, 0.0, 1.0);
     constexpr int kRoiMinX = 600;
-    constexpr int kRoiMaxX = 750;
-    constexpr int kRoiMinY = 500;
-    constexpr int kRoiMaxY = 550;
+    constexpr int kRoiMaxX = 650;
+    constexpr int kRoiMinY = 520;
+    constexpr int kRoiMaxY = 540;
 
     adcm::riskAssessmentStruct r{};
     r.hazard_class = SCENARIO_7;
@@ -927,6 +847,7 @@ void evaluateScenario7(const std::vector<double>& path_x,
                             << " threshold=" << kMinUnscannedRatio;
 
         riskAssessment.riskAssessmentList.push_back(r);
+        s7_triggered_once = true;
     }
     else
     {

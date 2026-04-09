@@ -639,6 +639,8 @@ void ThreadReceiveEdgeInformation()
     adcm::EdgeInformation_Subscriber edgeInformation_subscriber;
     edgeInformation_subscriber.init("RiskAssessment/RiskAssessment/RPort_edge_information");
 
+    std::uint8_t prev_edge_state = edge_state;
+
     while (continueExecution) {
         gMainthread_Loopcount++;
         VERBOSE("[RiskAssessment] ThreadReceiveEdgeInformation loop");
@@ -651,8 +653,66 @@ void ThreadReceiveEdgeInformation()
                 auto data = edgeInformation_subscriber.getEvent();
                 gReceivedEvent_count_edge_information++;
 
-                edge_state = data->state;
+                const std::uint8_t new_edge_state = static_cast<std::uint8_t>(data->state);
+                edge_state = new_edge_state;
                 adcm::Log::Info() << "state : " << edge_state;
+
+                constexpr std::uint8_t EDGE_STATE_MOVE = 3;
+                const bool moveTransition = (prev_edge_state != EDGE_STATE_MOVE &&
+                                             new_edge_state == EDGE_STATE_MOVE);
+                if (moveTransition)
+                {
+                    constexpr int kScenario7RoiMinX = 600;
+                    constexpr int kScenario7RoiMaxX = 650;
+                    constexpr int kScenario7RoiMinY = 520;
+                    constexpr int kScenario7RoiMaxY = 540;
+
+                    std::lock_guard<std::mutex> lock(mtx_map);
+                    const int map_width = static_cast<int>(map_2d.size());
+                    const int map_height = map_width ? static_cast<int>(map_2d[0].size()) : 0;
+
+                    if (map_width <= 0 || map_height <= 0)
+                    {
+                        adcm::Log::Info() << "[Scenario7][MOVE_TRANSITION] map_2d empty, skip UNSCANNED override";
+                    }
+                    else
+                    {
+                        const int roi_x_start = std::max(0, kScenario7RoiMinX);
+                        const int roi_x_end = std::min(kScenario7RoiMaxX, map_width - 1);
+                        const int roi_y_start = std::max(0, kScenario7RoiMinY);
+                        const int roi_y_end = std::min(kScenario7RoiMaxY, map_height - 1);
+
+                        if (roi_x_start <= roi_x_end && roi_y_start <= roi_y_end)
+                        {
+                            int changed_cells = 0;
+                            for (int x = roi_x_start; x <= roi_x_end; ++x)
+                            {
+                                for (int y = roi_y_start; y <= roi_y_end; ++y)
+                                {
+                                    auto &cell = map_2d[x][y];
+                                    const auto unscanned = static_cast<std::uint8_t>(IndexToValue::UNSCANNED);
+                                    if (cell.road_z != unscanned)
+                                    {
+                                        cell.road_z = unscanned;
+                                        ++changed_cells;
+                                    }
+                                }
+                            }
+
+                            adcm::Log::Info() << "[Scenario7][MOVE_TRANSITION] ROI forced to UNSCANNED"
+                                              << " changed_cells=" << changed_cells
+                                              << " roi=[X:" << roi_x_start << "~" << roi_x_end
+                                              << ", Y:" << roi_y_start << "~" << roi_y_end << "]";
+                        }
+                        else
+                        {
+                            adcm::Log::Info() << "[Scenario7][MOVE_TRANSITION] ROI out of map, skip UNSCANNED override"
+                                              << " map_size=(" << map_width << ", " << map_height << ")";
+                        }
+                    }
+                }
+
+                prev_edge_state = new_edge_state;
             }
         }
     }
