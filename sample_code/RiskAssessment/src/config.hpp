@@ -14,6 +14,7 @@ public:
     bool labelWrite = false;
     std::string labelOutputPath;
     int scenario7MinUnscanned = 10;
+    double scenario7MinUnscannedRatio = 0.7;
     int stopValue = 1;
     double scenario7VehicleWidthM = 2.5;
 
@@ -27,6 +28,7 @@ public:
         bool &labelWrite,
         std::string &labelOutputPath,
         int &scenario7MinUnscanned,
+        double &scenario7MinUnscannedRatio,
         int &stopValue,
         double &scenario7VehicleWidthM
     );

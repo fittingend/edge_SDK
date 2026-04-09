@@ -469,14 +469,14 @@ void ThreadRASS()
             riskAssessment.riskAssessmentList.clear();
             
             printObstacleList(obstacle_list);
-            evaluateScenario1(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
-            evaluateScenario2(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
-            evaluateScenario3(obstacle_list, ego_vehicle, riskAssessment);
+            evaluateScenario1(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment, edge_state);
+            evaluateScenario2(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment, edge_state);
+            evaluateScenario3(obstacle_list, ego_vehicle, riskAssessment, edge_state);
             evaluateScenario4(obstacle_list, ego_vehicle, riskAssessment, edge_state);
-            evaluateScenario5(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
-            evaluateScenario6(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
-            evaluateScenario7(path_x, path_y, map_2d, config, riskAssessment);
-            evaluateScenario8(path_x, path_y, map_2d, riskAssessment);
+            evaluateScenario5(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment, edge_state);
+            evaluateScenario6(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment, edge_state);
+            evaluateScenario7(path_x, path_y, map_2d, config, riskAssessment, edge_state);
+            evaluateScenario8(path_x, path_y, map_2d, riskAssessment, edge_state);
             evaluateScenario9(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
             evaluateScenario10(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
         }
@@ -735,8 +735,8 @@ int main(int argc, char *argv[])
     adcm::Log::Info() << "RiskAssessment: e2e configuration " << (success ? "succeeded" : "failed");
 #endif
     adcm::Log::Info() << "Ok, let's produce some RiskAssessment data...";
-    adcm::Log::Info() << "SDK interface v2.7, SA8195";
-    // adcm::Log::Info() << "SDK interface v2.7, AGX Orin version";
+    // adcm::Log::Info() << "SDK interface v2.7, SA8195";
+    adcm::Log::Info() << "SDK interface v2.7, AGX Orin version";
     adcm::Log::Info() << "RiskAssessment Build " << BUILD_TIMESTAMP;
 
     if (config.loadFromFile(iniFilePath))

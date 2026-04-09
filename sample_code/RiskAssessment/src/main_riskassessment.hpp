@@ -167,17 +167,20 @@ extern void evaluateScenario1(const obstacleListVector& obstacle_list,
                         const adcm::vehicleListStruct& ego_vehicle,
                         const std::vector<double>& path_x,
                         const std::vector<double>& path_y,
-                        adcm::risk_assessment_Objects& riskAssessment);
+                        adcm::risk_assessment_Objects& riskAssessment,
+                        std::uint8_t edge_state);
 
 void evaluateScenario2(const obstacleListVector& obstacle_list,
                         const adcm::vehicleListStruct& ego_vehicle,
                         const std::vector<double>& path_x,
                         const std::vector<double>& path_y,
-                        adcm::risk_assessment_Objects& riskAssessment);
+                        adcm::risk_assessment_Objects& riskAssessment,
+                        std::uint8_t edge_state);
 
 void evaluateScenario3(const obstacleListVector& obstacle_list,
                         const adcm::vehicleListStruct& ego_vehicle,
-                        adcm::risk_assessment_Objects& riskAssessment);
+                        adcm::risk_assessment_Objects& riskAssessment,
+                        std::uint8_t edge_state);
 
 void evaluateScenario4(const obstacleListVector& obstacle_list,
                         const adcm::vehicleListStruct& ego_vehicle,
@@ -188,13 +191,15 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
                         const adcm::vehicleListStruct& ego_vehicle,
                         const std::vector<double>& path_x,
                         const std::vector<double>& path_y,
-                        adcm::risk_assessment_Objects& riskAssessment);
+                        adcm::risk_assessment_Objects& riskAssessment,
+                        std::uint8_t edge_state);
 void resetScenario5State();
 void evaluateScenario6(const obstacleListVector& obstacle_list,
                         const adcm::vehicleListStruct& ego_vehicle,
                         const std::vector<double>& path_x,
                         const std::vector<double>& path_y,
-                        adcm::risk_assessment_Objects& riskAssessment);
+                        adcm::risk_assessment_Objects& riskAssessment,
+                        std::uint8_t edge_state);
 void resetScenario6State();
 
 // 시나리오 7: 경로와 맵 정보 필요
@@ -202,12 +207,14 @@ void evaluateScenario7(const std::vector<double>& path_x,
                         const std::vector<double>& path_y,
                         const std::vector<adcm::map_2dListVector>& map_2d,
                         const Config& config,
-                        adcm::risk_assessment_Objects& riskAssessment);
+                        adcm::risk_assessment_Objects& riskAssessment,
+                        std::uint8_t edge_state);
 // 시나리오 8: 경로와 맵 정보 필요
 void evaluateScenario8(const std::vector<double>& path_x,
                         const std::vector<double>& path_y,
                         const std::vector<adcm::map_2dListVector>& map_2d,
-                        adcm::risk_assessment_Objects& riskAssessment);
+                        adcm::risk_assessment_Objects& riskAssessment,
+                        std::uint8_t edge_state);
 void evaluateScenario9(const obstacleListVector& obstacle_list,
                         const adcm::vehicleListStruct& ego_vehicle,
                         const std::vector<double>& path_x,
