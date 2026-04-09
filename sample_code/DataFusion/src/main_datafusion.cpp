@@ -45,6 +45,7 @@
 // I.e. this code as nothing to do with the communication or execution API
 ///////////////////////////////////////////////////////////////////////
 #include <sstream>
+#include <iomanip>
 #include <fstream> // Required for file handling
 #include <filesystem>
 #include <limits>
@@ -132,21 +133,52 @@ struct ListObstacleEntry
     std::uint8_t obstacle_class = 0;
     double map_x = 0.0;
     double map_y = 0.0;
+    double cuboid_x = 1.0;
+    double cuboid_y = 1.0;
+    double cuboid_z = 1.0;
 };
 
 static std::vector<ListObstacleEntry> list_obstacles;
 static bool list_obstacles_loaded = false;
 static std::string list_obstacles_path;
-static bool cfgB255Enabled = false;
-static std::vector<BoundaryData> cfgB255Pts;
+struct ConfiguredForbiddenZone
+{
+    std::string name;
+    std::vector<BoundaryData> points;
+};
+
+struct CachedForbiddenZonePolygon
+{
+    std::string name;
+    std::vector<Point2D> polygon;
+};
+
+static std::vector<ConfiguredForbiddenZone> cfgForbiddenZones;
 static bool b255SendPending = false;
 static std::unordered_set<std::uint64_t> b255AddedCells;
+static std::unordered_map<std::uint16_t, std::uint32_t> obstacleMissingFramesById;
+static std::atomic<std::uint8_t> currentEdgeState{0}; // 0=idle,1=search,2=return,3=move,4=work
+static std::atomic<bool> keepDynamicObstaclesUntilWork{false};
 static bool isPointInsidePolygon(const Point2D &point, const std::vector<Point2D> &polygon);
 static std::mutex mtx_boundary_polygon_cache;
 static std::vector<Point2D> cachedWorkBoundaryPolygon;
 static bool cachedWorkBoundaryPolygonReady = false;
-static std::vector<Point2D> cachedCfgB255Polygon;
-static bool cachedCfgB255PolygonReady = false;
+static std::vector<CachedForbiddenZonePolygon> cachedForbiddenZonePolygons;
+
+static inline std::uint32_t getObstacleMissingFrames(std::uint16_t obstacleId)
+{
+    auto it = obstacleMissingFramesById.find(obstacleId);
+    if (it == obstacleMissingFramesById.end())
+    {
+        return 0;
+    }
+    return it->second;
+}
+
+static inline bool shouldKeepDynamicObstaclesByEdgeState()
+{
+    return keepDynamicObstaclesUntilWork.load(std::memory_order_relaxed);
+}
 
 static constexpr std::uint8_t DYNAMIC_CLASS_MIN = 1;
 static constexpr std::uint8_t DYNAMIC_CLASS_MAX = 29;
@@ -161,6 +193,13 @@ static inline std::uint64_t nowMilliseconds()
     auto now = std::chrono::system_clock::now();
     return static_cast<std::uint64_t>(
         std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count());
+}
+
+static inline std::string formatCoord2(double value)
+{
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(2) << value;
+    return oss.str();
 }
 
 static void rebuildBoundaryPolygonCaches()
@@ -181,28 +220,38 @@ static void rebuildBoundaryPolygonCaches()
         workBoundaryPolygonReady = workBoundaryPolygon.size() >= 3;
     }
 
-    std::vector<Point2D> cfgB255Polygon;
-    bool cfgB255PolygonReady = false;
-    if (cfgB255Enabled && cfgB255Pts.size() == 4)
+    std::vector<CachedForbiddenZonePolygon> forbiddenZonePolygons;
+    forbiddenZonePolygons.reserve(cfgForbiddenZones.size());
+
+    for (const auto &zone : cfgForbiddenZones)
     {
-        cfgB255Polygon.reserve(cfgB255Pts.size());
-        for (const auto &boundaryPoint : cfgB255Pts)
+        if (zone.points.size() != 4)
+            continue;
+
+        CachedForbiddenZonePolygon cachedZone;
+        cachedZone.name = zone.name;
+        cachedZone.polygon.reserve(zone.points.size());
+
+        for (const auto &boundaryPoint : zone.points)
         {
             double utm_x = 0.0;
             double utm_y = 0.0;
             GPStoUTM(boundaryPoint.lon, boundaryPoint.lat, utm_x, utm_y);
-            cfgB255Polygon.push_back({(utm_x - origin_x) * M_TO_10CM_PRECISION,
-                                      (utm_y - origin_y) * M_TO_10CM_PRECISION});
+            cachedZone.polygon.push_back({(utm_x - origin_x) * M_TO_10CM_PRECISION,
+                                          (utm_y - origin_y) * M_TO_10CM_PRECISION});
         }
-        cfgB255PolygonReady = cfgB255Polygon.size() >= 3;
+
+        if (cachedZone.polygon.size() >= 3)
+        {
+            forbiddenZonePolygons.push_back(std::move(cachedZone));
+        }
     }
 
     {
         std::lock_guard<std::mutex> lock(mtx_boundary_polygon_cache);
         cachedWorkBoundaryPolygon = std::move(workBoundaryPolygon);
         cachedWorkBoundaryPolygonReady = workBoundaryPolygonReady;
-        cachedCfgB255Polygon = std::move(cfgB255Polygon);
-        cachedCfgB255PolygonReady = cfgB255PolygonReady;
+        cachedForbiddenZonePolygons = std::move(forbiddenZonePolygons);
     }
 }
 
@@ -255,6 +304,9 @@ static bool loadListObstacles(const std::string &filePath)
                 entry.map_x = obj->getValue<double>("lon");
                 entry.map_y = obj->getValue<double>("lat");
             }
+            if (obj->has("cuboid_x")) entry.cuboid_x = obj->getValue<double>("cuboid_x");
+            if (obj->has("cuboid_y")) entry.cuboid_y = obj->getValue<double>("cuboid_y");
+            if (obj->has("cuboid_z")) entry.cuboid_z = obj->getValue<double>("cuboid_z");
             list_obstacles.push_back(entry);
         }
     }
@@ -268,7 +320,8 @@ static bool loadListObstacles(const std::string &filePath)
     adcm::Log::Info() << "List obstacles loaded: " << list_obstacles.size();
     for (const auto &entry : list_obstacles)
         adcm::Log::Info() << "  id=" << entry.obstacle_id << ", class=" << static_cast<int>(entry.obstacle_class)
-                          << ", map_x=" << entry.map_x << ", map_y=" << entry.map_y;
+                          << ", map_x=" << formatCoord2(entry.map_x)
+                          << ", map_y=" << formatCoord2(entry.map_y);
     return list_obstacles_loaded;
 }
 
@@ -720,9 +773,9 @@ void appendListObstaclesToMergedList(std::vector<ObstacleData> &mergedList)
         obs.obstacle_class = entry.obstacle_class;
         obs.timestamp = nowMilliseconds();
         obs.stop_count = 0;
-        obs.fused_cuboid_x = default_cuboid_x;
-        obs.fused_cuboid_y = default_cuboid_y;
-        obs.fused_cuboid_z = default_cuboid_z;
+        obs.fused_cuboid_x = entry.cuboid_x;
+        obs.fused_cuboid_y = entry.cuboid_y;
+        obs.fused_cuboid_z = entry.cuboid_z;
         obs.fused_heading_angle = 0.0;
         obs.fused_position_x = map_pos_x;
         obs.fused_position_y = map_pos_y;
@@ -787,8 +840,10 @@ static void logDuplicateSummary(const std::string &tag,
                     adcm::Log::Info() << tag << " near-dup class=" << static_cast<int>(list[i].obstacle_class)
                                       << " idA=" << list[i].obstacle_id
                                       << " idB=" << list[j].obstacle_id
-                                      << " posA=(" << list[i].fused_position_x << ", " << list[i].fused_position_y << ")"
-                                      << " posB=(" << list[j].fused_position_x << ", " << list[j].fused_position_y << ")"
+                                      << " posA=(" << formatCoord2(list[i].fused_position_x)
+                                      << ", " << formatCoord2(list[i].fused_position_y) << ")"
+                                      << " posB=(" << formatCoord2(list[j].fused_position_x)
+                                      << ", " << formatCoord2(list[j].fused_position_y) << ")"
                                       << " dist2=" << dist2;
                     loggedPairs += 1;
                 }
@@ -878,6 +933,57 @@ void filterClass1ByRegion(std::vector<ObstacleData> &mergedList)
     if (removed > 0)
     {
         adcm::Log::Info() << framePrefix() << "[KATECH] class-1 region filter removed=" << removed;
+    }
+}
+
+// 최종 융합 리스트에서 class 1 중 특장차(ego) 근처 오인식을 제거한다.
+// 근접 반경은 work_information의 main_vehicle_size(미터) 기반 반대각선 절반을 사용한다.
+void filterClass1NearEgoByMainVehicleSize(std::vector<ObstacleData> &mergedList)
+{
+    if (mergedList.empty())
+    {
+        return;
+    }
+
+    if (!workego || main_vehicle_size.length == 0 || main_vehicle_size.width == 0)
+    {
+        return;
+    }
+
+    const double length_dm = static_cast<double>(main_vehicle_size.length) * M_TO_10CM_PRECISION;
+    const double width_dm = static_cast<double>(main_vehicle_size.width) * M_TO_10CM_PRECISION;
+    const double near_radius_dm = 0.5 * std::hypot(length_dm, width_dm);
+    if (near_radius_dm <= 0.0)
+    {
+        return;
+    }
+
+    const double ego_x = main_vehicle.position_x;
+    const double ego_y = main_vehicle.position_y;
+    const double near_radius2 = near_radius_dm * near_radius_dm;
+
+    const auto before = mergedList.size();
+    mergedList.erase(std::remove_if(mergedList.begin(), mergedList.end(),
+                                    [&](const ObstacleData &obs)
+                                    {
+                                        if (obs.obstacle_class != 1)
+                                        {
+                                            return false;
+                                        }
+
+                                        const double dx = obs.fused_position_x - ego_x;
+                                        const double dy = obs.fused_position_y - ego_y;
+                                        return (dx * dx + dy * dy) <= near_radius2;
+                                    }),
+                     mergedList.end());
+
+    const auto removed = before - mergedList.size();
+    if (removed > 0)
+    {
+        adcm::Log::Info() << framePrefix()
+                          << "[KATECH] class-1 ego-near filter removed=" << removed
+                          << " radius_m=" << formatCoord2(near_radius_dm / M_TO_10CM_PRECISION)
+                          << " ego=(" << formatCoord2(ego_x) << ", " << formatCoord2(ego_y) << ")";
     }
 }
 
@@ -1280,6 +1386,7 @@ public:
                 tracked.obstacle = trackedObstacle;
                 tracked.unmatchedFrames = 0;
                 matchedDynamicIds.insert(bestMatchId);
+                obstacleMissingFramesById[bestMatchId] = 0;
             }
             else
             {
@@ -1292,6 +1399,7 @@ public:
                 trackedList.push_back(trackedObstacle);
                 dynamicObstacles[trackedObstacle.obstacle_id] = {trackedObstacle, 0};
                 matchedDynamicIds.insert(trackedObstacle.obstacle_id);
+                obstacleMissingFramesById[trackedObstacle.obstacle_id] = 0;
             }
         }
 
@@ -1301,13 +1409,15 @@ public:
             {
                 it->second.unmatchedFrames += 1;
                 const int maxUnmatchedFrames = (it->second.obstacle.obstacle_class == 1) ? MAX_UNMATCHED_FRAMES_CLASS1 : MAX_UNMATCHED_FRAMES;
-                if (it->second.unmatchedFrames >= maxUnmatchedFrames)
+                if (!shouldKeepDynamicObstaclesByEdgeState() && it->second.unmatchedFrames >= maxUnmatchedFrames)
                 {
+                    obstacleMissingFramesById.erase(it->first);
                     it = dynamicObstacles.erase(it);
                     continue;
                 }
                 else
                 {
+                    obstacleMissingFramesById[it->first] = static_cast<std::uint32_t>(it->second.unmatchedFrames);
                     trackedList.push_back(it->second.obstacle);
                 }
             }
@@ -1320,6 +1430,7 @@ public:
     void reset()
     {
         dynamicObstacles.clear();
+        obstacleMissingFramesById.clear();
     }
 };
 
@@ -1634,12 +1745,17 @@ std::vector<ObstacleData> mergeAndCompareLists(
     if (mergedList.empty())
     {
         if (previousFusionList.empty())
+        {
             adcm::Log::Info() << prefix << "[MERGELIST] 장애물 리스트 비어있음";
+            return previousFusionList;
+        }
         else
             adcm::Log::Info() << prefix << "[MERGELIST] 현재 TimeStamp 장애물 X, 이전 TimeStamp 장애물리스트 그대로 사용 및 출력";
 
-        logDuplicateSummary(prefix + "[MERGELIST] use previous list", previousFusionList, 1.0);
-        return previousFusionList;
+        std::vector<ObstacleData> emptyCurrentList;
+        const auto trackedList = obstacleTracker.track(emptyCurrentList);
+        logDuplicateSummary(prefix + "[MERGELIST] tracked on empty input", trackedList, 1.0);
+        return trackedList;
     }
     else
     {
@@ -1649,7 +1765,9 @@ std::vector<ObstacleData> mergeAndCompareLists(
             {
                 auto newId = id_manager.allocID();
                 obstacle.obstacle_id = newId;
-                adcm::Log::Info() << prefix << "[MERGELIST] 새로운 장애물 " << obstacle.obstacle_class << " ID 할당 " << newId << " : [" << obstacle.fused_position_x << ", " << obstacle.fused_position_y << "]";
+                adcm::Log::Info() << prefix << "[MERGELIST] 새로운 장애물 " << obstacle.obstacle_class << " ID 할당 " << newId
+                                  << " : [" << formatCoord2(obstacle.fused_position_x)
+                                  << ", " << formatCoord2(obstacle.fused_position_y) << "]";
             }
             adcm::Log::Info() << prefix << "[MERGELIST] 새로운 장애물 리스트 생성: " << id_manager.getNum();
             logDuplicateSummary(prefix + "[MERGELIST] first frame list", mergedList, 1.0);
@@ -1992,10 +2110,10 @@ void UpdateMapData(adcm::map_data_Objects &mapData, const std::vector<ObstacleDa
 // road_z -> road_list
 std::vector<adcm::roadListStruct> ConvertRoadZToRoadList(const VehicleData &vehicle)
 {
-    constexpr double ROADZ_LOG_MIN_X = 340.0;
-    constexpr double ROADZ_LOG_MAX_X = 380.0;
-    constexpr double ROADZ_LOG_MIN_Y = 500.0;
-    constexpr double ROADZ_LOG_MAX_Y = 540.0;
+    constexpr double ROADZ_LOG_MIN_X = 370.0;
+    constexpr double ROADZ_LOG_MAX_X = 410.0;
+    constexpr double ROADZ_LOG_MIN_Y = 480.0;
+    constexpr double ROADZ_LOG_MAX_Y = 520.0;
 
     std::vector<adcm::roadListStruct> result(24); // 0~22, 255
     for (int i = 0; i < 23; ++i)
@@ -2123,7 +2241,7 @@ static bool isPointInsidePolygon(const Point2D &point, const std::vector<Point2D
 
 static void appendCfgB255ToRoad255(std::vector<adcm::roadListStruct> &road_list)
 {
-    if (!cfgB255Enabled)
+    if (cfgForbiddenZones.empty())
         return;
 
     if (!b255SendPending)
@@ -2132,19 +2250,16 @@ static void appendCfgB255ToRoad255(std::vector<adcm::roadListStruct> &road_list)
     if (road_list.size() < 24)
         return;
 
+    std::vector<CachedForbiddenZonePolygon> polygons;
     {
         std::lock_guard<std::mutex> lock(mtx_boundary_polygon_cache);
-        if (!cachedCfgB255PolygonReady)
-        {
-            adcm::Log::Info() << "[BOUNDARY255] cached cfg polygon is not ready";
-            return;
-        }
+        polygons = cachedForbiddenZonePolygons;
     }
 
-    std::vector<Point2D> polygon;
+    if (polygons.empty())
     {
-        std::lock_guard<std::mutex> lock(mtx_boundary_polygon_cache);
-        polygon = cachedCfgB255Polygon;
+        adcm::Log::Info() << "[BOUNDARY255] cached forbidden-zone polygons are not ready";
+        return;
     }
 
     auto packCell = [](int x, int y) -> std::uint64_t
@@ -2168,7 +2283,17 @@ static void appendCfgB255ToRoad255(std::vector<adcm::roadListStruct> &road_list)
         for (int y = 0; y < map_y; ++y)
         {
             const Point2D point = {static_cast<double>(x), static_cast<double>(y)};
-            if (!isPointInsidePolygon(point, polygon))
+            bool insideForbiddenZone = false;
+            for (const auto &polygon : polygons)
+            {
+                if (isPointInsidePolygon(point, polygon.polygon))
+                {
+                    insideForbiddenZone = true;
+                    break;
+                }
+            }
+
+            if (!insideForbiddenZone)
                 continue;
 
             const auto key = packCell(x, y);
@@ -2183,7 +2308,8 @@ static void appendCfgB255ToRoad255(std::vector<adcm::roadListStruct> &road_list)
         }
     }
 
-    adcm::Log::Info() << "[BOUNDARY255] appended inside configured boundary cells: " << appendedCount;
+    adcm::Log::Info() << "[BOUNDARY255] appended inside configured boundary cells: " << appendedCount
+                      << ", zones=" << polygons.size();
 }
 
 static void resetCfgB255AfterEmptySend()
@@ -2508,20 +2634,21 @@ void ThreadReceiveWorkInfo()
 
             rebuildBoundaryPolygonCaches();
 
-            if (cfgB255Enabled && cfgB255Pts.size() == 4)
             {
                 std::lock_guard<std::mutex> lock(mtx_boundary_polygon_cache);
-                for (size_t i = 0; i < cachedCfgB255Polygon.size(); ++i)
+                for (const auto &zone : cachedForbiddenZonePolygons)
                 {
-                    const double map_x_local = cachedCfgB255Polygon[i].x;
-                    const double map_y_local = cachedCfgB255Polygon[i].y;
-                    adcm::Log::Info() << "[BOUNDARY255] cfg point[" << i << "] gps=(" << cfgB255Pts[i].lon << ", "
-                                      << cfgB255Pts[i].lat << ") map=(" << map_x_local << ", " << map_y_local << ")";
+                    for (size_t i = 0; i < zone.polygon.size(); ++i)
+                    {
+                        const double map_x_local = zone.polygon[i].x;
+                        const double map_y_local = zone.polygon[i].y;
+                        adcm::Log::Info() << "[BOUNDARY255] zone=" << zone.name
+                                          << " point[" << i << "] map=(" << map_x_local << ", " << map_y_local << ")";
+                    }
                 }
             }
 
-            b255SendPending =
-                (cfgB255Enabled && cfgB255Pts.size() == 4);
+            b255SendPending = !cfgForbiddenZones.empty();
             b255AddedCells.clear();
 
             processWorkingAreaBoundary(work_boundary);
@@ -2552,6 +2679,20 @@ void ThreadReceiveEdgeInfo()
         while (!edgeInformation_subscriber.isEventQueueEmpty())
         {
             auto data = edgeInformation_subscriber.getEvent();
+            const std::uint8_t state = static_cast<std::uint8_t>(data->state);
+            currentEdgeState.store(state, std::memory_order_relaxed);
+
+            constexpr std::uint8_t EDGE_STATE_MOVE = 3;
+            constexpr std::uint8_t EDGE_STATE_WORK = 4;
+            if (state == EDGE_STATE_MOVE)
+            {
+                keepDynamicObstaclesUntilWork.store(true, std::memory_order_relaxed);
+            }
+            else if (state == EDGE_STATE_WORK)
+            {
+                keepDynamicObstaclesUntilWork.store(false, std::memory_order_relaxed);
+            }
+
             adcm::Log::Info() << "[EDGEINFO] EDGE System State: " << data->state;
         }
     }
@@ -2628,14 +2769,12 @@ void ThreadKatech()
 
         std::vector<Point2D> workBoundaryPolygon;
         bool workBoundaryPolygonReady = false;
-        std::vector<Point2D> cfgB255Polygon;
-        bool cfgB255PolygonReady = false;
+        std::vector<CachedForbiddenZonePolygon> forbiddenZonePolygons;
         {
             std::lock_guard<std::mutex> lock(mtx_boundary_polygon_cache);
             workBoundaryPolygon = cachedWorkBoundaryPolygon;
             workBoundaryPolygonReady = cachedWorkBoundaryPolygonReady;
-            cfgB255Polygon = cachedCfgB255Polygon;
-            cfgB255PolygonReady = cachedCfgB255PolygonReady;
+            forbiddenZonePolygons = cachedForbiddenZonePolygons;
         }
 
         // ==============1.5. work_boundary 외부 장애물 필터링=================
@@ -2666,21 +2805,26 @@ void ThreadKatech()
         filterObstaclesByWorkBoundary(obstacle_list_sub4);
 
         auto filterObstaclesByCfgB255 = [&](std::vector<ObstacleData> &obstacles) {
-            if (!cfgB255PolygonReady)
+            if (forbiddenZonePolygons.empty())
                 return;
 
             size_t before_count = obstacles.size();
             obstacles.erase(std::remove_if(obstacles.begin(), obstacles.end(),
                                            [&](const ObstacleData &obs) {
                                                const Point2D point = {obs.fused_position_x, obs.fused_position_y};
-                                               return isPointInsidePolygon(point, cfgB255Polygon);
+                                               for (const auto &zone : forbiddenZonePolygons)
+                                               {
+                                                   if (isPointInsidePolygon(point, zone.polygon))
+                                                       return true;
+                                               }
+                                               return false;
                                            }),
                             obstacles.end());
             size_t after_count = obstacles.size();
             if (before_count != after_count)
             {
                 adcm::Log::Info() << prefix << "[BOUNDARY255_FILTER] removed " << (before_count - after_count)
-                                  << " obstacles inside forbidden zone";
+                                  << " obstacles inside forbidden zone(s)";
             }
         };
 
@@ -2694,6 +2838,7 @@ void ThreadKatech()
         const auto stage2Start = std::chrono::high_resolution_clock::now();
         obstacle_list = mergeAndCompareLists(previous_obstacle_list, obstacle_list_main, obstacle_list_sub1,
                                              obstacle_list_sub2, obstacle_list_sub3, obstacle_list_sub4, main_vehicle, sub1_vehicle, sub2_vehicle, sub3_vehicle, sub4_vehicle);
+        filterClass1NearEgoByMainVehicleSize(obstacle_list);
         filterClass1ByRegion(obstacle_list);
         dedupeCloseClass1StaticObstacles(obstacle_list);
         stage2_merge_ms = std::chrono::duration<double, std::milli>(
@@ -2826,9 +2971,13 @@ void ThreadKatech()
                 {
                     adcm::Log::Info() << prefix << "ID " << obs.obstacle_id
                                       << "(" << static_cast<int>(obs.obstacle_class) << ")"
-                                      << " : [" << obs.fused_position_x << ", " << obs.fused_position_y << "]"
+                                      << " : [" << formatCoord2(obs.fused_position_x)
+                                      << ", " << formatCoord2(obs.fused_position_y) << "]"
+                                      << " missing_frames=" << getObstacleMissingFrames(obs.obstacle_id)
                                       << " stop_count=" << static_cast<int>(obs.stop_count)
-                                      << " cuboid=(" << obs.fused_cuboid_x << ", " << obs.fused_cuboid_y << ", " << obs.fused_cuboid_z << ")"
+                                      << " cuboid=(" << formatCoord2(obs.fused_cuboid_x)
+                                      << ", " << formatCoord2(obs.fused_cuboid_y)
+                                      << ", " << formatCoord2(obs.fused_cuboid_z) << ")"
                                       << " map_2d_cells=" << obs.map_2d_location.size();
                 }
             }
@@ -3145,19 +3294,31 @@ int main(int argc, char *argv[])
         config.print();
     }
 
-    cfgB255Enabled = config.boundary255Enabled;
-    cfgB255Pts.clear();
-    if (cfgB255Enabled)
+    cfgForbiddenZones.clear();
+    for (const auto &zoneConfig : config.boundary255Zones)
     {
-        cfgB255Pts.push_back({config.b255P1Lon, config.b255P1Lat});
-        cfgB255Pts.push_back({config.b255P2Lon, config.b255P2Lat});
-        cfgB255Pts.push_back({config.b255P3Lon, config.b255P3Lat});
-        cfgB255Pts.push_back({config.b255P4Lon, config.b255P4Lat});
-        adcm::Log::Info() << "[BOUNDARY255] enabled from config. point count=" << cfgB255Pts.size();
-    }
-    else
-    {
-        adcm::Log::Info() << "[BOUNDARY255] disabled from config.";
+        if (!zoneConfig.enabled)
+        {
+            adcm::Log::Info() << "[BOUNDARY255] zone disabled: " << zoneConfig.sectionName;
+            continue;
+        }
+
+        if (zoneConfig.points.size() != 4)
+        {
+            adcm::Log::Info() << "[BOUNDARY255] zone skipped due to invalid point count: " << zoneConfig.sectionName;
+            continue;
+        }
+
+        ConfiguredForbiddenZone zone;
+        zone.name = zoneConfig.sectionName;
+        zone.points.reserve(zoneConfig.points.size());
+        for (const auto &point : zoneConfig.points)
+        {
+            zone.points.push_back({point.lon, point.lat});
+        }
+        cfgForbiddenZones.push_back(std::move(zone));
+        adcm::Log::Info() << "[BOUNDARY255] zone enabled from config: " << zoneConfig.sectionName
+                          << ", point count=" << zoneConfig.points.size();
     }
 
     if (!loadListObstacles(config.listFilePath))
