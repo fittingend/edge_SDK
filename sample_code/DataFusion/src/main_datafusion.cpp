@@ -936,8 +936,8 @@ void filterClass1ByRegion(std::vector<ObstacleData> &mergedList)
     }
 }
 
-// 최종 융합 리스트에서 class 1 중 특장차(ego) 근처 오인식을 제거한다.
-// 근접 반경은 work_information의 main_vehicle_size(미터) 기반 반대각선 절반을 사용한다.
+// 최종 융합 리스트에서 class 1 중 특장차(ego) 위치에 붙는 오인식만 제거한다.
+// 맵 좌표계는 10cm 단위이므로 10.0은 1m 반경이다.
 void filterClass1NearEgoByMainVehicleSize(std::vector<ObstacleData> &mergedList)
 {
     if (mergedList.empty())
@@ -945,22 +945,15 @@ void filterClass1NearEgoByMainVehicleSize(std::vector<ObstacleData> &mergedList)
         return;
     }
 
-    if (!workego || main_vehicle_size.length == 0 || main_vehicle_size.width == 0)
+    if (!workego)
     {
         return;
     }
 
-    const double length_dm = static_cast<double>(main_vehicle_size.length) * M_TO_10CM_PRECISION;
-    const double width_dm = static_cast<double>(main_vehicle_size.width) * M_TO_10CM_PRECISION;
-    const double near_radius_dm = 0.5 * std::hypot(length_dm, width_dm);
-    if (near_radius_dm <= 0.0)
-    {
-        return;
-    }
-
+    constexpr double CLASS1_EGO_NEAR_REMOVE_RADIUS_DM = 10.0;
     const double ego_x = main_vehicle.position_x;
     const double ego_y = main_vehicle.position_y;
-    const double near_radius2 = near_radius_dm * near_radius_dm;
+    const double near_radius2 = CLASS1_EGO_NEAR_REMOVE_RADIUS_DM * CLASS1_EGO_NEAR_REMOVE_RADIUS_DM;
 
     const auto before = mergedList.size();
     mergedList.erase(std::remove_if(mergedList.begin(), mergedList.end(),
@@ -982,7 +975,7 @@ void filterClass1NearEgoByMainVehicleSize(std::vector<ObstacleData> &mergedList)
     {
         adcm::Log::Info() << framePrefix()
                           << "[KATECH] class-1 ego-near filter removed=" << removed
-                          << " radius_m=" << formatCoord2(near_radius_dm / M_TO_10CM_PRECISION)
+                          << " radius_m=" << formatCoord2(CLASS1_EGO_NEAR_REMOVE_RADIUS_DM / M_TO_10CM_PRECISION)
                           << " ego=(" << formatCoord2(ego_x) << ", " << formatCoord2(ego_y) << ")";
     }
 }
