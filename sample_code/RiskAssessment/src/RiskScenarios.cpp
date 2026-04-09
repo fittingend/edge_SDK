@@ -458,81 +458,16 @@ void evaluateScenario4(const obstacleListVector& obstacle_list,
     SCENARIO_LOG_INFO() << "============= KATECH: Scenario 4 DONE =============";
 }
 /**
- * @brief 시나리오 5: 보행자 밀집 및 신규 객체 출현 기반 위험 판단
+ * @brief 시나리오 5: 보행자 순간 밀집 기반 위험 판단
  *
- * ego 차량 주변 (40m~50m) 내에서 보행자가 일정 수 이상 탐지되고,
- * 주행 경로 반경 10m 이내며
- * 이후 10초 이내에 새로운 보행자가 등장하며,
- * 등장한 보행자 간 거리가 20m 이하인 경우 위험 판단 수행.
- * 이때 ego 차량과 가장 가까운 보행자를 대상으로 confidence 값을 계산하여 평가 목록에 추가.
- * 현재 구조로 obstacle_list 에서 장애물이 계속 추가가 되지 있던 장애물이 없어지지는 않음 -> 이 가정하에 알고리즘 작성
- * confidence 값은 min_distance = 0이면 1.0 (가장 위험)하며 min_distance = 200이면 0.0 (경계선), min_distance > 200이면 0으로 클램핑
+ * ego 차량 주변 거리 조건과 전역 경로 거리 조건을 만족하는 보행자 후보를 현재 프레임에서만 추출한다.
+ * 후보 보행자들 사이 거리 중 가장 가까운 페어가 임계치 이하이면 시나리오5를 트리거한다.
  * @param obstacle_list      현재 인지된 장애물 리스트
  * @param ego_vehicle        ego 차량 정보 (위치 등)
  * @param path_x             전역 경로 x 좌표 리스트
  * @param path_y             전역 경로 y 좌표 리스트
  * @param riskAssessment     시나리오 판단 결과가 저장될 객체
  */
-namespace {
-    using namespace adcm;
-
-    // <obstacle_id, first_seen_ts_ms>
-    static std::vector<std::pair<std::uint64_t, double>> s5_first_seen_vec;
-
-    // 활성 앵커 윈도우: <anchor_id, window_start_ms>
-    static std::vector<std::pair<std::uint64_t, double>> s5_anchor_windows;
-
-    inline void s5_reset_state() {
-        s5_first_seen_vec.clear();
-        s5_anchor_windows.clear();
-        SCENARIO_LOG_INFO() << "[시나리오5] 상태 리셋 (first_seen, 앵커 윈도우 초기화)";
-    }
-
-    inline double s5_getFirstSeen(std::uint64_t id) {
-        for (size_t i = 0; i < s5_first_seen_vec.size(); ++i)
-            if (s5_first_seen_vec[i].first == id) return s5_first_seen_vec[i].second;
-        return -1.0;
-    }
-    inline void s5_recordFirstSeen(std::uint64_t id, double ts) {
-        for (size_t i = 0; i < s5_first_seen_vec.size(); ++i)
-            if (s5_first_seen_vec[i].first == id) {
-                if (ts < s5_first_seen_vec[i].second) s5_first_seen_vec[i].second = ts;
-                return;
-            }
-        s5_first_seen_vec.push_back(std::make_pair(id, ts));
-    }
-    inline double s5_getAnchorStart(std::uint64_t id) {
-        for (size_t i = 0; i < s5_anchor_windows.size(); ++i)
-            if (s5_anchor_windows[i].first == id) return s5_anchor_windows[i].second;
-        return -1.0;
-    }
-    inline void s5_addAnchor(std::uint64_t id, double start_ts) {
-        if (s5_getAnchorStart(id) < 0.0) {
-            s5_anchor_windows.push_back(std::make_pair(id, start_ts));
-            SCENARIO_LOG_INFO() << "  · [앵커 생성] ID=" << id << " | start=" << start_ts << " ms";
-        }
-    }
-    inline void s5_pruneAnchors(double now, double window_ms, double grace_ms) {
-        size_t kept = 0;
-        for (size_t i = 0; i < s5_anchor_windows.size(); ++i) {
-            double start = s5_anchor_windows[i].second;
-            if (now - start <= window_ms + grace_ms) {
-                if (kept != i) s5_anchor_windows[kept] = s5_anchor_windows[i];
-                ++kept;
-            } else {
-                SCENARIO_LOG_INFO() << "  · [앵커 만료] ID=" << s5_anchor_windows[i].first
-                            << " | start=" << start << " ms | now=" << now << " ms";
-            }
-        }
-        s5_anchor_windows.resize(kept);
-    }
-    inline const adcm::obstacleListStruct*
-    s5_findInCand(const obstacleListVector& cand, std::uint64_t id) {
-        for (size_t i = 0; i < cand.size(); ++i)
-            if (cand[i].obstacle_id == id) return &cand[i];
-        return nullptr;
-    }
-}
 void evaluateScenario5(const obstacleListVector& obstacle_list,
                        const adcm::vehicleListStruct& ego_vehicle,
                        const std::vector<double>& path_x,
@@ -549,17 +484,11 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
         return;
     }
 
-    // 상수 (dm/ms)
-    constexpr double EGO_MIN_DM          = 50.0;    // 5 m
-    constexpr double EGO_MAX_DM          = 500.0;    // 20 m
-    constexpr double DIST_TO_PATH_MAX_DM = 200.0;    // 20 m
-    constexpr double MAX_PAIR_DIST_DM    = 100.0;    // 10 m
-    constexpr double WINDOW_MS           = 10000.0;  // 10 s
-    constexpr double FRAME_GRACE_MS      = 120.0;    // 동시 프레임 관용치
-    constexpr double EPS                 = 1e-6;
-
-   
-    SCENARIO_LOG_INFO() << "==================== [시나리오5 시작] ====================";
+    // 상수 (dm)
+    constexpr double EGO_MIN_DM          = 50.0;   // 5 m
+    constexpr double EGO_MAX_DM          = 500.0;  // 50 m
+    constexpr double DIST_TO_PATH_MAX_DM = 200.0;  // 20 m
+    constexpr double MAX_PAIR_DIST_DM    = 100.0;  // 10 m
 
     if (obstacle_list.empty()) {
         SCENARIO_LOG_INFO() << "[시나리오5] 입력 장애물 없음 → 종료";
@@ -608,95 +537,46 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
                     << " | ts=" << obs.timestamp << " ms"
                     << " | Ego거리=" << (d_ego_dm/10.0) << " m"
                     << " | 경로거리=" << (path_dist_dm/10.0) << " m";
-
-        // 처음 조건을 만족한 보행자면 first_seen 기록하고, 자신의 앵커 윈도우 시작
-        double prev_fs = s5_getFirstSeen(obs.obstacle_id);
-        s5_recordFirstSeen(obs.obstacle_id, obs.timestamp);
-        if (prev_fs < 0.0) {
-            s5_addAnchor(obs.obstacle_id, obs.timestamp); // 새 앵커 생성
-        }
     }
 
-    if (cand.empty()) {
+    if (cand.size() < 2) {
         SCENARIO_LOG_INFO() << "[시나리오5] 유효 후보 없음 → 종료";
         SCENARIO_LOG_INFO() << "==================== [시나리오5 종료] ====================";
         return;
     }
 
-    // (2) 만료된 앵커 제거
-    s5_pruneAnchors(frame_ts_max, WINDOW_MS, FRAME_GRACE_MS);
-    SCENARIO_LOG_INFO() << "[시나리오5] 활성 앵커 수=" << s5_anchor_windows.size();
+    SCENARIO_LOG_INFO() << "[시나리오5] 현재 프레임 후보 수=" << cand.size();
 
-    if (s5_anchor_windows.empty()) {
-        SCENARIO_LOG_INFO() << "[시나리오5] 활성 앵커 없음 → 종료";
-        SCENARIO_LOG_INFO() << "==================== [시나리오5 종료] ====================";
-        return;
-    }
-
-    // (3) 페어 탐지: 앵커 × 현재 후보
+    // (2) 현재 프레임 후보 간 페어 탐지
     bool triggered = false;
     double best_pair_dm = std::numeric_limits<double>::max();
     adcm::obstacleListStruct best_a{}, best_b{};
 
-    for (size_t ai = 0; ai < s5_anchor_windows.size(); ++ai) {
-        const std::uint64_t anchor_id = s5_anchor_windows[ai].first;
-        const double        t0        = s5_anchor_windows[ai].second;
+    for (size_t ai = 0; ai < cand.size(); ++ai) {
+        for (size_t bi = ai + 1; bi < cand.size(); ++bi) {
+            const auto& a = cand[ai];
+            const auto& b = cand[bi];
 
-        // 현재 프레임에 앵커 객체가 실제로 존재해야 거리 계산 가능
-        const auto* anchor_ptr = s5_findInCand(cand, anchor_id);
-        if (!anchor_ptr) {
-            SCENARIO_LOG_INFO() << "  └─[스킵] 앵커 ID=" << anchor_id << " 가 현재 후보에 없음";
-            continue;
-        }
+            const double pair_dist_dm = calculateDistance(a, b);
+            SCENARIO_LOG_INFO() << "    · [검사] 페어(" << a.obstacle_id << "," << b.obstacle_id
+                                << ") | 거리=" << (pair_dist_dm / 10.0) << " m";
 
-        for (size_t ci = 0; ci < cand.size(); ++ci) {
-            const auto& obj = cand[ci];
-            if (obj.obstacle_id == anchor_id) continue;
-
-            const double fs = s5_getFirstSeen(obj.obstacle_id);
-            if (fs < 0.0) continue; // 방어적
-
-            const bool both_start_frame =
-                (fs >= t0 - EPS) && (fs <= t0 + FRAME_GRACE_MS + EPS);
-
-            const bool newcomer_in_window =
-                (fs >  t0 + FRAME_GRACE_MS + EPS) && (fs <= t0 + WINDOW_MS + EPS);
-
-            if (!(both_start_frame || newcomer_in_window)) {
-                 SCENARIO_LOG_INFO() << "[무시] 앵커(ID=" << anchor_id
-                << ", start=" << t0 << "ms)"
-                << " vs 후보(ID=" << obj.obstacle_id
-                << ", first_seen=" << fs << "ms)"
-                << " -> 시간조건 불일치"
-                << " (동시등장=" << (both_start_frame ? "예" : "아니오")
-                << ", 10초내신규=" << (newcomer_in_window ? "예" : "아니오") << ")";
-                continue;
-            }
-
-            double dij_dm = calculateDistance(*anchor_ptr, obj);
-            SCENARIO_LOG_INFO() << "    · [검사] 페어(" << anchor_id << "," << obj.obstacle_id
-                        << ") | 유형=" << (both_start_frame? "동시등장":"앵커-뉴커머")
-                        << " | 거리=" << (dij_dm/10.0) << " m";
-
-            if (dij_dm <= MAX_PAIR_DIST_DM) {
-                //SCENARIO_LOG_INFO() << "      -> [유효쌍] 거리 ≤ 20 m";
-                if (dij_dm < best_pair_dm) {
-                    best_pair_dm = dij_dm;
-                    best_a = *anchor_ptr;
-                    best_b = obj;
-                    triggered = true;
-                }
+            if (pair_dist_dm <= MAX_PAIR_DIST_DM && pair_dist_dm < best_pair_dm) {
+                best_pair_dm = pair_dist_dm;
+                best_a = a;
+                best_b = b;
+                triggered = true;
             }
         }
     }
 
     if (!triggered) {
-        SCENARIO_LOG_INFO() << "[시나리오5] 현재 프레임: 유효(≤20m) 페어 없음";
+        SCENARIO_LOG_INFO() << "[시나리오5] 현재 프레임: 유효(≤10m) 페어 없음";
         SCENARIO_LOG_INFO() << "==================== [시나리오5 종료] ====================";
         return;
     }
 
-    // (4) 트리거 처리
+    // (3) 트리거 처리
     const double pair_m   = best_pair_dm / 10.0;
     const double base_conf = clampValue((MAX_PAIR_DIST_DM - best_pair_dm) / MAX_PAIR_DIST_DM, 0.0, 1.0);
     // const double dir_factor_a = calculateFrontRearFactor(best_a, ego_vehicle); // 전방/후방 가중치
@@ -715,11 +595,6 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
 
     riskAssessment.riskAssessmentList.push_back(s5a);
     riskAssessment.riskAssessmentList.push_back(s5b);
-
-    // 정책 선택:
-    //  (A) 한 번 트리거하면 전체 리셋 → 깔끔 (아래 사용)
-    //  (B) 트리거 후에도 남은 앵커 유지 → 다중 트리거 허용 (원하시면 이 라인 제거)
-    s5_reset_state();
 
     SCENARIO_LOG_INFO() << "==================== [시나리오5 종료] ====================";
 }
