@@ -2,9 +2,23 @@
 #include <boost/property_tree/ini_parser.hpp>
 #include <iostream>
 #include <string>
+#include <vector>
 #include <ara/log/logger.h>
 #include "logger.h"
 #include "ara/core/initialization.h"
+
+struct BoundaryPointConfig
+{
+    double lon = 0.0;
+    double lat = 0.0;
+};
+
+struct BoundaryPolygonConfig
+{
+    std::string sectionName;
+    bool enabled = false;
+    std::vector<BoundaryPointConfig> points;
+};
 
 class Config
 {
@@ -16,21 +30,46 @@ public:
     bool useNats = false;
     bool saveJson = false;
     std::string listFilePath;
-    bool boundary255Enabled = false;
-    double b255P1Lon = 0.0;
-    double b255P1Lat = 0.0;
-    double b255P2Lon = 0.0;
-    double b255P2Lat = 0.0;
-    double b255P3Lon = 0.0;
-    double b255P3Lat = 0.0;
-    double b255P4Lon = 0.0;
-    double b255P4Lat = 0.0;
+    std::vector<BoundaryPolygonConfig> boundary255Zones;
 
 private:
     template <typename T>
     T readOrDefault(const boost::property_tree::ptree &pt, const std::string &key, const T &defaultValue)
     {
         return pt.get<T>(key, defaultValue);
+    }
+
+    bool startsWith(const std::string &value, const std::string &prefix)
+    {
+        return value.rfind(prefix, 0) == 0;
+    }
+
+    void loadBoundary255Zones(const boost::property_tree::ptree &pt)
+    {
+        boundary255Zones.clear();
+
+        for (const auto &sectionEntry : pt)
+        {
+            const std::string &sectionName = sectionEntry.first;
+            if (!startsWith(sectionName, "Boundary255"))
+                continue;
+
+            BoundaryPolygonConfig zone;
+            zone.sectionName = sectionName;
+            zone.enabled = readOrDefault<bool>(sectionEntry.second, "Enable", false);
+            zone.points.reserve(4);
+
+            for (int i = 1; i <= 4; ++i)
+            {
+                const std::string index = std::to_string(i);
+                BoundaryPointConfig point;
+                point.lon = readOrDefault<double>(sectionEntry.second, "P" + index + "Lon", 0.0);
+                point.lat = readOrDefault<double>(sectionEntry.second, "P" + index + "Lat", 0.0);
+                zone.points.push_back(point);
+            }
+
+            boundary255Zones.push_back(std::move(zone));
+        }
     }
 
     void loadFromTree(const boost::property_tree::ptree &pt)
@@ -42,15 +81,7 @@ private:
         saveJson = readOrDefault<bool>(pt, "Network.SaveJson", false);
         listFilePath = readOrDefault<std::string>(pt, "Network.ListFilePath", "/opt/DataFusion/etc/lists.ini");
 
-        boundary255Enabled = readOrDefault<bool>(pt, "Boundary255.Enable", false);
-        b255P1Lon = readOrDefault<double>(pt, "Boundary255.P1Lon", 0.0);
-        b255P1Lat = readOrDefault<double>(pt, "Boundary255.P1Lat", 0.0);
-        b255P2Lon = readOrDefault<double>(pt, "Boundary255.P2Lon", 0.0);
-        b255P2Lat = readOrDefault<double>(pt, "Boundary255.P2Lat", 0.0);
-        b255P3Lon = readOrDefault<double>(pt, "Boundary255.P3Lon", 0.0);
-        b255P3Lat = readOrDefault<double>(pt, "Boundary255.P3Lat", 0.0);
-        b255P4Lon = readOrDefault<double>(pt, "Boundary255.P4Lon", 0.0);
-        b255P4Lat = readOrDefault<double>(pt, "Boundary255.P4Lat", 0.0);
+        loadBoundary255Zones(pt);
     }
 
 public:
@@ -83,10 +114,15 @@ public:
         adcm::Log::Info() << "Use NATS: " << (useNats ? "true" : "false");
         adcm::Log::Info() << "Save JSON: " << (saveJson ? "true" : "false");
         adcm::Log::Info() << "List File Path: " << listFilePath;
-        adcm::Log::Info() << "Boundary255 Enable: " << (boundary255Enabled ? "true" : "false");
-        adcm::Log::Info() << "Boundary255 P1(lon,lat): (" << b255P1Lon << ", " << b255P1Lat << ")";
-        adcm::Log::Info() << "Boundary255 P2(lon,lat): (" << b255P2Lon << ", " << b255P2Lat << ")";
-        adcm::Log::Info() << "Boundary255 P3(lon,lat): (" << b255P3Lon << ", " << b255P3Lat << ")";
-        adcm::Log::Info() << "Boundary255 P4(lon,lat): (" << b255P4Lon << ", " << b255P4Lat << ")";
+        adcm::Log::Info() << "Boundary255 Zone Count: " << boundary255Zones.size();
+        for (const auto &zone : boundary255Zones)
+        {
+            adcm::Log::Info() << zone.sectionName << " Enable: " << (zone.enabled ? "true" : "false");
+            for (size_t i = 0; i < zone.points.size(); ++i)
+            {
+                adcm::Log::Info() << zone.sectionName << " P" << (i + 1) << "(lon,lat): ("
+                                  << zone.points[i].lon << ", " << zone.points[i].lat << ")";
+            }
+        }
     }
 };
