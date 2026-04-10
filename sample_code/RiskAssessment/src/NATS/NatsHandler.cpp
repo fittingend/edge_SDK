@@ -198,9 +198,9 @@ static Poco::JSON::Object::Ptr buildRiskAssessmentJson(const adcm::risk_assessme
             endArr->add(xy);
         }
         obj->set("hazard_path_end", endArr);
-
+        obj->set("hazard_path", item.hazard_path);
+        
         obj->set("hazard_class", static_cast<int>(item.hazard_class));
-        obj->set("isHazard", item.hazard_path);
         obj->set("confidence", item.confidence);
         obj->set("timestamp_map", timestamp_map);
         obj->set("timestamp_risk", timestamp_risk);

@@ -270,10 +270,14 @@ void evaluateScenario3(const obstacleListVector& obstacle_list,
     }
 
     // 단위: dm (0.1 m)
-    constexpr double NEAR_THRESH_DM    = 300.0; // 30 m 이내 → 누적
-    constexpr double RELEASE_THRESH_DM = 350.0; // 35 m 이상 → 완전 해제 (히스테리시스)
-    constexpr int    TRIGGER_FRAMES    = 10;     // 연속 유지 프레임 수
-    constexpr int    MISS_GRACE        = 2;      // 허용 이탈 프레임 수
+    constexpr double TRIGGER_DIST_DM   = 250.0; // 25 m 이내 진입 시 즉시 트리거
+    constexpr double RELEASE_THRESH_DM = 300.0; // 30 m 이상이면 해제(히스테리시스)
+    constexpr int    FRAMES_TO_0P7     = 10;    // 유지 10프레임에서 confidence=0.7
+    constexpr int    FRAMES_TO_MAX     = 20;    // 유지 20프레임에서 confidence=1.0
+    constexpr int    MISS_GRACE        = 2;     // 허용 이탈 프레임 수
+    constexpr double CONF_START        = 0.40;
+    constexpr double CONF_AT_10        = 0.70;
+    constexpr double CONF_MAX          = 1.00;
 
     // 장애물별 누적 상태 (프레임 간 유지)
     struct S3State { int near_count = 0; int miss_count = 0; };
@@ -291,16 +295,16 @@ void evaluateScenario3(const obstacleListVector& obstacle_list,
 
         auto& st = s3_state[static_cast<uint16_t>(obs.obstacle_id)];
 
-        if (d_ego_dm <= NEAR_THRESH_DM) {
-            // 30 m 이내 → 정상 누적
+        if (d_ego_dm <= TRIGGER_DIST_DM) {
+            // 25 m 이내 유지 프레임 누적
             st.near_count++;
             st.miss_count = 0;
             SCENARIO_LOG_INFO() << "[3] ID=" << obs.obstacle_id
                                 << " | near_count=" << st.near_count
-                                << "/" << TRIGGER_FRAMES
+                                << " | trigger_dist=" << (TRIGGER_DIST_DM / 10.0) << " m"
                                 << " | dist=" << (d_ego_dm / 10.0) << " m";
         } else if (st.near_count > 0 && d_ego_dm < RELEASE_THRESH_DM) {
-            // 히스테리시스 구간 (30~35 m): miss 프레임 허용
+            // 히스테리시스 구간 (25~30 m): miss 프레임 허용
             st.miss_count++;
             if (st.miss_count <= MISS_GRACE) {
                 SCENARIO_LOG_INFO() << "[3] ID=" << obs.obstacle_id
@@ -315,7 +319,7 @@ void evaluateScenario3(const obstacleListVector& obstacle_list,
                                     << " | grace 초과 → 카운터 리셋";
             }
         } else {
-            // 35 m 이상 → 완전 해제
+            // 30 m 이상 → 완전 해제
             if (st.near_count > 0 || st.miss_count > 0) {
                 SCENARIO_LOG_INFO() << "[3] ID=" << obs.obstacle_id
                                     << " | 해제 거리 초과(" << (d_ego_dm / 10.0) << " m) → 리셋";
@@ -324,10 +328,22 @@ void evaluateScenario3(const obstacleListVector& obstacle_list,
             st.miss_count = 0;
         }
 
-        // 트리거 판정
-        if (st.near_count >= TRIGGER_FRAMES) {
-            const double confidence = clampValue(
-                (NEAR_THRESH_DM - d_ego_dm) / NEAR_THRESH_DM, 0.0, 1.0);
+        // 트리거 판정: 25m 진입 즉시 트리거, 유지 프레임 기반으로 confidence 상승
+        if (st.near_count >= 1) {
+            double confidence = CONF_START;
+            if (st.near_count <= FRAMES_TO_0P7) {
+                const double t = clampValue(
+                    static_cast<double>(st.near_count - 1) / static_cast<double>(std::max(1, FRAMES_TO_0P7 - 1)),
+                    0.0, 1.0);
+                confidence = CONF_START + (CONF_AT_10 - CONF_START) * t;
+            } else {
+                const double t = clampValue(
+                    static_cast<double>(st.near_count - FRAMES_TO_0P7) /
+                        static_cast<double>(std::max(1, FRAMES_TO_MAX - FRAMES_TO_0P7)),
+                    0.0, 1.0);
+                confidence = CONF_AT_10 + (CONF_MAX - CONF_AT_10) * t;
+            }
+            confidence = clampValue(confidence, 0.0, 1.0);
 
             adcm::riskAssessmentStruct r{};
             r.obstacle_id  = obs.obstacle_id;
@@ -335,7 +351,7 @@ void evaluateScenario3(const obstacleListVector& obstacle_list,
             r.confidence   = confidence;
 
             SCENARIO_LOG_INFO() << "[시나리오3 활성] ID=" << obs.obstacle_id
-                                << " | 연속 " << st.near_count << " 프레임"
+                                << " | 유지 " << st.near_count << " 프레임"
                                 << " | dist=" << (d_ego_dm / 10.0) << " m"
                                 << " | confidence=" << confidence;
 
@@ -695,36 +711,43 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
     }
 
     // (3) 트리거 처리
-    // - 결과는 'Ego와 더 가까운 차량 1대'만 추가
+    // - 페어 양쪽 차량을 모두 결과에 추가
     const double d_ego_a_dm = calculateDistance(best_a, ego_vehicle);
     const double d_ego_b_dm = calculateDistance(best_b, ego_vehicle);
-    const bool   a_is_closer = (d_ego_a_dm <= d_ego_b_dm);
-
-    const adcm::obstacleListStruct& chosen = a_is_closer ? best_a : best_b;
-    const double min_ego_dm = a_is_closer ? d_ego_a_dm : d_ego_b_dm;
-    const double min_ego_m  = min_ego_dm / 10.0;
     const double pair_m     = best_pair_dm / 10.0;
 
-    // confidence = 400dm / (min_ego_dm) * 0.7  (단위 일치)
-    const double base_confidence = (400.0 / std::max(min_ego_dm, 1.0)) * 0.7; // 0 보호
-    // const double dir_factor = calculateFrontRearFactor(chosen, ego_vehicle); // 전방/후방 가중치
-    double confidence = clampValue(base_confidence, 0.0, 1.0);
+    // confidence = 400dm / (ego_dist_dm) * 0.7  (각 차량별 계산)
+    const double base_conf_a = (400.0 / std::max(d_ego_a_dm, 1.0)) * 0.7; // 0 보호
+    const double base_conf_b = (400.0 / std::max(d_ego_b_dm, 1.0)) * 0.7; // 0 보호
+    // const double dir_factor_a = calculateFrontRearFactor(best_a, ego_vehicle); // 전방/후방 가중치
+    // const double dir_factor_b = calculateFrontRearFactor(best_b, ego_vehicle); // 전방/후방 가중치
+    const double conf_a = clampValue(base_conf_a, 0.0, 1.0);
+    const double conf_b = clampValue(base_conf_b, 0.0, 1.0);
 
-    adcm::riskAssessmentStruct s6{};
-    s6.obstacle_id  = chosen.obstacle_id;
-    s6.hazard_class = SCENARIO_6;
-    s6.confidence   = confidence;
+    adcm::riskAssessmentStruct s6a{};
+    s6a.obstacle_id  = best_a.obstacle_id;
+    s6a.hazard_class = SCENARIO_6;
+    s6a.confidence   = conf_a;
+
+    adcm::riskAssessmentStruct s6b{};
+    s6b.obstacle_id  = best_b.obstacle_id;
+    s6b.hazard_class = SCENARIO_6;
+    s6b.confidence   = conf_b;
 
     SCENARIO_LOG_INFO() << "[시나리오6 활성]"
                 << " | 페어 IDs=(" << best_a.obstacle_id << "," << best_b.obstacle_id << ")"
                 << " | 페어거리=" << pair_m << " m"
-                << " | Ego-가까운차 ID=" << chosen.obstacle_id
-                << " | Ego-가까운차 거리=" << min_ego_m << " m"
-                << " | base_conf=" << base_confidence
-                << " | confidence=" << confidence
-                << " (계산식: 400dm/" << min_ego_dm << " *0.7)";
+                << " | ID=" << best_a.obstacle_id
+                << " Ego거리=" << (d_ego_a_dm / 10.0) << " m"
+                << " confidence=" << conf_a
+                << " (계산식: 400dm/" << d_ego_a_dm << " *0.7)"
+                << " | ID=" << best_b.obstacle_id
+                << " Ego거리=" << (d_ego_b_dm / 10.0) << " m"
+                << " confidence=" << conf_b
+                << " (계산식: 400dm/" << d_ego_b_dm << " *0.7)";
 
-    riskAssessment.riskAssessmentList.push_back(s6);
+    riskAssessment.riskAssessmentList.push_back(s6a);
+    riskAssessment.riskAssessmentList.push_back(s6b);
     SCENARIO_LOG_INFO()<<"==================== [시나리오6 종료] ====================";
 }
 /**

@@ -1763,8 +1763,9 @@ std::vector<ObstacleData> mergeAndCompareLists(
                                   << ", " << formatCoord2(obstacle.fused_position_y) << "]";
             }
             adcm::Log::Info() << prefix << "[MERGELIST] 새로운 장애물 리스트 생성: " << id_manager.getNum();
-            logDuplicateSummary(prefix + "[MERGELIST] first frame list", mergedList, 1.0);
-            return mergedList;
+            const auto trackedFirstList = obstacleTracker.track(mergedList);
+            logDuplicateSummary(prefix + "[MERGELIST] first frame list", trackedFirstList, 1.0);
+            return trackedFirstList;
         }
 
         adcm::Log::Info() << prefix << "[MERGELIST] 이전 장애물 리스트 사이즈: " << previousFusionList.size();
