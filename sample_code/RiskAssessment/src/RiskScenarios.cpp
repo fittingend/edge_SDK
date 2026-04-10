@@ -772,13 +772,6 @@ void evaluateScenario7(const std::vector<double>& path_x,
         return;
     }
 
-    static bool s7_triggered_once = false;
-    if (s7_triggered_once) {
-        SCENARIO_LOG_INFO() << "[시나리오7] 이미 1회 전송됨 -> 재평가/재전송 생략";
-        SCENARIO_LOG_INFO() << "============= KATECH: Scenario 7 DONE =============";
-        return;
-    }
-
     auto isUnscanned = [&](uint8_t road_z)
     {
         return road_z == static_cast<uint8_t>(IndexToValue::UNSCANNED);
@@ -786,9 +779,6 @@ void evaluateScenario7(const std::vector<double>& path_x,
         // 0xFF : 작업영역 외/기본값
         // 0xFE : 스캔되지 않은 지역
     };
-
-    (void)path_x;
-    (void)path_y;
 
     const double kMinUnscannedRatio =
         clampValue(config.scenario7MinUnscannedRatio, 0.0, 1.0);
@@ -852,17 +842,54 @@ void evaluateScenario7(const std::vector<double>& path_x,
 
     if (unscanned_ratio >= kMinUnscannedRatio)
     {
-        adcm::globalPathPosition start{static_cast<double>(roi_x_start), static_cast<double>(roi_y_start)};
-        adcm::globalPathPosition end{static_cast<double>(roi_x_end), static_cast<double>(roi_y_end)};
+        bool found_path_in_roi = false;
+        adcm::globalPathPosition start{};
+        adcm::globalPathPosition end{};
+
+        if (!path_x.empty() && path_x.size() == path_y.size()) {
+            std::size_t first_idx = 0;
+            std::size_t last_idx = 0;
+            for (std::size_t i = 0; i < path_x.size(); ++i) {
+                const bool inside_roi =
+                    (path_x[i] >= static_cast<double>(roi_x_start) && path_x[i] <= static_cast<double>(roi_x_end) &&
+                     path_y[i] >= static_cast<double>(roi_y_start) && path_y[i] <= static_cast<double>(roi_y_end));
+                if (!inside_roi) {
+                    continue;
+                }
+                if (!found_path_in_roi) {
+                    first_idx = i;
+                    last_idx = i;
+                    found_path_in_roi = true;
+                } else {
+                    last_idx = i;
+                }
+            }
+
+            if (found_path_in_roi) {
+                const std::size_t start_idx = (first_idx > 0) ? (first_idx - 1) : first_idx;
+                const std::size_t end_idx = (last_idx + 1 < path_x.size()) ? (last_idx + 1) : last_idx;
+                start = adcm::globalPathPosition{path_x[start_idx], path_y[start_idx]};
+                end = adcm::globalPathPosition{path_x[end_idx], path_y[end_idx]};
+            }
+        }
+
+        // ROI 내부 경로 포인트가 없으면 기존 ROI 코너로 폴백
+        if (!found_path_in_roi) {
+            start = adcm::globalPathPosition{static_cast<double>(roi_x_start), static_cast<double>(roi_y_start)};
+            end = adcm::globalPathPosition{static_cast<double>(roi_x_end), static_cast<double>(roi_y_end)};
+        }
+
         r.hazard_path_start.push_back(start);
         r.hazard_path_end.push_back(end);
 
         SCENARIO_LOG_INFO() << "[시나리오7] Triggered by ROI ratio."
                             << " ratio=" << unscanned_ratio
-                            << " threshold=" << kMinUnscannedRatio;
+                            << " threshold=" << kMinUnscannedRatio
+                            << " | start=(" << start.x << "," << start.y << ")"
+                            << " end=(" << end.x << "," << end.y << ")"
+                            << " | path_based=" << (found_path_in_roi ? "true" : "false");
 
         riskAssessment.riskAssessmentList.push_back(r);
-        s7_triggered_once = true;
     }
     else
     {
