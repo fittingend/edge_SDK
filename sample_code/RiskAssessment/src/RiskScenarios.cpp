@@ -278,6 +278,8 @@ void evaluateScenario3(const obstacleListVector& obstacle_list,
     constexpr double CONF_START        = 0.40;
     constexpr double CONF_AT_10        = 0.70;
     constexpr double CONF_MAX          = 1.00;
+    constexpr double MIN_TRIGGER_X     = 800.0;
+    constexpr double MIN_TRIGGER_Y     = 400.0;
 
     // 장애물별 누적 상태 (프레임 간 유지)
     struct S3State { int near_count = 0; int miss_count = 0; };
@@ -289,6 +291,18 @@ void evaluateScenario3(const obstacleListVector& obstacle_list,
     for (const auto& obs : obstacle_list) {
         const bool target_class = (obs.obstacle_class >= 1 && obs.obstacle_class <= 10);
         if (!target_class) continue;
+
+        const bool coord_in_range =
+            (obs.fused_position_x >= MIN_TRIGGER_X) &&
+            (obs.fused_position_y >= MIN_TRIGGER_Y);
+        if (!coord_in_range) {
+            SCENARIO_LOG_INFO() << "[3-reject] ID=" << obs.obstacle_id
+                                << " | class=" << static_cast<int>(obs.obstacle_class)
+                                << " | pos=(" << obs.fused_position_x << ", " << obs.fused_position_y << ")"
+                                << " | threshold=(x>=" << MIN_TRIGGER_X
+                                << ", y>=" << MIN_TRIGGER_Y << ")";
+            continue;
+        }
 
         const double d_ego_dm = calculateDistance(obs, ego_vehicle);
         seen_ids.insert(static_cast<uint16_t>(obs.obstacle_id));
@@ -587,10 +601,18 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
     // (3) 트리거 처리
     const double pair_m   = best_pair_dm / 10.0;
     const double base_conf = clampValue((MAX_PAIR_DIST_DM - best_pair_dm) / MAX_PAIR_DIST_DM, 0.0, 1.0);
+    const double d_ego_a_dm = calculateDistance(best_a, ego_vehicle);
+    const double d_ego_b_dm = calculateDistance(best_b, ego_vehicle);
+    const double ego_conf_a = clampValue((EGO_MAX_DM - d_ego_a_dm) / EGO_MAX_DM, 0.0, 1.0);
+    const double ego_conf_b = clampValue((EGO_MAX_DM - d_ego_b_dm) / EGO_MAX_DM, 0.0, 1.0);
+    constexpr double W_PAIR = 0.7;
+    constexpr double W_EGO  = 0.3;
+    const double fused_conf_a = clampValue(W_PAIR * base_conf + W_EGO * ego_conf_a, 0.0, 1.0);
+    const double fused_conf_b = clampValue(W_PAIR * base_conf + W_EGO * ego_conf_b, 0.0, 1.0);
     // const double dir_factor_a = calculateFrontRearFactor(best_a, ego_vehicle); // 전방/후방 가중치
     // const double dir_factor_b = calculateFrontRearFactor(best_b, ego_vehicle); // 전방/후방 가중치
-    const double conf_a = clampValue(base_conf, 0.0, 1.0);
-    const double conf_b = clampValue(base_conf, 0.0, 1.0);
+    const double conf_a = fused_conf_a;
+    const double conf_b = fused_conf_b;
 
     adcm::riskAssessmentStruct s5a{ .obstacle_id=best_a.obstacle_id, .hazard_class=SCENARIO_5, .confidence=conf_a };
     adcm::riskAssessmentStruct s5b{ .obstacle_id=best_b.obstacle_id, .hazard_class=SCENARIO_5, .confidence=conf_b };
@@ -599,6 +621,12 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
                 << " | 페어 IDs=(" << s5a.obstacle_id << "," << s5b.obstacle_id << ")"
                 << " | 거리=" << pair_m << " m"
                 << " | base_conf=" << base_conf
+                << " | ego_dist_a=" << (d_ego_a_dm / 10.0) << " m"
+                << " | ego_dist_b=" << (d_ego_b_dm / 10.0) << " m"
+                << " | ego_conf_a=" << ego_conf_a
+                << " | ego_conf_b=" << ego_conf_b
+                << " | fused_conf_a=" << fused_conf_a
+                << " | fused_conf_b=" << fused_conf_b
                 << " | confidence=(" << conf_a << "," << conf_b << ")";
 
     riskAssessment.riskAssessmentList.push_back(s5a);
@@ -640,6 +668,8 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
     constexpr double EGO_MAX_DM          = 600.0;   // 60 m
     constexpr double DIST_TO_PATH_MAX_DM = 150.0;   // 15 m
     constexpr double MAX_PAIR_DIST_DM    = 300.0;   // 30 m
+    constexpr double MIN_TRIGGER_X       = 800.0;
+    constexpr double MIN_TRIGGER_Y       = 400.0;
 
     if (obstacle_list.empty()) {
         SCENARIO_LOG_INFO() << "[시나리오6] 입력 없음 → 종료";
@@ -661,6 +691,18 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
     obstacleListVector cand;
     for (auto &obs : obstacle_list) {
         if (obs.obstacle_class < 1 || obs.obstacle_class > 19) continue;
+
+        const bool coord_in_range =
+            (obs.fused_position_x >= MIN_TRIGGER_X) &&
+            (obs.fused_position_y >= MIN_TRIGGER_Y);
+        if (!coord_in_range) {
+            SCENARIO_LOG_INFO() << "[6-reject] ID=" << obs.obstacle_id
+                                << " | class=" << static_cast<int>(obs.obstacle_class)
+                                << " | pos=(" << obs.fused_position_x << ", " << obs.fused_position_y << ")"
+                                << " | threshold=(x>=" << MIN_TRIGGER_X
+                                << ", y>=" << MIN_TRIGGER_Y << ")";
+            continue;
+        }
 
         double d_ego_dm = calculateDistance(obs, ego_vehicle);
         if (d_ego_dm < EGO_MIN_DM || d_ego_dm > EGO_MAX_DM) continue;
