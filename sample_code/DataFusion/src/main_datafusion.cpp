@@ -50,6 +50,7 @@
 #include <filesystem>
 #include <limits>
 #include <set>
+#include <cmath>
 #include <unordered_map>
 #include <unordered_set>
 #include <Poco/JSON/Parser.h>
@@ -859,6 +860,117 @@ static void logDuplicateSummary(const std::string &tag,
     }
 }
 
+static std::vector<ObstacleData> dedupeObstacleIdWithQuality(
+    const std::vector<ObstacleData> &inputList,
+    const std::vector<ObstacleData> &referenceList,
+    const std::string &tag)
+{
+    if (inputList.empty())
+    {
+        return inputList;
+    }
+
+    std::unordered_map<std::uint16_t, ObstacleData> referenceById;
+    referenceById.reserve(referenceList.size());
+    for (const auto &ref : referenceList)
+    {
+        auto it = referenceById.find(ref.obstacle_id);
+        if (it == referenceById.end() || ref.timestamp > it->second.timestamp)
+        {
+            referenceById[ref.obstacle_id] = ref;
+        }
+    }
+
+    struct CandidateScore
+    {
+        bool hasReference = false;
+        double continuityDistance = std::numeric_limits<double>::infinity();
+        double stdDev = std::numeric_limits<double>::infinity();
+        std::uint64_t timestamp = 0;
+    };
+
+    auto buildScore = [&](const ObstacleData &candidate) {
+        CandidateScore score;
+        score.timestamp = candidate.timestamp;
+
+        if (std::isfinite(candidate.standard_deviation))
+        {
+            score.stdDev = candidate.standard_deviation;
+        }
+
+        auto refIt = referenceById.find(candidate.obstacle_id);
+        if (refIt != referenceById.end())
+        {
+            score.hasReference = true;
+            score.continuityDistance = euclideanDistance(candidate, refIt->second);
+        }
+
+        return score;
+    };
+
+    auto isBetter = [&](const ObstacleData &candidate, const ObstacleData &currentBest) {
+        const CandidateScore candScore = buildScore(candidate);
+        const CandidateScore bestScore = buildScore(currentBest);
+
+        if (candScore.hasReference != bestScore.hasReference)
+        {
+            return candScore.hasReference;
+        }
+
+        if (candScore.hasReference && bestScore.hasReference &&
+            candScore.continuityDistance != bestScore.continuityDistance)
+        {
+            return candScore.continuityDistance < bestScore.continuityDistance;
+        }
+
+        if (candScore.stdDev != bestScore.stdDev)
+        {
+            return candScore.stdDev < bestScore.stdDev;
+        }
+
+        if (candScore.timestamp != bestScore.timestamp)
+        {
+            return candScore.timestamp > bestScore.timestamp;
+        }
+
+        return false;
+    };
+
+    std::vector<ObstacleData> deduped;
+    deduped.reserve(inputList.size());
+    std::unordered_map<std::uint16_t, size_t> indexById;
+    indexById.reserve(inputList.size());
+
+    size_t removedCount = 0;
+    for (const auto &obs : inputList)
+    {
+        auto it = indexById.find(obs.obstacle_id);
+        if (it == indexById.end())
+        {
+            indexById[obs.obstacle_id] = deduped.size();
+            deduped.push_back(obs);
+            continue;
+        }
+
+        size_t &bestIdx = it->second;
+        if (isBetter(obs, deduped[bestIdx]))
+        {
+            deduped[bestIdx] = obs;
+        }
+        removedCount += 1;
+    }
+
+    if (removedCount > 0)
+    {
+        adcm::Log::Info() << tag
+                          << " dedupe-by-id removed=" << removedCount
+                          << " before=" << inputList.size()
+                          << " after=" << deduped.size();
+    }
+
+    return deduped;
+}
+
 bool checkRange(const VehicleData &vehicle)
 {
     if (vehicle.position_x >= 0 && vehicle.position_x < map_x &&
@@ -1525,6 +1637,7 @@ void processFusionForVehiclePair(
     const std::vector<ObstacleData> &prevList,
     const std::vector<int> &assignment)
 {
+    const std::string prefix = framePrefix();
     std::vector<int> validatedAssignment = assignment;
 
     // 0. 매칭 유효성 검사 (클래스 불일치 또는 거리 초과 시 매칭 취소)
@@ -1555,6 +1668,44 @@ void processFusionForVehiclePair(
         const double threshold = DYNAMIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD;
 
         if (distance >= threshold)
+        {
+            validatedAssignment[i] = -1;
+        }
+    }
+
+    // 같은 현재 인덱스(j)가 여러 이전 인덱스(i)에 할당되면,
+    // 연속성이 높은(거리 최소) 매칭만 유지한다.
+    std::unordered_map<int, size_t> ownerByCurrentIndex;
+    std::unordered_map<int, double> bestDistanceByCurrentIndex;
+    for (size_t i = 0; i < validatedAssignment.size(); ++i)
+    {
+        const int j = validatedAssignment[i];
+        if (j < 0)
+            continue;
+
+        if (i >= prevList.size() || static_cast<size_t>(j) >= presList.size())
+        {
+            validatedAssignment[i] = -1;
+            continue;
+        }
+
+        const double dist = euclideanDistance(prevList[i], presList[j]);
+        auto distIt = bestDistanceByCurrentIndex.find(j);
+        if (distIt == bestDistanceByCurrentIndex.end())
+        {
+            ownerByCurrentIndex[j] = i;
+            bestDistanceByCurrentIndex[j] = dist;
+            continue;
+        }
+
+        if (dist < distIt->second)
+        {
+            const size_t previousOwner = ownerByCurrentIndex[j];
+            validatedAssignment[previousOwner] = -1;
+            ownerByCurrentIndex[j] = i;
+            distIt->second = dist;
+        }
+        else
         {
             validatedAssignment[i] = -1;
         }
@@ -1600,8 +1751,8 @@ void processFusionForVehiclePair(
         }
     }
 
-    // 새로운 리스트로 갱신
-    presList = newList;
+    // 같은 obstacle_id 중복이 생기면 품질 우선순위로 1개만 유지
+    presList = dedupeObstacleIdWithQuality(newList, prevList, prefix + "[VEHICLE_FUSION]");
 }
 
 // 프레임 간 융합 처리
@@ -1614,31 +1765,50 @@ void processFusion(
     logDuplicateSummary(prefix + "[FUSION] presList in", presList, 1.0);
     std::vector<ObstacleData> newList;
 
+    // 같은 현재 인덱스(j)에 여러 이전 인덱스(i)가 매칭된 경우,
+    // 클래스 일치 + 임계거리 내 후보 중 거리 최소 매칭만 사용한다.
+    std::unordered_map<int, size_t> bestPrevByCurrentIndex;
+    std::unordered_map<int, double> bestDistanceByCurrentIndex;
+    for (size_t i = 0; i < assignment.size(); ++i)
+    {
+        const int j = assignment[i];
+        if (j < 0)
+            continue;
+        if (i >= prevList.size() || static_cast<size_t>(j) >= presList.size())
+            continue;
+
+        const auto &prevObstacle = prevList[i];
+        const auto &currentObstacle = presList[j];
+        if (prevObstacle.obstacle_class != currentObstacle.obstacle_class)
+            continue;
+
+        const double distance = euclideanDistance(prevObstacle, currentObstacle);
+        const double threshold = DYNAMIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD;
+        if (distance >= threshold)
+            continue;
+
+        auto it = bestDistanceByCurrentIndex.find(j);
+        if (it == bestDistanceByCurrentIndex.end() || distance < it->second)
+        {
+            bestDistanceByCurrentIndex[j] = distance;
+            bestPrevByCurrentIndex[j] = i;
+        }
+    }
+
     // 1. 매칭된 장애물 처리
     for (size_t i = 0; i < assignment.size(); ++i)
     {
         int j = assignment[i];
         if (j >= 0)
         {
+            auto selectedIt = bestPrevByCurrentIndex.find(j);
+            if (selectedIt == bestPrevByCurrentIndex.end() || selectedIt->second != i)
+            {
+                continue;
+            }
+
             const auto &prevObstacle = prevList[i];
             auto &currentObstacle = presList[j];
-
-            if (prevObstacle.obstacle_class != currentObstacle.obstacle_class)
-            {
-                currentObstacle.obstacle_id = id_manager.allocID();
-                newList.push_back(currentObstacle);
-                continue;
-            }
-
-            const double distance = euclideanDistance(prevObstacle, currentObstacle);
-            const double threshold = DYNAMIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD;
-
-            if (distance >= threshold)
-            {
-                currentObstacle.obstacle_id = id_manager.allocID();
-                newList.push_back(currentObstacle);
-                continue;
-            }
 
             currentObstacle.obstacle_id = prevObstacle.obstacle_id;
             newList.push_back(currentObstacle);
@@ -1649,10 +1819,10 @@ void processFusion(
 
     // 3. presList에서 매칭되지 않은 장애물 처리
     std::unordered_set<int> matchedPresIndices;
-    for (size_t i = 0; i < assignment.size(); ++i)
+    matchedPresIndices.reserve(bestPrevByCurrentIndex.size());
+    for (const auto &entry : bestPrevByCurrentIndex)
     {
-        if (assignment[i] >= 0)
-            matchedPresIndices.insert(assignment[i]);
+        matchedPresIndices.insert(entry.first);
     }
 
     for (size_t i = 0; i < presList.size(); ++i)
@@ -1664,6 +1834,8 @@ void processFusion(
             newList.push_back(currentObstacle);
         }
     }
+
+    newList = dedupeObstacleIdWithQuality(newList, prevList, prefix + "[FUSION]");
 
     if (newList.empty())
     {
