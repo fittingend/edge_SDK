@@ -57,7 +57,7 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
 
     // 단위: 거리 dm(0.1 m), 시간 ms
     constexpr double DIST_TO_EGO_MAX_DM  = 300.0; // 장애물 <-> 특장차와 30 m 이내
-    constexpr double DIST_TO_PATH_MAX_DM = 300.0; // 장애물 <-> 전역경로와 30 m 이내
+    constexpr double DIST_TO_PATH_MAX_DM = 150.0; // 장애물 <-> 전역경로와 15 m 이내
 
     // 컨피던스 파라미터 (confidence 0.7 이상 목표)
     constexpr double EGO_THRESH_DM  = 300.0;  // 거리 기준 (변경 없음)
@@ -163,7 +163,7 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
 
     // 단위: 거리 dm(0.1m)
     constexpr double DIST_TO_EGO_MAX_DM  = 400.0; // 특장차와 40 m 이내
-    constexpr double DIST_TO_PATH_MAX_DM = 400.0; // 특장차 전역경로에서 10 m 이내 (03.26 수정: 30 m → 40 m)
+    constexpr double DIST_TO_PATH_MAX_DM = 150.0; // 특장차 전역경로에서 15 m 이내 
 
     // 컨피던스 파라미터
     // 트리거 조건은 유지하고, confidence 정규화 범위만 완화해서
@@ -172,7 +172,7 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
     constexpr double PATH_THRESH_DM = 450.0;
     constexpr double W_EGO  = 0.7;
     constexpr double W_PATH = 0.3;
-    constexpr double CONFIDENCE_MULTIPLIER = 1;
+    constexpr double CONFIDENCE_MULTIPLIER = 1.2;
 
     obstacleListVector candidates;
 
@@ -278,8 +278,9 @@ void evaluateScenario3(const obstacleListVector& obstacle_list,
     constexpr double CONF_START        = 0.40;
     constexpr double CONF_AT_10        = 0.70;
     constexpr double CONF_MAX          = 1.00;
-    constexpr double MIN_TRIGGER_X     = 800.0;
+    constexpr double MIN_TRIGGER_X     = 850.0;
     constexpr double MIN_TRIGGER_Y     = 400.0;
+    constexpr double MAX_TRIGGER_Y     = 570.0;
 
     // 장애물별 누적 상태 (프레임 간 유지)
     struct S3State { int near_count = 0; int miss_count = 0; };
@@ -294,13 +295,15 @@ void evaluateScenario3(const obstacleListVector& obstacle_list,
 
         const bool coord_in_range =
             (obs.fused_position_x >= MIN_TRIGGER_X) &&
-            (obs.fused_position_y >= MIN_TRIGGER_Y);
+            (obs.fused_position_y >= MIN_TRIGGER_Y) &&
+            (obs.fused_position_y <= MAX_TRIGGER_Y);
         if (!coord_in_range) {
             SCENARIO_LOG_INFO() << "[3-reject] ID=" << obs.obstacle_id
                                 << " | class=" << static_cast<int>(obs.obstacle_class)
                                 << " | pos=(" << obs.fused_position_x << ", " << obs.fused_position_y << ")"
                                 << " | threshold=(x>=" << MIN_TRIGGER_X
-                                << ", y>=" << MIN_TRIGGER_Y << ")";
+                                << ", y>=" << MIN_TRIGGER_Y
+                                << ", y<=" << MAX_TRIGGER_Y << ")";
             continue;
         }
 
@@ -509,7 +512,7 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
     // 상수 (dm)
     constexpr double EGO_MIN_DM          = 50.0;   // 5 m
     constexpr double EGO_MAX_DM          = 500.0;  // 50 m
-    constexpr double DIST_TO_PATH_MAX_DM = 200.0;  // 20 m
+    constexpr double DIST_TO_PATH_MAX_DM = 100.0;  // 10 m
     constexpr double MAX_PAIR_DIST_DM    = 100.0;  // 10 m
 
     if (obstacle_list.empty()) {
@@ -665,7 +668,7 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
     }
 
     constexpr double EGO_MIN_DM          = 100.0;   // 10 m
-    constexpr double EGO_MAX_DM          = 600.0;   // 60 m
+    constexpr double EGO_MAX_DM          = 400.0;   // 40 m
     constexpr double DIST_TO_PATH_MAX_DM = 150.0;   // 15 m
     constexpr double MAX_PAIR_DIST_DM    = 300.0;   // 30 m
     constexpr double MIN_TRIGGER_X       = 800.0;
@@ -945,6 +948,11 @@ void evaluateScenario7(const std::vector<double>& path_x,
 
 namespace {
     bool s8_triggered_once = false;
+}
+
+void resetScenario8State()
+{
+    s8_triggered_once = false;
 }
 
 void evaluateScenario8(const std::vector<double>& path_x, 
@@ -1274,14 +1282,22 @@ void evaluateScenario8(const std::vector<double>& path_x,
 
 }
 */
+
 //===== 시나리오 #9. 목적지 반경 30m 내 사각영역 유발 위험 판단 (정차 차량 포함 높이 weight) =====
 void evaluateScenario9(const obstacleListVector& obstacle_list,
                        const adcm::vehicleListStruct& ego_vehicle,
                        const std::vector<double>& path_x,
                        const std::vector<double>& path_y,
-                       adcm::risk_assessment_Objects& riskAssessment)
+                       adcm::risk_assessment_Objects& riskAssessment,
+                       std::uint8_t edge_state)
 {
     SCENARIO_LOG_INFO() << "============= KATECH: Scenario 9 START =============";
+
+    if (edge_state != 3) {
+        SCENARIO_LOG_INFO() << "[시나리오9] MOVE 상태 아님(" << static_cast<int>(edge_state) << ") → 종료";
+        SCENARIO_LOG_INFO() << "============= KATECH: Scenario 9 DONE =============";
+        return;
+    }
 
     if (path_x.empty() || path_y.empty() || path_x.size() != path_y.size()) {
         SCENARIO_LOG_INFO() << "[시나리오9] 전역경로 비정상 → 종료";
@@ -1388,9 +1404,16 @@ void evaluateScenario10(const obstacleListVector& obstacle_list,
                         const adcm::vehicleListStruct& ego_vehicle,
                         const std::vector<double>& path_x,
                         const std::vector<double>& path_y,
-                        adcm::risk_assessment_Objects& riskAssessment)
+                        adcm::risk_assessment_Objects& riskAssessment,
+                        std::uint8_t edge_state)
 {
     SCENARIO_LOG_INFO() << "============= KATECH: Scenario 10 START =============";
+
+    if (edge_state != 3) {
+        SCENARIO_LOG_INFO() << "[시나리오10] MOVE 상태 아님(" << static_cast<int>(edge_state) << ") → 종료";
+        SCENARIO_LOG_INFO() << "============= KATECH: Scenario 10 DONE =============";
+        return;
+    }
 
     if (path_x.empty() || path_y.empty() || path_x.size() != path_y.size()) {
         SCENARIO_LOG_INFO() << "[시나리오10] 전역경로 비정상 → 종료";

@@ -215,16 +215,19 @@ void evaluateScenario8(const std::vector<double>& path_x,
                         const std::vector<adcm::map_2dListVector>& map_2d,
                         adcm::risk_assessment_Objects& riskAssessment,
                         std::uint8_t edge_state);
+void resetScenario8State();
 void evaluateScenario9(const obstacleListVector& obstacle_list,
                         const adcm::vehicleListStruct& ego_vehicle,
                         const std::vector<double>& path_x,
                         const std::vector<double>& path_y,
-                        adcm::risk_assessment_Objects& riskAssessment);
+                        adcm::risk_assessment_Objects& riskAssessment,
+                        std::uint8_t edge_state);
 void evaluateScenario10(const obstacleListVector& obstacle_list,
                         const adcm::vehicleListStruct& ego_vehicle,
                         const std::vector<double>& path_x,
                         const std::vector<double>& path_y,
-                        adcm::risk_assessment_Objects& riskAssessment);
+                        adcm::risk_assessment_Objects& riskAssessment,
+                        std::uint8_t edge_state);
 
 // ==== confidence 값을 clamp 해주는 clampValue 함수 선언 ====
 template <typename T>

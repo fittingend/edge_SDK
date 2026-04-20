@@ -88,6 +88,7 @@ int gStopValue = 20;
 std::unique_ptr<AutoLabelWriter> labelWriter;
 Config config;
 std::atomic<uint64_t> gRiskLogSeq{0};
+std::atomic<bool> gInjectScenario8RoadPatternOnce{false};
 
 namespace {
 std::string formatObstacleBriefById(std::uint64_t id)
@@ -112,6 +113,57 @@ std::string riskLogPrefix(uint64_t seq)
     std::ostringstream oss;
     oss << "[R" << seq << "] ";
     return oss.str();
+}
+
+void injectScenario8RoadPatternForMoveTransition(
+    std::vector<adcm::map_2dListVector> &map,
+    const std::vector<double> &pathX,
+    const std::vector<double> &pathY)
+{
+    if (map.empty() || map[0].empty() || pathX.empty() || pathY.empty())
+    {
+        adcm::Log::Info() << "[Scenario8][MOVE_TRANSITION] skip road pattern injection: empty map/path";
+        return;
+    }
+
+    const int width = static_cast<int>(map.size());
+    const int height = static_cast<int>(map[0].size());
+
+    const std::size_t anchorIdx = std::min(pathX.size(), pathY.size()) > 1 ? 1 : 0;
+    const int anchorX = static_cast<int>(std::lround(pathX[anchorIdx]));
+    const int anchorY = static_cast<int>(std::lround(pathY[anchorIdx]));
+
+    constexpr int ROI_HALF_WIDTH = 70;
+    constexpr int STEP = 10;
+    constexpr std::uint8_t LOW_Z = static_cast<std::uint8_t>(RoadIndex::LE_NEG_50);
+    constexpr std::uint8_t HIGH_Z = static_cast<std::uint8_t>(RoadIndex::GE_POS_55);
+
+    const int minX = std::max(0, anchorX - ROI_HALF_WIDTH);
+    const int maxX = std::min(width - 1, anchorX + ROI_HALF_WIDTH);
+    const int minY = std::max(0, anchorY - ROI_HALF_WIDTH);
+    const int maxY = std::min(height - 1, anchorY + ROI_HALF_WIDTH);
+
+    int changedCells = 0;
+    for (int x = minX; x <= maxX; ++x)
+    {
+        const bool highStripe = ((x / STEP) % 2) != 0;
+        const std::uint8_t z = highStripe ? HIGH_Z : LOW_Z;
+        for (int y = minY; y <= maxY; ++y)
+        {
+            if (map[x][y].road_z != z)
+            {
+                map[x][y].road_z = z;
+                ++changedCells;
+            }
+        }
+    }
+
+    adcm::Log::Info() << "[Scenario8][MOVE_TRANSITION] injected steep road pattern"
+                      << " anchor=(" << anchorX << ", " << anchorY << ")"
+                      << " roi=[X:" << minX << "~" << maxX << ", Y:" << minY << "~" << maxY << "]"
+                      << " low_z=" << static_cast<int>(LOW_Z)
+                      << " high_z=" << static_cast<int>(HIGH_Z)
+                      << " changed_cells=" << changedCells;
 }
 }
 
@@ -146,6 +198,7 @@ std::condition_variable cv_rass;    // ThreadSend waits on this
 // Shared flags
 bool isMapAvailable = false;
 bool isPathAvailable = false;
+bool isRiskFrameReady = false;
 
 /**
  * @brief 맵 데이터 수신 쓰레드
@@ -476,15 +529,24 @@ void ThreadRASS()
             evaluateScenario5(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment, edge_state);
             evaluateScenario6(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment, edge_state);
             evaluateScenario7(path_x, path_y, map_2d, config, riskAssessment, edge_state);
+
+            if (gInjectScenario8RoadPatternOnce.exchange(false, std::memory_order_relaxed))
+            {
+                injectScenario8RoadPatternForMoveTransition(map_2d, path_x, path_y);
+            }
+
             evaluateScenario8(path_x, path_y, map_2d, riskAssessment, edge_state);
-            evaluateScenario9(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
-            evaluateScenario10(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment);
+            evaluateScenario9(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment, edge_state);
+            evaluateScenario10(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment, edge_state);
         }
 
         uint64_t riskSeq = 0;
         if (!riskAssessment.riskAssessmentList.empty()) {
             riskSeq = ++gRiskLogSeq;
         }
+
+        const bool canSendEmptyFrame = (edge_state >= 3);
+        const bool hasRiskScenario = !riskAssessment.riskAssessmentList.empty();
 
         adcm::Log::Info() << riskLogPrefix(riskSeq)
                           << "[KATECH] 위험판단 생성 완료 size " << riskAssessment.riskAssessmentList.size();
@@ -513,9 +575,12 @@ void ThreadRASS()
             }
         }
 
-        if (!riskAssessment.riskAssessmentList.empty())
+        if (hasRiskScenario || canSendEmptyFrame)
         {
-            // notify ThreadSend
+            {
+                std::lock_guard<std::mutex> lock_rass(mtx_rass);
+                isRiskFrameReady = true;
+            }
             cv_rass.notify_one(); // 전송 쓰레드 깨움
         }
         isMapAvailable = false;
@@ -543,7 +608,7 @@ void ThreadSend()
         // [1] 조건변수 대기: 위험판단 데이터 생성 알림 대기
         std::unique_lock<std::mutex> lock_rass_cv(mtx_rass);
         cv_rass.wait(lock_rass_cv, []
-                     { return !riskAssessment.riskAssessmentList.empty() || !continueExecution; });
+                     { return isRiskFrameReady || !continueExecution; });
 
         if (!continueExecution)
             break;
@@ -551,6 +616,7 @@ void ThreadSend()
         // 전송 중에 RASS 계산 스레드가 막히지 않도록 공유 버퍼를 복사 후 즉시 비운다.
         risk_to_send = riskAssessment;
         riskAssessment.riskAssessmentList.clear();
+        isRiskFrameReady = false;
         lock_rass_cv.unlock();
 
         auto t_start_total = std::chrono::high_resolution_clock::now();
@@ -710,6 +776,10 @@ void ThreadReceiveEdgeInformation()
                                               << " map_size=(" << map_width << ", " << map_height << ")";
                         }
                     }
+
+                    gInjectScenario8RoadPatternOnce.store(true, std::memory_order_relaxed);
+                    resetScenario8State();
+                    adcm::Log::Info() << "[Scenario8][MOVE_TRANSITION] one-shot road pattern injection armed";
                 }
 
                 prev_edge_state = new_edge_state;

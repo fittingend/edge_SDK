@@ -1048,6 +1048,168 @@ void filterClass1ByRegion(std::vector<ObstacleData> &mergedList)
     }
 }
 
+// class 1 중 특정 영역(x>=750, y<=300) 후보가 여러 개면
+// 기준점(930,150)에 가장 가까운 1개만 유지한다.
+void filterClass1ExcavatorNearestInRegion(std::vector<ObstacleData> &mergedList)
+{
+    constexpr std::uint8_t TARGET_CLASS = 1;
+    constexpr double MIN_X = 750.0;
+    constexpr double MAX_Y = 300.0;
+    constexpr double ANCHOR_X = 930.0;
+    constexpr double ANCHOR_Y = 150.0;
+
+    std::vector<size_t> candidateIndices;
+    candidateIndices.reserve(mergedList.size());
+
+    for (size_t i = 0; i < mergedList.size(); ++i)
+    {
+        const auto &obs = mergedList[i];
+        if (obs.obstacle_class != TARGET_CLASS)
+        {
+            continue;
+        }
+
+        if (obs.fused_position_x >= MIN_X && obs.fused_position_y <= MAX_Y)
+        {
+            candidateIndices.push_back(i);
+        }
+    }
+
+    if (candidateIndices.size() <= 1)
+    {
+        return;
+    }
+
+    size_t bestIndex = candidateIndices.front();
+    double bestDist2 = std::numeric_limits<double>::infinity();
+
+    for (const auto idx : candidateIndices)
+    {
+        const auto &obs = mergedList[idx];
+        const double dx = obs.fused_position_x - ANCHOR_X;
+        const double dy = obs.fused_position_y - ANCHOR_Y;
+        const double dist2 = dx * dx + dy * dy;
+
+        if (dist2 < bestDist2)
+        {
+            bestDist2 = dist2;
+            bestIndex = idx;
+        }
+    }
+
+    std::vector<ObstacleData> filtered;
+    filtered.reserve(mergedList.size() - (candidateIndices.size() - 1));
+
+    for (size_t i = 0; i < mergedList.size(); ++i)
+    {
+        const auto &obs = mergedList[i];
+        const bool isCandidate = (obs.obstacle_class == TARGET_CLASS &&
+                                  obs.fused_position_x >= MIN_X &&
+                                  obs.fused_position_y <= MAX_Y);
+
+        if (!isCandidate || i == bestIndex)
+        {
+            filtered.push_back(obs);
+        }
+    }
+
+    const size_t removed = mergedList.size() - filtered.size();
+    if (removed > 0)
+    {
+        const auto &kept = mergedList[bestIndex];
+        adcm::Log::Info() << framePrefix()
+                          << "[KATECH] class-1 excavator nearest filter removed=" << removed
+                          << " kept_id=" << kept.obstacle_id
+                          << " kept_pos=(" << formatCoord2(kept.fused_position_x)
+                          << ", " << formatCoord2(kept.fused_position_y) << ")"
+                          << " anchor=(" << ANCHOR_X << ", " << ANCHOR_Y << ")"
+                          << " region=(x>=" << MIN_X << ", y<=" << MAX_Y << ")";
+    }
+
+    mergedList = std::move(filtered);
+}
+
+// class 10 중 특정 영역(x>=500, y>=400) 후보가 여러 개면
+// 기준점(900,480)에 가장 가까운 1개만 유지한다.
+void filterClass10SedanNearestInRegion(std::vector<ObstacleData> &mergedList)
+{
+    constexpr std::uint8_t TARGET_CLASS = 10;
+    constexpr double MIN_X = 500.0;
+    constexpr double MIN_Y = 400.0;
+    constexpr double ANCHOR_X = 900.0;
+    constexpr double ANCHOR_Y = 480.0;
+
+    std::vector<size_t> candidateIndices;
+    candidateIndices.reserve(mergedList.size());
+
+    for (size_t i = 0; i < mergedList.size(); ++i)
+    {
+        const auto &obs = mergedList[i];
+        if (obs.obstacle_class != TARGET_CLASS)
+        {
+            continue;
+        }
+
+        if (obs.fused_position_x >= MIN_X && obs.fused_position_y >= MIN_Y)
+        {
+            candidateIndices.push_back(i);
+        }
+    }
+
+    if (candidateIndices.size() <= 1)
+    {
+        return;
+    }
+
+    size_t bestIndex = candidateIndices.front();
+    double bestDist2 = std::numeric_limits<double>::infinity();
+
+    for (const auto idx : candidateIndices)
+    {
+        const auto &obs = mergedList[idx];
+        const double dx = obs.fused_position_x - ANCHOR_X;
+        const double dy = obs.fused_position_y - ANCHOR_Y;
+        const double dist2 = dx * dx + dy * dy;
+
+        if (dist2 < bestDist2)
+        {
+            bestDist2 = dist2;
+            bestIndex = idx;
+        }
+    }
+
+    std::vector<ObstacleData> filtered;
+    filtered.reserve(mergedList.size() - (candidateIndices.size() - 1));
+
+    for (size_t i = 0; i < mergedList.size(); ++i)
+    {
+        const auto &obs = mergedList[i];
+        const bool isCandidate = (obs.obstacle_class == TARGET_CLASS &&
+                                  obs.fused_position_x >= MIN_X &&
+                                  obs.fused_position_y >= MIN_Y);
+
+        if (!isCandidate || i == bestIndex)
+        {
+            filtered.push_back(obs);
+        }
+    }
+
+    const size_t removed = mergedList.size() - filtered.size();
+    if (removed > 0)
+    {
+        const auto &kept = mergedList[bestIndex];
+        adcm::Log::Info() << framePrefix()
+                          << "[KATECH] class-10 sedan nearest filter removed=" << removed
+                          << " kept_id=" << kept.obstacle_id
+                          << " kept_pos=(" << formatCoord2(kept.fused_position_x)
+                          << ", " << formatCoord2(kept.fused_position_y) << ")"
+                          << " anchor=(" << ANCHOR_X << ", " << ANCHOR_Y << ")"
+                          << " region=(x>=" << MIN_X << ", y>=" << MIN_Y << ")";
+    }
+
+    mergedList = std::move(filtered);
+}
+
 // 최종 장애물 리스트에서 class 20은 x>480 영역만 유지
 void filterClass20ByRegion(std::vector<ObstacleData> &mergedList)
 {
@@ -1501,6 +1663,10 @@ public:
                 const auto id = pair.first;
                 const auto &tracked = pair.second;
                 if (matchedDynamicIds.find(id) != matchedDynamicIds.end())
+                    continue;
+
+                // 같은 ID 유지 매칭은 클래스가 동일한 경우에만 허용
+                if (currentObstacle.obstacle_class != tracked.obstacle.obstacle_class)
                     continue;
 
                 const double distance = euclideanDistance(currentObstacle, tracked.obstacle);
@@ -3037,6 +3203,8 @@ void ThreadKatech()
                                              obstacle_list_sub2, obstacle_list_sub3, obstacle_list_sub4, main_vehicle, sub1_vehicle, sub2_vehicle, sub3_vehicle, sub4_vehicle);
         filterClass1NearEgoByMainVehicleSize(obstacle_list);
         filterClass1ByRegion(obstacle_list);
+        filterClass1ExcavatorNearestInRegion(obstacle_list);
+        filterClass10SedanNearestInRegion(obstacle_list);
         filterClass20ByRegion(obstacle_list);
         dedupeCloseClass1StaticObstacles(obstacle_list);
         stage2_merge_ms = std::chrono::duration<double, std::milli>(
