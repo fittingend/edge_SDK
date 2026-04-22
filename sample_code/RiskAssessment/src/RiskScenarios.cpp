@@ -58,6 +58,11 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
     // 단위: 거리 dm(0.1 m), 시간 ms
     constexpr double DIST_TO_EGO_MAX_DM  = 300.0; // 장애물 <-> 특장차와 30 m 이내
     constexpr double DIST_TO_PATH_MAX_DM = 150.0; // 장애물 <-> 전역경로와 15 m 이내
+    // 시나리오 1 전용 고정 ROI (dm): 정적 마네킹 영역만 허용
+    constexpr double S1_ROI_MIN_X_DM = 545.0;
+    constexpr double S1_ROI_MAX_X_DM = 630.0;
+    constexpr double S1_ROI_MIN_Y_DM = 580.0;
+    constexpr double S1_ROI_MAX_Y_DM = 595.0;
 
     // 컨피던스 파라미터 (confidence 0.7 이상 목표)
     constexpr double EGO_THRESH_DM  = 300.0;  // 거리 기준 (변경 없음)
@@ -74,6 +79,14 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
         const bool is_vehicle = (obs.obstacle_class == 20);
         if (!is_vehicle) continue;
         if (obs.stop_count < gStopValue) continue;
+
+        // static/dynamic 구분 불가 환경 대응: 시나리오 1 전용 ROI 강제
+        const bool in_s1_roi =
+            (obs.fused_position_x >= S1_ROI_MIN_X_DM) &&
+            (obs.fused_position_x <= S1_ROI_MAX_X_DM) &&
+            (obs.fused_position_y >= S1_ROI_MIN_Y_DM) &&
+            (obs.fused_position_y <= S1_ROI_MAX_Y_DM);
+        if (!in_s1_roi) continue;
 
         SCENARIO_LOG_INFO() << "[1-i] 차량 & 정지 상태: ID=" << obs.obstacle_id
                           << " | class=" << static_cast<int>(obs.obstacle_class)
@@ -96,6 +109,25 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
         }
         // 세 조건 모두 통과한 경우 후보군에 추가
         candidates.push_back(obs);
+    }
+
+    // ROI 내 복수 검출 시 좌측(작은 x) 1개만 유지: 우측 접근 보행자는 시나리오1 제외
+    if (candidates.size() > 1) {
+        auto left_it = std::min_element(
+            candidates.begin(), candidates.end(),
+            [](const adcm::obstacleListStruct& a, const adcm::obstacleListStruct& b) {
+                return a.fused_position_x < b.fused_position_x;
+            });
+
+        SCENARIO_LOG_INFO() << "[시나리오1] ROI 내 복수 후보(" << candidates.size()
+                            << "개) 검출 → 좌측 1개만 유지, 선택 ID="
+                            << left_it->obstacle_id
+                            << " x=" << left_it->fused_position_x;
+
+        obstacleListVector left_only;
+        left_only.reserve(1);
+        left_only.push_back(*left_it);
+        candidates.swap(left_only);
     }
 
     // === 후보군 로그 출력 ===
