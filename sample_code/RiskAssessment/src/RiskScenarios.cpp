@@ -761,13 +761,19 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
     const double d_ego_b_dm = calculateDistance(best_b, ego_vehicle);
     const double pair_m     = best_pair_dm / 10.0;
 
-    // confidence = 400dm / (ego_dist_dm) * 0.7  (각 차량별 계산)
-    const double base_conf_a = (400.0 / std::max(d_ego_a_dm, 1.0)) * 0.7; // 0 보호
-    const double base_conf_b = (400.0 / std::max(d_ego_b_dm, 1.0)) * 0.7; // 0 보호
-    // const double dir_factor_a = calculateFrontRearFactor(best_a, ego_vehicle); // 전방/후방 가중치
-    // const double dir_factor_b = calculateFrontRearFactor(best_b, ego_vehicle); // 전방/후방 가중치
-    const double conf_a = clampValue(base_conf_a, 0.0, 1.0);
-    const double conf_b = clampValue(base_conf_b, 0.0, 1.0);
+    // ego 근접도 선형 정규화: 40m(400dm)→0, 10m(100dm)→0.75
+    // 역수 공식 대신 선형 정규화 + 페어 근접도 혼합으로 완만한 성장
+    const double s_ego_a = clampValue((EGO_MAX_DM - d_ego_a_dm) / EGO_MAX_DM, 0.0, 1.0);
+    const double s_ego_b = clampValue((EGO_MAX_DM - d_ego_b_dm) / EGO_MAX_DM, 0.0, 1.0);
+    // 페어 근접도: 0m→1, 30m(300dm)→0
+    const double s_pair  = clampValue((MAX_PAIR_DIST_DM - best_pair_dm) / MAX_PAIR_DIST_DM, 0.0, 1.0);
+
+    constexpr double W_EGO_S6  = 0.7;
+    constexpr double W_PAIR_S6 = 0.3;
+    const double base_conf_a = clampValue(W_EGO_S6 * s_ego_a + W_PAIR_S6 * s_pair, 0.0, 1.0);
+    const double base_conf_b = clampValue(W_EGO_S6 * s_ego_b + W_PAIR_S6 * s_pair, 0.0, 1.0);
+    const double conf_a = clampValue(std::pow(base_conf_a, 1.3), 0.0, 1.0);
+    const double conf_b = clampValue(std::pow(base_conf_b, 1.3), 0.0, 1.0);
 
     adcm::riskAssessmentStruct s6a{};
     s6a.obstacle_id  = best_a.obstacle_id;
@@ -781,15 +787,15 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
 
     SCENARIO_LOG_INFO() << "[시나리오6 활성]"
                 << " | 페어 IDs=(" << best_a.obstacle_id << "," << best_b.obstacle_id << ")"
-                << " | 페어거리=" << pair_m << " m"
+                << " | 페어거리=" << pair_m << " m (s_pair=" << s_pair << ")"
                 << " | ID=" << best_a.obstacle_id
                 << " Ego거리=" << (d_ego_a_dm / 10.0) << " m"
+                << " s_ego=" << s_ego_a << " base=" << base_conf_a
                 << " confidence=" << conf_a
-                << " (계산식: 400dm/" << d_ego_a_dm << " *0.7)"
                 << " | ID=" << best_b.obstacle_id
                 << " Ego거리=" << (d_ego_b_dm / 10.0) << " m"
-                << " confidence=" << conf_b
-                << " (계산식: 400dm/" << d_ego_b_dm << " *0.7)";
+                << " s_ego=" << s_ego_b << " base=" << base_conf_b
+                << " confidence=" << conf_b;
 
     riskAssessment.riskAssessmentList.push_back(s6a);
     riskAssessment.riskAssessmentList.push_back(s6b);
@@ -1375,12 +1381,12 @@ void evaluateScenario9(const obstacleListVector& obstacle_list,
         double s_height = 0.0;
         s_height = clampValue((obs.fused_cuboid_z - HEIGHT_THRESH_M) / (HEIGHT_MAX_M - HEIGHT_THRESH_M), 0.0, 1.0);
     
-        // 목적지 근접 시나리오 특성상 기본 위험도를 반영해 과도한 저평가를 방지
-        constexpr double SCENARIO9_PRIOR = 0.60;
+        // 낮은 선행값과 완만한 거듭제곱 곡선으로 느리고 점진적인 위험도 상승
+        constexpr double SCENARIO9_PRIOR = 0.30;
         const double base_confidence = clampValue(W_GOAL * s_goal +
                               W_EGO  * s_ego  +
                               W_HEIGHT * s_height, 0.0, 1.0);
-        double confidence = clampValue(SCENARIO9_PRIOR + (1.0 - SCENARIO9_PRIOR) * base_confidence, 0.0, 1.0);
+        double confidence = clampValue(SCENARIO9_PRIOR + (1.0 - SCENARIO9_PRIOR) * std::pow(base_confidence, 1.3), 0.0, 1.0);
 
         adcm::riskAssessmentStruct r{};
         r.obstacle_id  = obs.obstacle_id;
@@ -1482,12 +1488,12 @@ void evaluateScenario10(const obstacleListVector& obstacle_list,
         // (3) 정차 시간 점수: stop_count=10 → 0, stop_count=50 이상 → 1
         double s_stop = clampValue((obs.stop_count - STOP_THRESH) / double(STOP_MAX - STOP_THRESH), 0.0, 1.0);
 
-        // 목적지 근접 정체 시나리오 특성상 기본 위험도를 반영해 과도한 저평가를 방지
-        constexpr double SCENARIO10_PRIOR = 0.60;
+        // 낮은 선행값과 완만한 거듭제곱 곡선으로 느리고 점진적인 위험도 상승
+        constexpr double SCENARIO10_PRIOR = 0.30;
         const double base_confidence = clampValue(W_GOAL * s_goal +
                               W_EGO  * s_ego  +
                               W_STOP * s_stop, 0.0, 1.0);
-        double confidence = clampValue(SCENARIO10_PRIOR + (1.0 - SCENARIO10_PRIOR) * base_confidence, 0.0, 1.0);
+        double confidence = clampValue(SCENARIO10_PRIOR + (1.0 - SCENARIO10_PRIOR) * std::pow(base_confidence, 1.3), 0.0, 1.0);
 
         adcm::riskAssessmentStruct r{};
         r.obstacle_id  = obs.obstacle_id;
