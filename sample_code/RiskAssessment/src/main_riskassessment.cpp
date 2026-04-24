@@ -524,7 +524,7 @@ void ThreadRASS()
             printObstacleList(obstacle_list);
             evaluateScenario1(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment, edge_state);
             evaluateScenario2(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment, edge_state);
-            evaluateScenario3(obstacle_list, ego_vehicle, riskAssessment, edge_state);
+            evaluateScenario3(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment, edge_state);
             evaluateScenario4(obstacle_list, ego_vehicle, riskAssessment, edge_state);
             evaluateScenario5(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment, edge_state);
             evaluateScenario6(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment, edge_state);

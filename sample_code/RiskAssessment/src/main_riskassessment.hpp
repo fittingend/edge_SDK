@@ -179,6 +179,8 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
 
 void evaluateScenario3(const obstacleListVector& obstacle_list,
                         const adcm::vehicleListStruct& ego_vehicle,
+                        const std::vector<double>& path_x,
+                        const std::vector<double>& path_y,
                         adcm::risk_assessment_Objects& riskAssessment,
                         std::uint8_t edge_state);
 
