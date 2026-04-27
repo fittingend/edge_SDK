@@ -1211,7 +1211,7 @@ void filterClass10SedanNearestInRegion(std::vector<ObstacleData> &mergedList)
     mergedList = std::move(filtered);
 }
 
-// move 단계(state==3) 도중에만 class 20 장애물 중 x>=690 인 것을 제거
+// move 단계(state==3) 도중에만 class 20 장애물 중 x>=690 또는 y<=520 인 것을 제거
 void filterClass20DuringMove(std::vector<ObstacleData> &mergedList)
 {
     constexpr std::uint8_t EDGE_STATE_MOVE = 3;
@@ -1220,6 +1220,7 @@ void filterClass20DuringMove(std::vector<ObstacleData> &mergedList)
 
     constexpr std::uint8_t TARGET_CLASS = 20;
     constexpr double MAX_X_EXCLUSIVE = 690.0;
+    constexpr double MAX_Y_INCLUSIVE = 520.0;
 
     const auto oldSize = mergedList.size();
     mergedList.erase(std::remove_if(mergedList.begin(), mergedList.end(),
@@ -1227,7 +1228,8 @@ void filterClass20DuringMove(std::vector<ObstacleData> &mergedList)
                                     {
                                         if (obs.obstacle_class != TARGET_CLASS)
                                             return false;
-                                        return obs.fused_position_x >= MAX_X_EXCLUSIVE;
+                                        return obs.fused_position_x >= MAX_X_EXCLUSIVE ||
+                                               obs.fused_position_y <= MAX_Y_INCLUSIVE;
                                     }),
                      mergedList.end());
 
@@ -1235,7 +1237,9 @@ void filterClass20DuringMove(std::vector<ObstacleData> &mergedList)
     if (removed > 0)
     {
         adcm::Log::Info() << framePrefix() << "[KATECH] class-20 move-stage filter removed=" << removed
-                          << " (x>=" << MAX_X_EXCLUSIVE << ", MOVE state)";
+                          << " (x>=" << MAX_X_EXCLUSIVE
+                          << " or y<=" << MAX_Y_INCLUSIVE
+                          << ", MOVE state)";
     }
 }
 
