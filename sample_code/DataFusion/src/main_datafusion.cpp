@@ -1268,6 +1268,27 @@ void filterClass20ByRegion(std::vector<ObstacleData> &mergedList)
     }
 }
 
+// 최종 장애물 리스트에서 y<=150 영역의 장애물을 제거
+void filterObstaclesByMinY(std::vector<ObstacleData> &mergedList)
+{
+    constexpr double MIN_Y_EXCLUSIVE = 150.0;
+
+    const auto oldSize = mergedList.size();
+    mergedList.erase(std::remove_if(mergedList.begin(), mergedList.end(),
+                                    [&](const ObstacleData &obs)
+                                    {
+                                        return obs.fused_position_y <= MIN_Y_EXCLUSIVE;
+                                    }),
+                     mergedList.end());
+
+    const auto removed = oldSize - mergedList.size();
+    if (removed > 0)
+    {
+        adcm::Log::Info() << framePrefix() << "[KATECH] y-min filter removed=" << removed
+                          << " threshold=(y>" << MIN_Y_EXCLUSIVE << ")";
+    }
+}
+
 // 최종 융합 리스트에서 class 1 중 특장차(ego) 위치에 붙는 오인식만 제거한다.
 // 맵 좌표계는 10cm 단위이므로 10.0은 1m 반경이다.
 void filterClass1NearEgoByMainVehicleSize(std::vector<ObstacleData> &mergedList)
@@ -3254,6 +3275,7 @@ void ThreadKatech()
         filterClass10SedanNearestInRegion(obstacle_list);
         filterClass20ByRegion(obstacle_list);
         filterClass20DuringMove(obstacle_list);
+        filterObstaclesByMinY(obstacle_list);
         dedupeCloseClass1StaticObstacles(obstacle_list);
         stage2_merge_ms = std::chrono::duration<double, std::milli>(
                               std::chrono::high_resolution_clock::now() - stage2Start)

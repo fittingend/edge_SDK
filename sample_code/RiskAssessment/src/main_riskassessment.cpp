@@ -135,18 +135,9 @@ void injectScenario8RoadPatternForMoveTransition(
     const int anchorY = static_cast<int>(std::lround(pathY[anchorIdx]));
 
     constexpr int ROI_HALF_WIDTH = 70;
-
-    // 건설 현장 노면 시뮬레이션:
-    //   기준 지면 : z=10 (NEG_5_0,  약 0cm)
-    //   성토 구간 : anchor 기준 dx -50 ~ -15 → z=17 (POS_30_35, 약 +33cm) — 흙더미
-    //   절토 구간 : anchor 기준 dx +15 ~ +50 → z=3  (NEG_40_35, 약 -38cm) — 굴착면
-    // 조건 충족:
-    //   i)  경계 인접셀 높이차 = 7bin × 5cm = 35cm ≥ 30cm
-    //   ii) 경계 5셀 기울기 = 35cm / 50cm = 70% ≥ 20%
-    //   iii) σ ≈ 25cm ≥ 15cm
-    constexpr std::uint8_t Z_BASE  = static_cast<std::uint8_t>(RoadIndex::NEG_5_0);    // 10
-    constexpr std::uint8_t Z_MOUND = static_cast<std::uint8_t>(RoadIndex::POS_30_35);  // 17
-    constexpr std::uint8_t Z_TRENCH= static_cast<std::uint8_t>(RoadIndex::NEG_40_35);  // 3
+    constexpr int STEP = 10;
+    constexpr std::uint8_t LOW_Z = static_cast<std::uint8_t>(RoadIndex::LE_NEG_50);
+    constexpr std::uint8_t HIGH_Z = static_cast<std::uint8_t>(RoadIndex::GE_POS_55);
 
     const int minX = std::max(0, anchorX - ROI_HALF_WIDTH);
     const int maxX = std::min(width - 1, anchorX + ROI_HALF_WIDTH);
@@ -156,15 +147,8 @@ void injectScenario8RoadPatternForMoveTransition(
     int changedCells = 0;
     for (int x = minX; x <= maxX; ++x)
     {
-        const int dx = x - anchorX;
-        std::uint8_t z;
-        if (dx >= -50 && dx <= -15)
-            z = Z_MOUND;   // 성토 구간
-        else if (dx >= 15 && dx <= 50)
-            z = Z_TRENCH;  // 절토 구간
-        else
-            z = Z_BASE;    // 기준 지면
-
+        const bool highStripe = ((x / STEP) % 2) != 0;
+        const std::uint8_t z = highStripe ? HIGH_Z : LOW_Z;
         for (int y = minY; y <= maxY; ++y)
         {
             if (map[x][y].road_z != z)
@@ -175,12 +159,11 @@ void injectScenario8RoadPatternForMoveTransition(
         }
     }
 
-    adcm::Log::Info() << "[Scenario8][MOVE_TRANSITION] injected construction-site road pattern"
+    adcm::Log::Info() << "[Scenario8][MOVE_TRANSITION] injected steep road pattern"
                       << " anchor=(" << anchorX << ", " << anchorY << ")"
                       << " roi=[X:" << minX << "~" << maxX << ", Y:" << minY << "~" << maxY << "]"
-                      << " base_z=" << static_cast<int>(Z_BASE)
-                      << " mound_z=" << static_cast<int>(Z_MOUND)
-                      << " trench_z=" << static_cast<int>(Z_TRENCH)
+                      << " low_z=" << static_cast<int>(LOW_Z)
+                      << " high_z=" << static_cast<int>(HIGH_Z)
                       << " changed_cells=" << changedCells;
 }
 }

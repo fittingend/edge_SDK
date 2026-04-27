@@ -1252,6 +1252,10 @@ void resetScenario8State()
     s8_triggered_once = false;
 }
 
+
+
+
+
 void evaluateScenario8(const std::vector<double>& path_x, 
                        const std::vector<double>& path_y, 
                        const std::vector<adcm::map_2dListVector>& map_2d, 
@@ -1273,50 +1277,30 @@ void evaluateScenario8(const std::vector<double>& path_x,
     }
 
     // =========================
-    // Scenario 8: 단차/급경사 검출
-    // - road_z: RoadIndex enum (0~22 valid, 0xFF OUT, 0xFE UNSCANNED)
-    // - ROI: 전역경로 주변 SHIFT_DISTANCE(5m) 내 스캔
-    // - 추가 제한: MOVE 전환 시 노면 주입 함수의 ROI(anchor/path[1], half-width=70)와 교집합만 평가
-    // - 판정 조건 (OR):
-    //   i)  인접셀 높이차 >= 30cm
-    //   ii) 5셀(50cm) 간격 기울기 >= 20%
-    //   iii) ROI 내 z 샘플 표준편차 >= 15cm → risk_count 강제 임계 초과
+    // Scenario 8: 급경사(주행 불가 수준) 검출
+    // - road_z: RoadZHeight enum (0~22 valid, 0xFF OUT)
+    // - ROI: 전역경로 주변 SHIFT_DISTANCE 내 스캔
+    // - 판정: slope >= 0.8 (80% 경사)인 급격한 높이 변화가 ROI 내에서 일정 횟수 이상 발견되면 Hazard
     // =========================
 
     // 파라미터
     constexpr int    SHIFT_DISTANCE   = 50;     // 전역경로 근방 5m (10cm/cell 가정)
-    constexpr int    STEP             = 5;       // 5셀 = 50cm 간격에서 기울기 측정
+    constexpr int    STEP             = 10;      // 5셀 = 50cm 간격에서 높이 변화 측정
     constexpr double CELL_SIZE_CM     = 10.0;   // 1셀 = 10cm
     constexpr double BIN_CM           = 5.0;    // road_z 1단계(bin) = 5cm
-    constexpr double HEIGHT_DIFF_CM   = 30.0;   // i) 인접셀 높이차 임계: 30cm 이상
-    constexpr double SLOPE_THRESHOLD  = 0.20;   // ii) 기울기 임계: 20% 이상
-    constexpr double STDDEV_THRESHOLD = 15.0;   // iii) 표준편차 임계: 15cm 이상
-    constexpr int    RISK_THRESHOLD   = 20;     // 위험 카운트 임계값
+    constexpr double SLOPE_HARD       = 0.9;    // 80% 경사 이상이면 위험(주행 안정성 저해/불가 수준)
+    constexpr int    RISK_HIT_THRESH  = 3;      // ROI 내 급경사 발견 횟수 임계(노이즈 방지)
+
+    // slope = dz_cm / dist_cm
+    // dz_cm = |bin1 - bin0| * BIN_CM
+    // dist_cm = STEP * CELL_SIZE_CM
+    // slope >= SLOPE_HARD  <=> |bin1 - bin0| >= SLOPE_HARD * dist_cm / BIN_CM
+    constexpr int BIN_DIFF_THRESHOLD =
+        static_cast<int>(std::ceil(SLOPE_HARD * (STEP * CELL_SIZE_CM) / BIN_CM)); // 예: 0.8*50/5=8
 
     Point2D p1{}, p2{}, p3{}, p4{};
     const int width  = static_cast<int>(map_2d.size());
     const int height = width ? static_cast<int>(map_2d[0].size()) : 0;
-
-    if (width <= 0 || height <= 0 || path_x.empty() || path_x.size() != path_y.size())
-    {
-        SCENARIO_LOG_INFO() << "[시나리오8] map/path 유효하지 않음 → 종료";
-        SCENARIO_LOG_INFO() << "=============KATECH: scenario 8 DONE==============";
-        return;
-    }
-
-    // MOVE 전환 시 주입된 시나리오8 노면 패턴 ROI와 동일한 범위
-    const std::size_t anchorIdx = std::min(path_x.size(), path_y.size()) > 1 ? 1 : 0;
-    const int anchorX = static_cast<int>(std::lround(path_x[anchorIdx]));
-    const int anchorY = static_cast<int>(std::lround(path_y[anchorIdx]));
-    constexpr int INJECTED_ROI_HALF_WIDTH = 70;
-    const int injectedRoiMinX = std::max(0, anchorX - INJECTED_ROI_HALF_WIDTH);
-    const int injectedRoiMaxX = std::min(width - 1, anchorX + INJECTED_ROI_HALF_WIDTH);
-    const int injectedRoiMinY = std::max(0, anchorY - INJECTED_ROI_HALF_WIDTH);
-    const int injectedRoiMaxY = std::min(height - 1, anchorY + INJECTED_ROI_HALF_WIDTH);
-
-    SCENARIO_LOG_INFO() << "[시나리오8] injected ROI anchor=(" << anchorX << "," << anchorY
-                        << ") roi=[X:" << injectedRoiMinX << "~" << injectedRoiMaxX
-                        << ", Y:" << injectedRoiMinY << "~" << injectedRoiMaxY << "]";
 
     auto isValidZ = [&](uint8_t z) -> bool {
         return z <= static_cast<uint8_t>(RoadIndex::GE_POS_55); // 0~22
@@ -1366,83 +1350,62 @@ void evaluateScenario8(const std::vector<double>& path_x,
         int minY = std::max(0,        static_cast<int>(std::floor(std::min({p1.y, p2.y, p3.y, p4.y}))));
         int maxY = std::min(height-1, static_cast<int>(std::ceil (std::max({p1.y, p2.y, p3.y, p4.y}))));
 
-        // 주입 ROI와 교집합 범위만 시나리오8 평가
-        minX = std::max(minX, injectedRoiMinX);
-        maxX = std::min(maxX, injectedRoiMaxX);
-        minY = std::max(minY, injectedRoiMinY);
-        maxY = std::min(maxY, injectedRoiMaxY);
+        int hit = 0;
 
-        if (minX > maxX || minY > maxY)
-            continue;
+        // === 급경사 스캔 시작 ===
+        for (int x = minX; x <= maxX && hit < RISK_HIT_THRESH; ++x) {
+            for (int y = minY; y <= maxY && hit < RISK_HIT_THRESH; ++y) {
 
-        int risk_count = 0;
-        std::vector<double> z_cm_samples;
-        z_cm_samples.reserve(std::max(1, (maxX - minX + 1) * (maxY - minY + 1)));
+                const uint8_t z0_u = map_2d[x][y].road_z;
+                if (!isValidZ(z0_u)) continue;
 
-        // === 노면 상태 스캔 ===
-        for (int x = minX; x <= maxX && risk_count < RISK_THRESHOLD; ++x) {
-            for (int y = minY; y <= maxY && risk_count < RISK_THRESHOLD; ++y) {
+                const int z0 = static_cast<int>(z0_u);
 
-                const uint8_t z_xy_u = map_2d[x][y].road_z;
-                if (!isValidZ(z_xy_u)) continue;
-
-                const double z_xy_cm = static_cast<double>(z_xy_u) * BIN_CM;
-                z_cm_samples.push_back(z_xy_cm);
-
-                // i) 인접셀 높이차 ≥ 30cm
-                if (x > minX) {
-                    const uint8_t z_prev_u = map_2d[x - 1][y].road_z;
-                    if (isValidZ(z_prev_u)) {
-                        const double dz_cm = std::fabs(z_xy_cm - static_cast<double>(z_prev_u) * BIN_CM);
-                        if (dz_cm >= HEIGHT_DIFF_CM) ++risk_count;
-                    }
-                }
-                if (y > minY) {
-                    const uint8_t z_prev_u = map_2d[x][y - 1].road_z;
-                    if (isValidZ(z_prev_u)) {
-                        const double dz_cm = std::fabs(z_xy_cm - static_cast<double>(z_prev_u) * BIN_CM);
-                        if (dz_cm >= HEIGHT_DIFF_CM) ++risk_count;
-                    }
-                }
-
-                // ii) 기울기 ≥ 20% (5셀 = 50cm 간격)
+                // +X 방향 (x + STEP, y)
                 if (x + STEP <= maxX) {
-                    const uint8_t z_far_u = map_2d[x + STEP][y].road_z;
-                    if (isValidZ(z_far_u)) {
-                        const double dz_cm = std::fabs(static_cast<double>(z_far_u) * BIN_CM - z_xy_cm);
-                        const double slope = dz_cm / (STEP * CELL_SIZE_CM);
-                        if (slope >= SLOPE_THRESHOLD) ++risk_count;
+                    const uint8_t z1_u = map_2d[x + STEP][y].road_z;
+                    if (isValidZ(z1_u)) {
+                        const int dz_bin = std::abs(static_cast<int>(z1_u) - z0);
+                        if (dz_bin >= BIN_DIFF_THRESHOLD) {
+                            ++hit;
+                            // 필요 시 디버깅 로그
+                            SCENARIO_LOG_INFO() << "Steep slope hit(+X): seg=" << i
+                                                << " at (" << x << "," << y << ") dz_bin=" << dz_bin;
+                        }
                     }
                 }
+
+                // +Y 방향 (x, y + STEP)
                 if (y + STEP <= maxY) {
-                    const uint8_t z_far_u = map_2d[x][y + STEP].road_z;
-                    if (isValidZ(z_far_u)) {
-                        const double dz_cm = std::fabs(static_cast<double>(z_far_u) * BIN_CM - z_xy_cm);
-                        const double slope = dz_cm / (STEP * CELL_SIZE_CM);
-                        if (slope >= SLOPE_THRESHOLD) ++risk_count;
+                    const uint8_t z1_u = map_2d[x][y + STEP].road_z;
+                    if (isValidZ(z1_u)) {
+                        const int dz_bin = std::abs(static_cast<int>(z1_u) - z0);
+                        if (dz_bin >= BIN_DIFF_THRESHOLD) {
+                            ++hit;
+                            SCENARIO_LOG_INFO() << "Steep slope hit(+Y): seg=" << i
+                                                << " at (" << x << "," << y << ") dz_bin=" << dz_bin;
+                        }
+                    }
+                }
+
+                // (선택) 대각선: 더 강하게 잡고 싶으면 활성화
+                if (x + STEP <= maxX && y + STEP <= maxY) {
+                    const uint8_t z1_u = map_2d[x + STEP][y + STEP].road_z;
+                    if (isValidZ(z1_u)) {
+                        const int dz_bin = std::abs(static_cast<int>(z1_u) - z0);
+                        if (dz_bin >= BIN_DIFF_THRESHOLD) {
+                            ++hit;
+                            SCENARIO_LOG_INFO() << "Steep slope hit(DIAG): seg=" << i
+                                                << " at (" << x << "," << y << ") dz_bin=" << dz_bin;
+                        }
                     }
                 }
             }
         }
 
-        // iii) 표준편차 ≥ 15cm → 강제 위험 판정
-        if (!z_cm_samples.empty()) {
-            double sum = 0.0;
-            for (double v : z_cm_samples) sum += v;
-            const double mean = sum / static_cast<double>(z_cm_samples.size());
-            double sq_sum = 0.0;
-            for (double v : z_cm_samples) { const double d = v - mean; sq_sum += d * d; }
-            const double stddev = std::sqrt(sq_sum / static_cast<double>(z_cm_samples.size()));
-            if (stddev >= STDDEV_THRESHOLD) {
-                SCENARIO_LOG_INFO() << "Scenario 8 stddev hazard: seg=" << i
-                                    << " stddev=" << stddev << " cm";
-                risk_count += RISK_THRESHOLD;
-            }
-        }
-
-        if (risk_count >= RISK_THRESHOLD) {
-            SCENARIO_LOG_INFO() << "Scenario 8 hazard detected at segment " << i
-                                << " (risk_count=" << risk_count << ")";
+        if (hit >= RISK_HIT_THRESH) {
+            SCENARIO_LOG_INFO() << "Scenario 8 steep-slope hazard detected at segment " << i
+                                << " (hit=" << hit << ", bin_diff_th=" << BIN_DIFF_THRESHOLD << ")";
 
             out.hazard_path_start.push_back(adcm::globalPathPosition{ seg_start_x, seg_start_y });
             out.hazard_path_end.push_back  (adcm::globalPathPosition{ seg_end_x,   seg_end_y   });
