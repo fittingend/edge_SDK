@@ -1276,6 +1276,7 @@ void evaluateScenario8(const std::vector<double>& path_x,
     // Scenario 8: 단차/급경사 검출
     // - road_z: RoadIndex enum (0~22 valid, 0xFF OUT, 0xFE UNSCANNED)
     // - ROI: 전역경로 주변 SHIFT_DISTANCE(5m) 내 스캔
+    // - 추가 제한: MOVE 전환 시 노면 주입 함수의 ROI(anchor/path[1], half-width=70)와 교집합만 평가
     // - 판정 조건 (OR):
     //   i)  인접셀 높이차 >= 30cm
     //   ii) 5셀(50cm) 간격 기울기 >= 20%
@@ -1295,6 +1296,27 @@ void evaluateScenario8(const std::vector<double>& path_x,
     Point2D p1{}, p2{}, p3{}, p4{};
     const int width  = static_cast<int>(map_2d.size());
     const int height = width ? static_cast<int>(map_2d[0].size()) : 0;
+
+    if (width <= 0 || height <= 0 || path_x.empty() || path_x.size() != path_y.size())
+    {
+        SCENARIO_LOG_INFO() << "[시나리오8] map/path 유효하지 않음 → 종료";
+        SCENARIO_LOG_INFO() << "=============KATECH: scenario 8 DONE==============";
+        return;
+    }
+
+    // MOVE 전환 시 주입된 시나리오8 노면 패턴 ROI와 동일한 범위
+    const std::size_t anchorIdx = std::min(path_x.size(), path_y.size()) > 1 ? 1 : 0;
+    const int anchorX = static_cast<int>(std::lround(path_x[anchorIdx]));
+    const int anchorY = static_cast<int>(std::lround(path_y[anchorIdx]));
+    constexpr int INJECTED_ROI_HALF_WIDTH = 70;
+    const int injectedRoiMinX = std::max(0, anchorX - INJECTED_ROI_HALF_WIDTH);
+    const int injectedRoiMaxX = std::min(width - 1, anchorX + INJECTED_ROI_HALF_WIDTH);
+    const int injectedRoiMinY = std::max(0, anchorY - INJECTED_ROI_HALF_WIDTH);
+    const int injectedRoiMaxY = std::min(height - 1, anchorY + INJECTED_ROI_HALF_WIDTH);
+
+    SCENARIO_LOG_INFO() << "[시나리오8] injected ROI anchor=(" << anchorX << "," << anchorY
+                        << ") roi=[X:" << injectedRoiMinX << "~" << injectedRoiMaxX
+                        << ", Y:" << injectedRoiMinY << "~" << injectedRoiMaxY << "]";
 
     auto isValidZ = [&](uint8_t z) -> bool {
         return z <= static_cast<uint8_t>(RoadIndex::GE_POS_55); // 0~22
@@ -1343,6 +1365,15 @@ void evaluateScenario8(const std::vector<double>& path_x,
         int maxX = std::min(width-1,  static_cast<int>(std::ceil (std::max({p1.x, p2.x, p3.x, p4.x}))));
         int minY = std::max(0,        static_cast<int>(std::floor(std::min({p1.y, p2.y, p3.y, p4.y}))));
         int maxY = std::min(height-1, static_cast<int>(std::ceil (std::max({p1.y, p2.y, p3.y, p4.y}))));
+
+        // 주입 ROI와 교집합 범위만 시나리오8 평가
+        minX = std::max(minX, injectedRoiMinX);
+        maxX = std::min(maxX, injectedRoiMaxX);
+        minY = std::max(minY, injectedRoiMinY);
+        maxY = std::min(maxY, injectedRoiMaxY);
+
+        if (minX > maxX || minY > maxY)
+            continue;
 
         int risk_count = 0;
         std::vector<double> z_cm_samples;

@@ -3143,7 +3143,8 @@ void ThreadKatech()
             if (resetObstacleListPending.exchange(false, std::memory_order_relaxed))
             {
                 previous_obstacle_list.clear();
-                adcm::Log::Info() << prefix << "[KATECH] Work 단계 전환 - 장애물 리스트 리셋 완료";
+                obstacleTracker.reset();
+                adcm::Log::Info() << prefix << "[KATECH] Work 단계 전환 - 장애물 리스트 및 추적기 리셋 완료";
             }
 
             adcm::Log::Info() << prefix << "[KATECH] FUSION_START";
