@@ -160,6 +160,7 @@ static std::unordered_set<std::uint64_t> b255AddedCells;
 static std::unordered_map<std::uint16_t, std::uint32_t> obstacleMissingFramesById;
 static std::atomic<std::uint8_t> currentEdgeState{0}; // 0=idle,1=search,2=return,3=move,4=work
 static std::atomic<bool> keepDynamicObstaclesUntilWork{false};
+static std::atomic<bool> resetObstacleListPending{false};
 static bool isPointInsidePolygon(const Point2D &point, const std::vector<Point2D> &polygon);
 static std::mutex mtx_boundary_polygon_cache;
 static std::vector<Point2D> cachedWorkBoundaryPolygon;
@@ -3043,6 +3044,7 @@ void ThreadReceiveEdgeInfo()
         {
             auto data = edgeInformation_subscriber.getEvent();
             const std::uint8_t state = static_cast<std::uint8_t>(data->state);
+            const std::uint8_t prevState = currentEdgeState.load(std::memory_order_relaxed);
             currentEdgeState.store(state, std::memory_order_relaxed);
 
             constexpr std::uint8_t EDGE_STATE_MOVE = 3;
@@ -3054,6 +3056,11 @@ void ThreadReceiveEdgeInfo()
             else if (state == EDGE_STATE_WORK)
             {
                 keepDynamicObstaclesUntilWork.store(false, std::memory_order_relaxed);
+                if (prevState != EDGE_STATE_WORK)
+                {
+                    resetObstacleListPending.store(true, std::memory_order_relaxed);
+                    adcm::Log::Info() << "[EDGEINFO] Work 단계 전환 감지 - 장애물 리스트 리셋 예약";
+                }
             }
 
             adcm::Log::Info() << "[EDGEINFO] EDGE System State: " << data->state;
@@ -3104,6 +3111,13 @@ void ThreadKatech()
                            { return (get_workinfo && (((!worksub1 || sub1) && (!worksub2 || sub2) && (!worksub3 || sub3) && (!worksub4 || sub4)))); });
 
             startTime = std::chrono::high_resolution_clock::now();
+
+            if (resetObstacleListPending.exchange(false, std::memory_order_relaxed))
+            {
+                previous_obstacle_list.clear();
+                adcm::Log::Info() << prefix << "[KATECH] Work 단계 전환 - 장애물 리스트 리셋 완료";
+            }
+
             adcm::Log::Info() << prefix << "[KATECH] FUSION_START";
             adcm::Log::Info() << prefix << "==============KATECH modified code start==========";
             //==============1. 차량 및 장애물 데이터 위치 변환=================
