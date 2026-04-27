@@ -1211,6 +1211,34 @@ void filterClass10SedanNearestInRegion(std::vector<ObstacleData> &mergedList)
     mergedList = std::move(filtered);
 }
 
+// move 단계(state==3) 도중에만 class 20 장애물 중 x>=690 인 것을 제거
+void filterClass20DuringMove(std::vector<ObstacleData> &mergedList)
+{
+    constexpr std::uint8_t EDGE_STATE_MOVE = 3;
+    if (currentEdgeState.load(std::memory_order_relaxed) != EDGE_STATE_MOVE)
+        return;
+
+    constexpr std::uint8_t TARGET_CLASS = 20;
+    constexpr double MAX_X_EXCLUSIVE = 690.0;
+
+    const auto oldSize = mergedList.size();
+    mergedList.erase(std::remove_if(mergedList.begin(), mergedList.end(),
+                                    [&](const ObstacleData &obs)
+                                    {
+                                        if (obs.obstacle_class != TARGET_CLASS)
+                                            return false;
+                                        return obs.fused_position_x >= MAX_X_EXCLUSIVE;
+                                    }),
+                     mergedList.end());
+
+    const auto removed = oldSize - mergedList.size();
+    if (removed > 0)
+    {
+        adcm::Log::Info() << framePrefix() << "[KATECH] class-20 move-stage filter removed=" << removed
+                          << " (x>=" << MAX_X_EXCLUSIVE << ", MOVE state)";
+    }
+}
+
 // 최종 장애물 리스트에서 class 20은 x>480 영역만 유지
 void filterClass20ByRegion(std::vector<ObstacleData> &mergedList)
 {
@@ -3220,6 +3248,7 @@ void ThreadKatech()
         filterClass1ExcavatorNearestInRegion(obstacle_list);
         filterClass10SedanNearestInRegion(obstacle_list);
         filterClass20ByRegion(obstacle_list);
+        filterClass20DuringMove(obstacle_list);
         dedupeCloseClass1StaticObstacles(obstacle_list);
         stage2_merge_ms = std::chrono::duration<double, std::milli>(
                               std::chrono::high_resolution_clock::now() - stage2Start)

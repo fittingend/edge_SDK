@@ -1086,6 +1086,12 @@ void evaluateScenario7(const std::vector<double>& path_x,
         return;
     }
 
+    if (path_x.empty() || path_x.size() != path_y.size()) {
+        SCENARIO_LOG_INFO() << "[시나리오7] 경로 데이터 없음 → 종료";
+        SCENARIO_LOG_INFO() << "============= KATECH: Scenario 7 DONE =============";
+        return;
+    }
+
     auto isUnscanned = [&](uint8_t road_z)
     {
         return road_z == static_cast<uint8_t>(IndexToValue::UNSCANNED);
@@ -1098,8 +1104,8 @@ void evaluateScenario7(const std::vector<double>& path_x,
         clampValue(config.scenario7MinUnscannedRatio, 0.0, 1.0);
     constexpr int kRoiMinX = 600;
     constexpr int kRoiMaxX = 650;
-    constexpr int kRoiMinY = 520;
-    constexpr int kRoiMaxY = 540;
+    constexpr int kRoiMinY = 500;
+    constexpr int kRoiMaxY = 560;
 
     adcm::riskAssessmentStruct r{};
     r.hazard_class = SCENARIO_7;
@@ -1187,7 +1193,29 @@ void evaluateScenario7(const std::vector<double>& path_x,
             }
         }
 
-        // ROI 내부 경로 포인트가 없으면 기존 ROI 코너로 폴백
+        // ROI 내부 경로 포인트가 없으면 경로에서 ROI 중심에 가장 가까운 포인트 사용
+        if (!found_path_in_roi && !path_x.empty() && path_x.size() == path_y.size()) {
+            const double roi_cx = (roi_x_start + roi_x_end) * 0.5;
+            const double roi_cy = (roi_y_start + roi_y_end) * 0.5;
+            std::size_t nearest_idx = 0;
+            double nearest_dist2 = std::numeric_limits<double>::max();
+            for (std::size_t i = 0; i < path_x.size(); ++i) {
+                const double dx = path_x[i] - roi_cx;
+                const double dy = path_y[i] - roi_cy;
+                const double d2 = dx * dx + dy * dy;
+                if (d2 < nearest_dist2) {
+                    nearest_dist2 = d2;
+                    nearest_idx = i;
+                }
+            }
+            const std::size_t start_idx = (nearest_idx > 0) ? (nearest_idx - 1) : nearest_idx;
+            const std::size_t end_idx = (nearest_idx + 1 < path_x.size()) ? (nearest_idx + 1) : nearest_idx;
+            start = adcm::globalPathPosition{path_x[start_idx], path_y[start_idx]};
+            end = adcm::globalPathPosition{path_x[end_idx], path_y[end_idx]};
+            found_path_in_roi = true; // nearest 포인트 사용
+        }
+
+        // 경로 자체가 없으면 ROI 코너로 폴백 (최후 수단)
         if (!found_path_in_roi) {
             start = adcm::globalPathPosition{static_cast<double>(roi_x_start), static_cast<double>(roi_y_start)};
             end = adcm::globalPathPosition{static_cast<double>(roi_x_end), static_cast<double>(roi_y_end)};

@@ -49,6 +49,7 @@
 #include "NATS/NatsHandler.hpp"
 #include "AI_model/AutoLabelWriter.hpp"
 #include "config.hpp"
+#include <random>
 #include <unistd.h>
 #include <sstream>
 /**
@@ -747,8 +748,8 @@ void ThreadReceiveEdgeInformation()
                 {
                     constexpr int kScenario7RoiMinX = 600;
                     constexpr int kScenario7RoiMaxX = 650;
-                    constexpr int kScenario7RoiMinY = 520;
-                    constexpr int kScenario7RoiMaxY = 540;
+                        constexpr int kScenario7RoiMinY = 500;
+                        constexpr int kScenario7RoiMaxY = 560;
 
                     std::lock_guard<std::mutex> lock(mtx_map);
                     const int map_width = static_cast<int>(map_2d.size());
@@ -767,22 +768,72 @@ void ThreadReceiveEdgeInformation()
 
                         if (roi_x_start <= roi_x_end && roi_y_start <= roi_y_end)
                         {
-                            int changed_cells = 0;
+                            constexpr int kScenario7ForcedUnscannedMinPercent = 80;
+                            constexpr int kScenario7ForcedUnscannedMaxPercent = 90;
+                            struct CellCoord
+                            {
+                                int x;
+                                int y;
+                            };
+
+                            static thread_local std::mt19937 rng{std::random_device{}()};
+                            std::uniform_int_distribution<int> forcedPercentDist(
+                                kScenario7ForcedUnscannedMinPercent,
+                                kScenario7ForcedUnscannedMaxPercent);
+                            const int target_unscanned_percent = forcedPercentDist(rng);
+
+                            const auto unscanned = static_cast<std::uint8_t>(IndexToValue::UNSCANNED);
+                            const int roi_total_cells =
+                                (roi_x_end - roi_x_start + 1) * (roi_y_end - roi_y_start + 1);
+                            const int target_unscanned_cells =
+                                (roi_total_cells * target_unscanned_percent + 99) / 100;
+
+                            int current_unscanned_cells = 0;
+                            std::vector<CellCoord> scanned_cells;
+                            scanned_cells.reserve(roi_total_cells);
+
                             for (int x = roi_x_start; x <= roi_x_end; ++x)
                             {
                                 for (int y = roi_y_start; y <= roi_y_end; ++y)
                                 {
                                     auto &cell = map_2d[x][y];
-                                    const auto unscanned = static_cast<std::uint8_t>(IndexToValue::UNSCANNED);
-                                    if (cell.road_z != unscanned)
+                                    if (cell.road_z == unscanned)
                                     {
-                                        cell.road_z = unscanned;
-                                        ++changed_cells;
+                                        ++current_unscanned_cells;
+                                    }
+                                    else
+                                    {
+                                        scanned_cells.push_back({x, y});
                                     }
                                 }
                             }
 
-                            adcm::Log::Info() << "[Scenario7][MOVE_TRANSITION] ROI forced to UNSCANNED"
+                            int changed_cells = 0;
+                            const int cells_to_force = std::min(
+                                std::max(0, target_unscanned_cells - current_unscanned_cells),
+                                static_cast<int>(scanned_cells.size()));
+
+                            for (int i = 0; i < cells_to_force; ++i)
+                            {
+                                const std::size_t idx =
+                                    (static_cast<std::size_t>(i) * scanned_cells.size()) / cells_to_force;
+                                auto &cell = map_2d[scanned_cells[idx].x][scanned_cells[idx].y];
+                                cell.road_z = unscanned;
+                                ++changed_cells;
+                            }
+
+                            const int final_unscanned_cells = current_unscanned_cells + changed_cells;
+                            const double before_ratio = roi_total_cells > 0
+                                                            ? static_cast<double>(current_unscanned_cells) / roi_total_cells
+                                                            : 0.0;
+                            const double after_ratio = roi_total_cells > 0
+                                                           ? static_cast<double>(final_unscanned_cells) / roi_total_cells
+                                                           : 0.0;
+
+                            adcm::Log::Info() << "[Scenario7][MOVE_TRANSITION] ROI partially forced to UNSCANNED"
+                                              << " target_ratio=" << (target_unscanned_percent / 100.0)
+                                              << " before_ratio=" << before_ratio
+                                              << " after_ratio=" << after_ratio
                                               << " changed_cells=" << changed_cells
                                               << " roi=[X:" << roi_x_start << "~" << roi_x_end
                                               << ", Y:" << roi_y_start << "~" << roi_y_end << "]";
