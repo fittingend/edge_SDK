@@ -909,6 +909,36 @@ static std::vector<ObstacleData> dedupeObstacleIdWithQuality(
         return score;
     };
 
+    auto scoreToString = [&](const ObstacleData &candidate) {
+        const CandidateScore score = buildScore(candidate);
+        std::ostringstream oss;
+        oss << "id=" << candidate.obstacle_id
+            << " class=" << static_cast<int>(candidate.obstacle_class)
+            << " pos=(" << formatCoord2(candidate.fused_position_x)
+            << ", " << formatCoord2(candidate.fused_position_y) << ")"
+            << " std=";
+        if (std::isfinite(score.stdDev))
+        {
+            oss << formatCoord2(score.stdDev);
+        }
+        else
+        {
+            oss << "inf";
+        }
+        oss << " ts=" << score.timestamp
+            << " has_ref=" << (score.hasReference ? 1 : 0)
+            << " cont_dist=";
+        if (std::isfinite(score.continuityDistance))
+        {
+            oss << formatCoord2(score.continuityDistance);
+        }
+        else
+        {
+            oss << "inf";
+        }
+        return oss.str();
+    };
+
     auto isBetter = [&](const ObstacleData &candidate, const ObstacleData &currentBest) {
         const CandidateScore candScore = buildScore(candidate);
         const CandidateScore bestScore = buildScore(currentBest);
@@ -942,6 +972,9 @@ static std::vector<ObstacleData> dedupeObstacleIdWithQuality(
     std::unordered_map<std::uint16_t, size_t> indexById;
     indexById.reserve(inputList.size());
 
+    std::vector<std::string> dedupeDetailLogs;
+    dedupeDetailLogs.reserve(inputList.size());
+
     size_t removedCount = 0;
     for (const auto &obs : inputList)
     {
@@ -954,9 +987,39 @@ static std::vector<ObstacleData> dedupeObstacleIdWithQuality(
         }
 
         size_t &bestIdx = it->second;
+        if (deduped[bestIdx].obstacle_class != obs.obstacle_class)
+        {
+            // Guardrail: never allow different classes to share the same obstacle_id.
+            ObstacleData remapped = obs;
+            const std::uint16_t oldId = remapped.obstacle_id;
+            remapped.obstacle_id = static_cast<std::uint16_t>(id_manager.allocID());
+
+            indexById[remapped.obstacle_id] = deduped.size();
+            deduped.push_back(remapped);
+
+            adcm::Log::Info() << tag
+                              << " class-mismatch id-guard remap old_id=" << oldId
+                              << " old_class=" << static_cast<int>(deduped[bestIdx].obstacle_class)
+                              << " new_class=" << static_cast<int>(obs.obstacle_class)
+                              << " remapped_id=" << remapped.obstacle_id;
+            continue;
+        }
+
+        const ObstacleData oldBest = deduped[bestIdx];
         if (isBetter(obs, deduped[bestIdx]))
         {
             deduped[bestIdx] = obs;
+            std::ostringstream oss;
+            oss << tag << " dedupe-by-id replace: keep_new { " << scoreToString(obs)
+                << " } drop_old { " << scoreToString(oldBest) << " }";
+            dedupeDetailLogs.push_back(oss.str());
+        }
+        else
+        {
+            std::ostringstream oss;
+            oss << tag << " dedupe-by-id drop: keep_old { " << scoreToString(oldBest)
+                << " } drop_new { " << scoreToString(obs) << " }";
+            dedupeDetailLogs.push_back(oss.str());
         }
         removedCount += 1;
     }
@@ -967,6 +1030,18 @@ static std::vector<ObstacleData> dedupeObstacleIdWithQuality(
                           << " dedupe-by-id removed=" << removedCount
                           << " before=" << inputList.size()
                           << " after=" << deduped.size();
+
+        constexpr size_t kMaxDetailLogs = 20;
+        const size_t detailCount = std::min(kMaxDetailLogs, dedupeDetailLogs.size());
+        for (size_t i = 0; i < detailCount; ++i)
+        {
+            adcm::Log::Info() << dedupeDetailLogs[i];
+        }
+        if (dedupeDetailLogs.size() > kMaxDetailLogs)
+        {
+            adcm::Log::Info() << tag << " dedupe-by-id detail omitted="
+                              << (dedupeDetailLogs.size() - kMaxDetailLogs);
+        }
     }
 
     return deduped;
@@ -1209,6 +1284,34 @@ void filterClass10SedanNearestInRegion(std::vector<ObstacleData> &mergedList)
     }
 
     mergedList = std::move(filtered);
+}
+
+// class 1 공사차량 중 lists.ini 정적 관리 영역(x>=800, y>=540)은 센서 입력 단계에서 제거한다.
+// 해당 영역 장애물은 lists.ini로 고정 등록하여 사용하므로 센서 데이터는 드롭한다.
+void filterClass1InStaticListRegion(std::vector<ObstacleData> &obstacleList)
+{
+    constexpr std::uint8_t TARGET_CLASS = 1;
+    constexpr double MIN_X = 800.0;
+    constexpr double MIN_Y = 540.0;
+
+    const auto oldSize = obstacleList.size();
+    obstacleList.erase(std::remove_if(obstacleList.begin(), obstacleList.end(),
+                                      [&](const ObstacleData &obs)
+                                      {
+                                          if (obs.obstacle_class != TARGET_CLASS)
+                                              return false;
+                                          return obs.fused_position_x >= MIN_X &&
+                                                 obs.fused_position_y >= MIN_Y;
+                                      }),
+                       obstacleList.end());
+
+    const auto removed = oldSize - obstacleList.size();
+    if (removed > 0)
+    {
+        adcm::Log::Info() << framePrefix()
+                          << "[KATECH] class-1 static-list region filter removed=" << removed
+                          << " threshold=(x>=" << MIN_X << ", y>=" << MIN_Y << ")";
+    }
 }
 
 // move 단계(state==3) 도중에만 class 20 장애물 중 x>=690 또는 y<=520 인 것을 제거
@@ -3240,13 +3343,25 @@ void ThreadKatech()
                 return;
 
             size_t before_count = obstacles.size();
+            std::vector<std::string> removedDetailLogs;
+            removedDetailLogs.reserve(obstacles.size());
             obstacles.erase(std::remove_if(obstacles.begin(), obstacles.end(),
                                            [&](const ObstacleData &obs) {
                                                const Point2D point = {obs.fused_position_x, obs.fused_position_y};
                                                for (const auto &zone : forbiddenZonePolygons)
                                                {
                                                    if (isPointInsidePolygon(point, zone.polygon))
+                                                   {
+                                                       std::ostringstream oss;
+                                                       oss << prefix
+                                                           << "[BOUNDARY255_FILTER] drop id=" << obs.obstacle_id
+                                                           << " class=" << static_cast<int>(obs.obstacle_class)
+                                                           << " pos=(" << formatCoord2(obs.fused_position_x)
+                                                           << ", " << formatCoord2(obs.fused_position_y) << ")"
+                                                           << " zone=" << zone.name;
+                                                       removedDetailLogs.push_back(oss.str());
                                                        return true;
+                                                   }
                                                }
                                                return false;
                                            }),
@@ -3256,6 +3371,18 @@ void ThreadKatech()
             {
                 adcm::Log::Info() << prefix << "[BOUNDARY255_FILTER] removed " << (before_count - after_count)
                                   << " obstacles inside forbidden zone(s)";
+
+                constexpr size_t kMaxBoundaryDetailLogs = 20;
+                const size_t detailCount = std::min(kMaxBoundaryDetailLogs, removedDetailLogs.size());
+                for (size_t i = 0; i < detailCount; ++i)
+                {
+                    adcm::Log::Info() << removedDetailLogs[i];
+                }
+                if (removedDetailLogs.size() > kMaxBoundaryDetailLogs)
+                {
+                    adcm::Log::Info() << prefix << "[BOUNDARY255_FILTER] detail omitted="
+                                      << (removedDetailLogs.size() - kMaxBoundaryDetailLogs);
+                }
             }
         };
 
@@ -3264,6 +3391,13 @@ void ThreadKatech()
         filterObstaclesByCfgB255(obstacle_list_sub2);
         filterObstaclesByCfgB255(obstacle_list_sub3);
         filterObstaclesByCfgB255(obstacle_list_sub4);
+
+        // lists.ini 정적 관리 영역(class1, x>=800, y>=540) 센서 입력 드롭
+        filterClass1InStaticListRegion(obstacle_list_main);
+        filterClass1InStaticListRegion(obstacle_list_sub1);
+        filterClass1InStaticListRegion(obstacle_list_sub2);
+        filterClass1InStaticListRegion(obstacle_list_sub3);
+        filterClass1InStaticListRegion(obstacle_list_sub4);
 
         // ==============2. 장애물 데이터 융합 / 3. 특장차 및 보조차량 제거 / 4. 장애물 ID 부여 =================
         const auto stage2Start = std::chrono::high_resolution_clock::now();
