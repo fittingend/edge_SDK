@@ -12,7 +12,12 @@ IDManager::IDManager()
 
 int IDManager::allocID()
 {
-    return id_Notused[--id_Counter];
+    int id = id_Notused[--id_Counter];
+    if (id == 466)
+    {
+        id = id_Notused[--id_Counter];
+    }
+    return id;
 }
 
 void IDManager::retID(int id)

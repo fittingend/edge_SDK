@@ -293,12 +293,10 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
 
     for (const auto& obs : obstacle_list) {
         // ----------------------------------------------------
-        // (i) 조건: 차량이면서 정지 상태 OR 높이 2m 이상 정적 장애물
+        // (i) 조건: class 1 공사차량
         const bool is_target_vehicle_class = (obs.obstacle_class == 1);
-        bool cond_vehicle_stopped = (is_target_vehicle_class && obs.stop_count >= gStopValue);
-        //bool cond_static_high     = (obs.obstacle_class >= 30 && obs.obstacle_class <= 49 && obs.fused_cuboid_z > HEIGHT_THRESH_M);
 
-        if (!cond_vehicle_stopped) continue;
+        if (!is_target_vehicle_class) continue;
 
         const bool coord_in_range =
             (obs.fused_position_x >= MIN_TRIGGER_X_DM) &&
@@ -306,9 +304,9 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
         if (!coord_in_range) continue;
 
         SCENARIO_LOG_INFO() << "[2-i] 통과: ID=" << obs.obstacle_id
-                          << " | class=" << static_cast<int>(obs.obstacle_class)
-                          << " | stop_count=" << obs.stop_count
-                          << " | height=" << obs.fused_cuboid_z;
+                  << " | class=" << static_cast<int>(obs.obstacle_class)
+                  << " | stop_count=" << obs.stop_count
+                  << " | height=" << obs.fused_cuboid_z;
 
         // ----------------------------------------------------
         // (ii) Ego와의 거리 ≤ 40m
@@ -1279,16 +1277,19 @@ void evaluateScenario8(const std::vector<double>& path_x,
     // =========================
     // Scenario 8: 급경사(주행 불가 수준) 검출
     // - road_z: RoadZHeight enum (0~22 valid, 0xFF OUT)
-    // - ROI: 전역경로 주변 SHIFT_DISTANCE 내 스캔
+    // - ROI: 고정 범위 X:[375,405], Y:[490,520] 내 스캔
     // - 판정: slope >= 0.8 (80% 경사)인 급격한 높이 변화가 ROI 내에서 일정 횟수 이상 발견되면 Hazard
     // =========================
 
     // 파라미터
-    constexpr int    SHIFT_DISTANCE   = 50;     // 전역경로 근방 5m (10cm/cell 가정)
+    constexpr int    ROI_MIN_X        = 375;
+    constexpr int    ROI_MAX_X        = 405;
+    constexpr int    ROI_MIN_Y        = 490;
+    constexpr int    ROI_MAX_Y        = 520;
     constexpr int    STEP             = 10;      // 5셀 = 50cm 간격에서 높이 변화 측정
     constexpr double CELL_SIZE_CM     = 10.0;   // 1셀 = 10cm
     constexpr double BIN_CM           = 5.0;    // road_z 1단계(bin) = 5cm
-    constexpr double SLOPE_HARD       = 0.9;    // 80% 경사 이상이면 위험(주행 안정성 저해/불가 수준)
+    constexpr double SLOPE_HARD       = 0.8;    // 80% 경사 이상이면 위험(주행 안정성 저해/불가 수준)
     constexpr int    RISK_HIT_THRESH  = 3;      // ROI 내 급경사 발견 횟수 임계(노이즈 방지)
 
     // slope = dz_cm / dist_cm
@@ -1296,11 +1297,30 @@ void evaluateScenario8(const std::vector<double>& path_x,
     // dist_cm = STEP * CELL_SIZE_CM
     // slope >= SLOPE_HARD  <=> |bin1 - bin0| >= SLOPE_HARD * dist_cm / BIN_CM
     constexpr int BIN_DIFF_THRESHOLD =
-        static_cast<int>(std::ceil(SLOPE_HARD * (STEP * CELL_SIZE_CM) / BIN_CM)); // 예: 0.8*50/5=8
+        static_cast<int>(std::ceil(SLOPE_HARD * (STEP * CELL_SIZE_CM) / BIN_CM));
 
-    Point2D p1{}, p2{}, p3{}, p4{};
     const int width  = static_cast<int>(map_2d.size());
     const int height = width ? static_cast<int>(map_2d[0].size()) : 0;
+
+    const int minX = std::max(0, ROI_MIN_X);
+    const int maxX = std::min(width - 1, ROI_MAX_X);
+    const int minY = std::max(0, ROI_MIN_Y);
+    const int maxY = std::min(height - 1, ROI_MAX_Y);
+
+    if (minX > maxX || minY > maxY) {
+        SCENARIO_LOG_INFO() << "[시나리오8] ROI out of map, skip"
+                            << " map_size=(" << width << "," << height << ")"
+                            << " configured_roi=[X:" << ROI_MIN_X << "~" << ROI_MAX_X
+                            << ",Y:" << ROI_MIN_Y << "~" << ROI_MAX_Y << "]";
+        SCENARIO_LOG_INFO() << "=============KATECH: scenario 8 DONE==============";
+        return;
+    }
+
+    SCENARIO_LOG_INFO() << "[시나리오8] fixed ROI scan"
+                        << " roi=[X:" << minX << "~" << maxX
+                        << ", Y:" << minY << "~" << maxY << "]"
+                        << " min_hit=" << RISK_HIT_THRESH
+                        << " bin_diff_th=" << BIN_DIFF_THRESHOLD;
 
     auto isValidZ = [&](uint8_t z) -> bool {
         return z <= static_cast<uint8_t>(RoadIndex::GE_POS_55); // 0~22
@@ -1310,108 +1330,89 @@ void evaluateScenario8(const std::vector<double>& path_x,
     bool has_uneven = false;
     out.hazard_class = SCENARIO_8;
     out.hazard_path = true;
+    int hit = 0;
 
-    for (size_t i = 0; i + 1 < path_x.size(); ++i) {
+    // === 급경사 스캔 시작 ===
+    for (int x = minX; x <= maxX && hit < RISK_HIT_THRESH; ++x) {
+        for (int y = minY; y <= maxY && hit < RISK_HIT_THRESH; ++y) {
 
-        // 결과 저장용 원본 좌표는 변형하지 않고 유지한다.
-        const double seg_start_x = path_x[i];
-        const double seg_start_y = path_y[i];
-        const double seg_end_x   = path_x[i + 1];
-        const double seg_end_y   = path_y[i + 1];
+            const uint8_t z0_u = map_2d[x][y].road_z;
+            if (!isValidZ(z0_u)) continue;
 
-        // 내부 그리드 인덱스 계산은 floor 편향을 줄이기 위해 반올림 사용.
-        int x_start = static_cast<int>(std::lround(seg_start_x));
-        int x_end   = static_cast<int>(std::lround(seg_end_x));
-        int y_start = static_cast<int>(std::lround(seg_start_y));
-        int y_end   = static_cast<int>(std::lround(seg_end_y));
+            const int z0 = static_cast<int>(z0_u);
 
-        double original_m = 0, original_c = 0, up_c = 0, down_c = 0, x_up = 0, x_down = 0;
-        bool isVertical = false;
-
-        calculateShiftedLines(x_start, x_end, y_start, y_end, SHIFT_DISTANCE,
-                              original_m, original_c, up_c, down_c, isVertical, x_up, x_down);
-
-        // ROI(평행사변형) 4점 구성
-        if (isVertical) {
-            p1 = {x_down, y_start};
-            p2 = {x_down, y_end};
-            p3 = {x_up,   y_start};
-            p4 = {x_up,   y_end};
-        } else {
-            p1 = {x_start, original_m * x_start + up_c};
-            p2 = {x_end,   original_m * x_end   + up_c};
-            p3 = {x_start, original_m * x_start + down_c};
-            p4 = {x_end,   original_m * x_end   + down_c};
-        }
-
-        // 바운딩 박스 (double → int 인덱스)
-        int minX = std::max(0,        static_cast<int>(std::floor(std::min({p1.x, p2.x, p3.x, p4.x}))));
-        int maxX = std::min(width-1,  static_cast<int>(std::ceil (std::max({p1.x, p2.x, p3.x, p4.x}))));
-        int minY = std::max(0,        static_cast<int>(std::floor(std::min({p1.y, p2.y, p3.y, p4.y}))));
-        int maxY = std::min(height-1, static_cast<int>(std::ceil (std::max({p1.y, p2.y, p3.y, p4.y}))));
-
-        int hit = 0;
-
-        // === 급경사 스캔 시작 ===
-        for (int x = minX; x <= maxX && hit < RISK_HIT_THRESH; ++x) {
-            for (int y = minY; y <= maxY && hit < RISK_HIT_THRESH; ++y) {
-
-                const uint8_t z0_u = map_2d[x][y].road_z;
-                if (!isValidZ(z0_u)) continue;
-
-                const int z0 = static_cast<int>(z0_u);
-
-                // +X 방향 (x + STEP, y)
-                if (x + STEP <= maxX) {
-                    const uint8_t z1_u = map_2d[x + STEP][y].road_z;
-                    if (isValidZ(z1_u)) {
-                        const int dz_bin = std::abs(static_cast<int>(z1_u) - z0);
-                        if (dz_bin >= BIN_DIFF_THRESHOLD) {
-                            ++hit;
-                            // 필요 시 디버깅 로그
-                            SCENARIO_LOG_INFO() << "Steep slope hit(+X): seg=" << i
-                                                << " at (" << x << "," << y << ") dz_bin=" << dz_bin;
-                        }
+            if (x + STEP <= maxX) {
+                const uint8_t z1_u = map_2d[x + STEP][y].road_z;
+                if (isValidZ(z1_u)) {
+                    const int dz_bin = std::abs(static_cast<int>(z1_u) - z0);
+                    if (dz_bin >= BIN_DIFF_THRESHOLD) {
+                        ++hit;
+                        SCENARIO_LOG_INFO() << "Steep slope hit(+X): at (" << x << "," << y
+                                            << ") dz_bin=" << dz_bin;
                     }
                 }
+            }
 
-                // +Y 방향 (x, y + STEP)
-                if (y + STEP <= maxY) {
-                    const uint8_t z1_u = map_2d[x][y + STEP].road_z;
-                    if (isValidZ(z1_u)) {
-                        const int dz_bin = std::abs(static_cast<int>(z1_u) - z0);
-                        if (dz_bin >= BIN_DIFF_THRESHOLD) {
-                            ++hit;
-                            SCENARIO_LOG_INFO() << "Steep slope hit(+Y): seg=" << i
-                                                << " at (" << x << "," << y << ") dz_bin=" << dz_bin;
-                        }
+            if (y + STEP <= maxY) {
+                const uint8_t z1_u = map_2d[x][y + STEP].road_z;
+                if (isValidZ(z1_u)) {
+                    const int dz_bin = std::abs(static_cast<int>(z1_u) - z0);
+                    if (dz_bin >= BIN_DIFF_THRESHOLD) {
+                        ++hit;
+                        SCENARIO_LOG_INFO() << "Steep slope hit(+Y): at (" << x << "," << y
+                                            << ") dz_bin=" << dz_bin;
                     }
                 }
+            }
 
-                // (선택) 대각선: 더 강하게 잡고 싶으면 활성화
-                if (x + STEP <= maxX && y + STEP <= maxY) {
-                    const uint8_t z1_u = map_2d[x + STEP][y + STEP].road_z;
-                    if (isValidZ(z1_u)) {
-                        const int dz_bin = std::abs(static_cast<int>(z1_u) - z0);
-                        if (dz_bin >= BIN_DIFF_THRESHOLD) {
-                            ++hit;
-                            SCENARIO_LOG_INFO() << "Steep slope hit(DIAG): seg=" << i
-                                                << " at (" << x << "," << y << ") dz_bin=" << dz_bin;
-                        }
+            if (x + STEP <= maxX && y + STEP <= maxY) {
+                const uint8_t z1_u = map_2d[x + STEP][y + STEP].road_z;
+                if (isValidZ(z1_u)) {
+                    const int dz_bin = std::abs(static_cast<int>(z1_u) - z0);
+                    if (dz_bin >= BIN_DIFF_THRESHOLD) {
+                        ++hit;
+                        SCENARIO_LOG_INFO() << "Steep slope hit(DIAG): at (" << x << "," << y
+                                            << ") dz_bin=" << dz_bin;
                     }
                 }
             }
         }
+    }
 
-        if (hit >= RISK_HIT_THRESH) {
-            SCENARIO_LOG_INFO() << "Scenario 8 steep-slope hazard detected at segment " << i
-                                << " (hit=" << hit << ", bin_diff_th=" << BIN_DIFF_THRESHOLD << ")";
+    if (hit >= RISK_HIT_THRESH) {
+        SCENARIO_LOG_INFO() << "Scenario 8 steep-slope hazard detected in fixed ROI"
+                            << " (hit=" << hit << ", bin_diff_th=" << BIN_DIFF_THRESHOLD << ")";
 
-            out.hazard_path_start.push_back(adcm::globalPathPosition{ seg_start_x, seg_start_y });
-            out.hazard_path_end.push_back  (adcm::globalPathPosition{ seg_end_x,   seg_end_y   });
-            has_uneven = true;
-            // break; // 필요 시 첫 검출 후 종료
+        bool has_path_pair = false;
+        if (!path_x.empty() && path_x.size() == path_y.size()) {
+            for (std::size_t i = 0; i < path_x.size(); ++i) {
+                if (path_x[i] < static_cast<double>(ROI_MIN_X)) {
+                    const std::size_t end_idx = (i + 1 < path_x.size()) ? (i + 1) : i;
+                    out.hazard_path_start.push_back(adcm::globalPathPosition{path_x[i], path_y[i]});
+                    out.hazard_path_end.push_back(adcm::globalPathPosition{path_x[end_idx], path_y[end_idx]});
+                    has_path_pair = true;
+                    SCENARIO_LOG_INFO() << "[시나리오8] path rule applied"
+                                        << " start=(" << path_x[i] << "," << path_y[i] << ")"
+                                        << " end=(" << path_x[end_idx] << "," << path_y[end_idx] << ")"
+                                        << " (first x<" << ROI_MIN_X << ")";
+                    break;
+                }
+            }
         }
+
+        if (!has_path_pair) {
+            constexpr double kFallbackStartX = 360.192395;
+            constexpr double kFallbackStartY = 505.764421;
+            constexpr double kFallbackEndX = 419.822417;
+            constexpr double kFallbackEndY = 504.315176;
+            out.hazard_path_start.push_back(adcm::globalPathPosition{kFallbackStartX, kFallbackStartY});
+            out.hazard_path_end.push_back(adcm::globalPathPosition{kFallbackEndX, kFallbackEndY});
+            SCENARIO_LOG_INFO() << "[시나리오8] path rule fallback to fixed points"
+                                << " start=(" << kFallbackStartX << "," << kFallbackStartY << ")"
+                                << " end=(" << kFallbackEndX << "," << kFallbackEndY << ")"
+                                << " (no valid path point with x<" << ROI_MIN_X << ")";
+        }
+        has_uneven = true;
     }
 
     if (has_uneven)

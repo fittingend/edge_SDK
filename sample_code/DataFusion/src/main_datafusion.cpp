@@ -1286,13 +1286,13 @@ void filterClass10SedanNearestInRegion(std::vector<ObstacleData> &mergedList)
     mergedList = std::move(filtered);
 }
 
-// class 1 공사차량 중 lists.ini 정적 관리 영역(x>=800, y>=540)은 센서 입력 단계에서 제거한다.
+// class 1 공사차량 중 lists.ini 정적 관리 영역(x>=800, y>=500)은 센서 입력 단계에서 제거한다.
 // 해당 영역 장애물은 lists.ini로 고정 등록하여 사용하므로 센서 데이터는 드롭한다.
 void filterClass1InStaticListRegion(std::vector<ObstacleData> &obstacleList)
 {
     constexpr std::uint8_t TARGET_CLASS = 1;
     constexpr double MIN_X = 800.0;
-    constexpr double MIN_Y = 540.0;
+    constexpr double MIN_Y = 500.0;
 
     const auto oldSize = obstacleList.size();
     obstacleList.erase(std::remove_if(obstacleList.begin(), obstacleList.end(),
@@ -1343,6 +1343,35 @@ void filterClass20DuringMove(std::vector<ObstacleData> &mergedList)
                           << " (x>=" << MAX_X_EXCLUSIVE
                           << " or y<=" << MAX_Y_INCLUSIVE
                           << ", MOVE state)";
+    }
+}
+
+// work 단계(state==4) 도중에만 class 20 장애물 중 x>900 인 것을 제거
+void filterClass20DuringWork(std::vector<ObstacleData> &mergedList)
+{
+    constexpr std::uint8_t EDGE_STATE_WORK = 4;
+    if (currentEdgeState.load(std::memory_order_relaxed) != EDGE_STATE_WORK)
+        return;
+
+    constexpr std::uint8_t TARGET_CLASS = 20;
+    constexpr double MAX_X_EXCLUSIVE = 900.0;
+
+    const auto oldSize = mergedList.size();
+    mergedList.erase(std::remove_if(mergedList.begin(), mergedList.end(),
+                                    [&](const ObstacleData &obs)
+                                    {
+                                        if (obs.obstacle_class != TARGET_CLASS)
+                                            return false;
+                                        return obs.fused_position_x > MAX_X_EXCLUSIVE;
+                                    }),
+                     mergedList.end());
+
+    const auto removed = oldSize - mergedList.size();
+    if (removed > 0)
+    {
+        adcm::Log::Info() << framePrefix() << "[KATECH] class-20 work-stage filter removed=" << removed
+                          << " (x>" << MAX_X_EXCLUSIVE
+                          << ", WORK state)";
     }
 }
 
@@ -3392,7 +3421,7 @@ void ThreadKatech()
         filterObstaclesByCfgB255(obstacle_list_sub3);
         filterObstaclesByCfgB255(obstacle_list_sub4);
 
-        // lists.ini 정적 관리 영역(class1, x>=800, y>=540) 센서 입력 드롭
+        // lists.ini 정적 관리 영역(class1, x>=800, y>=500) 센서 입력 드롭
         filterClass1InStaticListRegion(obstacle_list_main);
         filterClass1InStaticListRegion(obstacle_list_sub1);
         filterClass1InStaticListRegion(obstacle_list_sub2);
@@ -3409,6 +3438,7 @@ void ThreadKatech()
         filterClass10SedanNearestInRegion(obstacle_list);
         filterClass20ByRegion(obstacle_list);
         filterClass20DuringMove(obstacle_list);
+        filterClass20DuringWork(obstacle_list);
         filterObstaclesByMinY(obstacle_list);
         dedupeCloseClass1StaticObstacles(obstacle_list);
         stage2_merge_ms = std::chrono::duration<double, std::milli>(

@@ -121,28 +121,39 @@ void injectScenario8RoadPatternForMoveTransition(
     const std::vector<double> &pathX,
     const std::vector<double> &pathY)
 {
-    if (map.empty() || map[0].empty() || pathX.empty() || pathY.empty())
+    (void)pathX;
+    (void)pathY;
+
+    if (map.empty() || map[0].empty())
     {
-        adcm::Log::Info() << "[Scenario8][MOVE_TRANSITION] skip road pattern injection: empty map/path";
+        adcm::Log::Info() << "[Scenario8][MOVE_TRANSITION] skip road pattern injection: empty map";
         return;
     }
 
     const int width = static_cast<int>(map.size());
     const int height = static_cast<int>(map[0].size());
 
-    const std::size_t anchorIdx = std::min(pathX.size(), pathY.size()) > 1 ? 1 : 0;
-    const int anchorX = static_cast<int>(std::lround(pathX[anchorIdx]));
-    const int anchorY = static_cast<int>(std::lround(pathY[anchorIdx]));
-
-    constexpr int ROI_HALF_WIDTH = 70;
+    constexpr int ROI_MIN_X = 375;
+    constexpr int ROI_MAX_X = 405;
+    constexpr int ROI_MIN_Y = 490;
+    constexpr int ROI_MAX_Y = 520;
     constexpr int STEP = 10;
     constexpr std::uint8_t LOW_Z = static_cast<std::uint8_t>(RoadIndex::LE_NEG_50);
     constexpr std::uint8_t HIGH_Z = static_cast<std::uint8_t>(RoadIndex::GE_POS_55);
 
-    const int minX = std::max(0, anchorX - ROI_HALF_WIDTH);
-    const int maxX = std::min(width - 1, anchorX + ROI_HALF_WIDTH);
-    const int minY = std::max(0, anchorY - ROI_HALF_WIDTH);
-    const int maxY = std::min(height - 1, anchorY + ROI_HALF_WIDTH);
+    const int minX = std::max(0, ROI_MIN_X);
+    const int maxX = std::min(width - 1, ROI_MAX_X);
+    const int minY = std::max(0, ROI_MIN_Y);
+    const int maxY = std::min(height - 1, ROI_MAX_Y);
+
+    if (minX > maxX || minY > maxY)
+    {
+        adcm::Log::Info() << "[Scenario8][MOVE_TRANSITION] skip road pattern injection: ROI out of map"
+                          << " map_size=(" << width << ", " << height << ")"
+                          << " configured_roi=[X:" << ROI_MIN_X << "~" << ROI_MAX_X
+                          << ", Y:" << ROI_MIN_Y << "~" << ROI_MAX_Y << "]";
+        return;
+    }
 
     int changedCells = 0;
     for (int x = minX; x <= maxX; ++x)
@@ -160,7 +171,6 @@ void injectScenario8RoadPatternForMoveTransition(
     }
 
     adcm::Log::Info() << "[Scenario8][MOVE_TRANSITION] injected steep road pattern"
-                      << " anchor=(" << anchorX << ", " << anchorY << ")"
                       << " roi=[X:" << minX << "~" << maxX << ", Y:" << minY << "~" << maxY << "]"
                       << " low_z=" << static_cast<int>(LOW_Z)
                       << " high_z=" << static_cast<int>(HIGH_Z)
