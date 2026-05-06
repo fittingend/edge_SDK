@@ -1,0 +1,5 @@
+HOW TO RUN 
+스크립트 실행방법:
+
+python3 post_processing.py --config config.yaml
+
