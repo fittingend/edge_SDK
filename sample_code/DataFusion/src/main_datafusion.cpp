@@ -1421,6 +1421,27 @@ void filterObstaclesByMinY(std::vector<ObstacleData> &mergedList)
     }
 }
 
+// 최종 장애물 리스트에서 x<300 영역의 장애물을 제거
+void filterObstaclesByMinX(std::vector<ObstacleData> &mergedList)
+{
+    constexpr double MIN_X_INCLUSIVE = 300.0;
+
+    const auto oldSize = mergedList.size();
+    mergedList.erase(std::remove_if(mergedList.begin(), mergedList.end(),
+                                    [&](const ObstacleData &obs)
+                                    {
+                                        return obs.fused_position_x < MIN_X_INCLUSIVE;
+                                    }),
+                     mergedList.end());
+
+    const auto removed = oldSize - mergedList.size();
+    if (removed > 0)
+    {
+        adcm::Log::Info() << framePrefix() << "[KATECH] x-min filter removed=" << removed
+                          << " threshold=(x>=" << MIN_X_INCLUSIVE << ")";
+    }
+}
+
 // 최종 융합 리스트에서 class 1 중 특장차(ego) 위치에 붙는 오인식만 제거한다.
 // 맵 좌표계는 10cm 단위이므로 10.0은 1m 반경이다.
 void filterClass1NearEgoByMainVehicleSize(std::vector<ObstacleData> &mergedList)
@@ -3432,6 +3453,7 @@ void ThreadKatech()
         const auto stage2Start = std::chrono::high_resolution_clock::now();
         obstacle_list = mergeAndCompareLists(previous_obstacle_list, obstacle_list_main, obstacle_list_sub1,
                                              obstacle_list_sub2, obstacle_list_sub3, obstacle_list_sub4, main_vehicle, sub1_vehicle, sub2_vehicle, sub3_vehicle, sub4_vehicle);
+        filterObstaclesByMinX(obstacle_list);
         filterClass1NearEgoByMainVehicleSize(obstacle_list);
         filterClass1ByRegion(obstacle_list);
         filterClass1ExcavatorNearestInRegion(obstacle_list);
