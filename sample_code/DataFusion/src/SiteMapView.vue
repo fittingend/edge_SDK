@@ -72,7 +72,7 @@
       </thead>
 
       <tbody>
-        <tr v-for="row in debugRiskList" :key="row.obstacle_id">
+        <tr v-for="(row, index) in debugRiskList" :key="`${row.obstacle_id}-${row.hazard_class}-${index}`">
           <td>{{ row.obstacle_id }}</td>
           <td class="mono">
             {{ formatObstacleXY(row.obstacle_xy) }}
@@ -3681,8 +3681,8 @@ const clearRiskFeatures = (): void => {
 const drawRiskFeatures = (list: any[]): void => {
   clearRiskFeatures();
   
-  list.forEach((item: any) => {
-    const riskId = item.obstacle_id;
+  list.forEach((item: any, itemIndex: number) => {
+    const riskId = `${item.obstacle_id}_${item.hazard_class ?? 'na'}_${itemIndex}`;
 
     // ==============================
     // 기존 obstacle_xy 원 스타일
@@ -3755,8 +3755,8 @@ const drawRiskFeatures = (list: any[]): void => {
     // ✅ wgs84 start / end pair 표시 (선 + 사각형)
     // =====================================================
 
-    const starts = item.wgs84_xy_start ?? [];
-    const ends   = item.wgs84_xy_end   ?? [];
+    const starts = item.wgs84_xy_start ?? item.hazard_path_start ?? [];
+    const ends   = item.wgs84_xy_end   ?? item.hazard_path_end ?? [];
 
     const pairCount = Math.min(starts.length, ends.length);
 
@@ -3846,8 +3846,8 @@ const subscribeRiskTopic = (): void => {
           riskTableList.push({
             obstacle_id: r.obstacle_id,
             obstacle_xy: r.obstacle_xy || [],
-            wgs84_xy_start: r.wgs84_xy_start || [],
-            wgs84_xy_end: r.wgs84_xy_end || [],
+            wgs84_xy_start: r.wgs84_xy_start || r.hazard_path_start || [],
+            wgs84_xy_end: r.wgs84_xy_end || r.hazard_path_end || [],
             hazard_class: r.hazard_class,
             isHazard: r.isHazard,
             confidence: r.confidence,

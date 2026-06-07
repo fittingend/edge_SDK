@@ -168,6 +168,7 @@ std::condition_variable cv_rass;    // ThreadSend waits on this
 // Shared flags
 bool isMapAvailable = false;
 bool isPathAvailable = false;
+bool hasPendingRiskAssessment = false;
 
 /**
  * @brief 맵 데이터 수신 쓰레드
@@ -535,11 +536,11 @@ void ThreadRASS()
             }
         }
 
-        if (!riskAssessment.riskAssessmentList.empty())
         {
-            // notify ThreadSend
-            cv_rass.notify_one(); // 전송 쓰레드 깨움
+            std::lock_guard<std::mutex> lock_rass(mtx_rass);
+            hasPendingRiskAssessment = true;
         }
+        cv_rass.notify_one(); // 전송 쓰레드 깨움
         isMapAvailable = false;
     }
 }
@@ -644,6 +645,7 @@ void ThreadRASSAI()
         {
             std::lock_guard<std::mutex> lock_rass(mtx_rass);
             riskAssessment = local_risk;
+            hasPendingRiskAssessment = true;
         }
 
         uint64_t riskSeq = 0;
@@ -681,9 +683,7 @@ void ThreadRASSAI()
                               << " conf=" << r.confidence;
         }
 
-        if (!local_risk.riskAssessmentList.empty()) {
-            cv_rass.notify_one();
-        }
+        cv_rass.notify_one();
 
         isMapAvailable = false;
     }
@@ -704,7 +704,7 @@ void ThreadSend()
         // [1] 조건변수 대기: 위험판단 데이터 생성 알림 대기
         std::unique_lock<std::mutex> lock_rass_cv(mtx_rass);
         cv_rass.wait(lock_rass_cv, []
-                     { return !riskAssessment.riskAssessmentList.empty() || !continueExecution; });
+                     { return hasPendingRiskAssessment || !continueExecution; });
 
         if (!continueExecution)
             break;
@@ -769,6 +769,7 @@ void ThreadSend()
 
         // [4] 전송 완료 후 위험 판단 데이터 초기화
         riskAssessment.riskAssessmentList.clear();
+        hasPendingRiskAssessment = false;
         // std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
 }
