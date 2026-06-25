@@ -112,6 +112,10 @@ double calculateFrontRearFactor(const adcm::obstacleListStruct& obs,
 
 #define SCENARIO_LOG_INFO() if (!scenarioLogEnabled()) ; else adcm::Log::Info()
 
+namespace {
+    bool s7_triggered_once = false;
+}
+
 //=====시나리오 #1. 주행중 전역경로 근방 이동가능한 정지 장애물이 존재하는 위험 환경=====
 void evaluateScenario1(const obstacleListVector& obstacle_list, 
                         const adcm::vehicleListStruct& ego_vehicle, 
@@ -132,11 +136,11 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
     constexpr double PASS_RELEASE_DM   = 100.0; // 경로 진행 기준 10m 지나치면 해제
     constexpr double DIST_TO_EGO_MAX_DM  = 300.0; // 장애물 <-> 특장차와 30 m 이내
     constexpr double DIST_TO_PATH_MAX_DM = 150.0; // 장애물 <-> 전역경로와 15 m 이내
-    // 시나리오 1 전용 고정 ROI (dm): 정적 마네킹 영역만 허용
-    constexpr double S1_ROI_MIN_X_DM = 545.0;
+    // 시나리오 1 전용 고정 ROI (dm): 마네킹 검출 편차를 반영해 여유 범위 적용
+    constexpr double S1_ROI_MIN_X_DM = 500.0;
     constexpr double S1_ROI_MAX_X_DM = 630.0;
     constexpr double S1_ROI_MIN_Y_DM = 580.0;
-    constexpr double S1_ROI_MAX_Y_DM = 595.0;
+    constexpr double S1_ROI_MAX_Y_DM = 610.0;
 
     // 컨피던스 파라미터 (confidence 0.7 이상 목표)
     constexpr double EGO_THRESH_DM  = 300.0;  // 거리 기준 (변경 없음)
@@ -160,7 +164,13 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
             (obs.fused_position_x <= S1_ROI_MAX_X_DM) &&
             (obs.fused_position_y >= S1_ROI_MIN_Y_DM) &&
             (obs.fused_position_y <= S1_ROI_MAX_Y_DM);
-        if (!in_s1_roi) continue;
+        if (!in_s1_roi) {
+            SCENARIO_LOG_INFO() << "[1-roi 제외] ID=" << obs.obstacle_id
+                                << " | Pos=(" << obs.fused_position_x << ", " << obs.fused_position_y << ")"
+                                << " | ROI X[" << S1_ROI_MIN_X_DM << "~" << S1_ROI_MAX_X_DM
+                                << "], Y[" << S1_ROI_MIN_Y_DM << "~" << S1_ROI_MAX_Y_DM << "]";
+            continue;
+        }
 
         SCENARIO_LOG_INFO() << "[1-i] 차량 & 정지 상태: ID=" << obs.obstacle_id
                           << " | class=" << static_cast<int>(obs.obstacle_class)
@@ -276,7 +286,7 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
     // 단위: 거리 dm(0.1m)
     constexpr double PASS_RELEASE_DM   = 100.0; // 경로 진행 기준 10m 지나치면 해제
     constexpr double DIST_TO_EGO_MAX_DM  = 400.0; // 특장차와 40 m 이내
-    constexpr double DIST_TO_PATH_MAX_DM = 150.0; // 특장차 전역경로에서 15 m 이내
+    constexpr double DIST_TO_PATH_MAX_DM = 220.0; // 특장차 전역경로에서 22 m 이내
     constexpr double MIN_TRIGGER_X_DM    = 850.0;
     constexpr double MIN_TRIGGER_Y_DM    = 450.0;
 
@@ -301,7 +311,14 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
         const bool coord_in_range =
             (obs.fused_position_x >= MIN_TRIGGER_X_DM) &&
             (obs.fused_position_y >= MIN_TRIGGER_Y_DM);
-        if (!coord_in_range) continue;
+        if (!coord_in_range) {
+            SCENARIO_LOG_INFO() << "[2-reject] ID=" << obs.obstacle_id
+                                << " | class=" << static_cast<int>(obs.obstacle_class)
+                                << " | pos=(" << obs.fused_position_x << ", " << obs.fused_position_y << ")"
+                                << " | threshold=(x>=" << MIN_TRIGGER_X_DM
+                                << ", y>=" << MIN_TRIGGER_Y_DM << ")";
+            continue;
+        }
 
         SCENARIO_LOG_INFO() << "[2-i] 통과: ID=" << obs.obstacle_id
                   << " | class=" << static_cast<int>(obs.obstacle_class)
@@ -320,7 +337,7 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
                           << " | Ego거리=" << (d_ego_dm/10.0) << " m";
 
         // ----------------------------------------------------
-        // (iii) 전역경로와의 거리 ≤ 10m
+        // (iii) 전역경로와의 거리 ≤ 22m
         double d_path_dm = 0.0;
         if (!calculateMinDistanceToPath(obs, path_x, path_y, d_path_dm)) {
             // SCENARIO_LOG_INFO() << "[2-iii 제외] ID=" << obs.obstacle_id
@@ -329,7 +346,7 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
         }
         if (d_path_dm > DIST_TO_PATH_MAX_DM) {
             SCENARIO_LOG_INFO() << "[2-iii 제외] ID=" << obs.obstacle_id
-                              << " | 경로거리=" << (d_path_dm/10.0) << " m (>10)";
+                              << " | 경로거리=" << (d_path_dm/10.0) << " m (>22)";
             continue;
         }
         SCENARIO_LOG_INFO() << "[2-iii] 통과: ID=" << obs.obstacle_id
@@ -917,7 +934,7 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
     constexpr double EGO_MIN_DM          = 150.0;   // 15 m
     constexpr double PASS_RELEASE_DM     = 100.0;   // 경로 진행 기준 10m 지나치면 해제
     constexpr double EGO_MAX_DM          = 500.0;   // 50 m
-    constexpr double DIST_TO_PATH_MAX_DM = 150.0;   // 15 m
+    constexpr double DIST_TO_PATH_MAX_DM = 220.0;   // 22 m
     constexpr double MAX_PAIR_DIST_DM    = 300.0;   // 30 m
     constexpr double MIN_TRIGGER_X       = 800.0;
     constexpr double MIN_TRIGGER_Y       = 400.0;
@@ -1078,6 +1095,12 @@ void evaluateScenario7(const std::vector<double>& path_x,
 {
     SCENARIO_LOG_INFO() << "============= KATECH: Scenario 7 START =============";
 
+    if (s7_triggered_once) {
+        SCENARIO_LOG_INFO() << "[시나리오7] 이미 1회 전송됨 -> 재전송 스킵";
+        SCENARIO_LOG_INFO() << "============= KATECH: Scenario 7 DONE =============";
+        return;
+    }
+
     if (edge_state != 3) {
         SCENARIO_LOG_INFO() << "[시나리오7] MOVE 상태 아님(" << static_cast<int>(edge_state) << ") → 종료";
         SCENARIO_LOG_INFO() << "============= KATECH: Scenario 7 DONE =============";
@@ -1230,6 +1253,8 @@ void evaluateScenario7(const std::vector<double>& path_x,
                             << " | path_based=" << (found_path_in_roi ? "true" : "false");
 
         riskAssessment.riskAssessmentList.push_back(r);
+        s7_triggered_once = true;
+        SCENARIO_LOG_INFO() << "[시나리오7] 1회 전송 래치 활성화";
     }
     else
     {
@@ -1239,6 +1264,11 @@ void evaluateScenario7(const std::vector<double>& path_x,
     }
 
     SCENARIO_LOG_INFO() << "============= KATECH: Scenario 7 DONE =============";
+}
+
+void resetScenario7State()
+{
+    s7_triggered_once = false;
 }
 
 namespace {

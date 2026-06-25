@@ -2053,6 +2053,16 @@ void processFusionForVehiclePair(
         }
     }
 
+    // Vehicle-pair fusion can carry raw sensor IDs (0). Normalize before dedupe
+    // so class-mismatch guard does not endlessly remap the same temporary ID.
+    for (auto &obs : newList)
+    {
+        if (obs.obstacle_id == 0)
+        {
+            obs.obstacle_id = id_manager.allocID();
+        }
+    }
+
     // 같은 obstacle_id 중복이 생기면 품질 우선순위로 1개만 유지
     presList = dedupeObstacleIdWithQuality(newList, prevList, prefix + "[VEHICLE_FUSION]");
 }
@@ -3191,25 +3201,131 @@ void ThreadKatech()
 
         // Simulation mode: keep all incoming obstacle data without forbidden-zone/static-area removal.
 
-        // ==============2. 장애물 데이터 융합 / 3. 특장차 및 보조차량 제거 / 4. 장애물 ID 부여 =================
+        // ==============2. 장애물 데이터 패스스루(변환값 그대로 사용)=================
         const auto stage2Start = std::chrono::high_resolution_clock::now();
-        obstacle_list = mergeAndCompareLists(previous_obstacle_list, obstacle_list_main, obstacle_list_sub1,
-                                             obstacle_list_sub2, obstacle_list_sub3, obstacle_list_sub4, main_vehicle, sub1_vehicle, sub2_vehicle, sub3_vehicle, sub4_vehicle);
+        obstacle_list.clear();
+        const std::vector<ObstacleData> *selectedObstacleSource = nullptr;
+        const char *selectedSourceName = "none";
+
+        if (workego)
+        {
+            selectedObstacleSource = &obstacle_list_main;
+            selectedSourceName = "ego";
+        }
+        else if (worksub1)
+        {
+            selectedObstacleSource = &obstacle_list_sub1;
+            selectedSourceName = "sub1";
+        }
+        else if (worksub2)
+        {
+            selectedObstacleSource = &obstacle_list_sub2;
+            selectedSourceName = "sub2";
+        }
+        else if (worksub3)
+        {
+            selectedObstacleSource = &obstacle_list_sub3;
+            selectedSourceName = "sub3";
+        }
+        else if (worksub4)
+        {
+            selectedObstacleSource = &obstacle_list_sub4;
+            selectedSourceName = "sub4";
+        }
+
+        if (selectedObstacleSource != nullptr)
+        {
+            obstacle_list = *selectedObstacleSource;
+        }
+
+        // Pass-through mode still requires valid IDs for downstream consumers.
+        // Keep incoming IDs when valid, and only fix zero/duplicate IDs.
+        // For zero/duplicate IDs, first try to reuse previous-frame IDs by
+        // nearest same-class matching to avoid per-frame ID churn.
+        std::unordered_set<std::uint16_t> usedObstacleIds;
+        usedObstacleIds.reserve(obstacle_list.size());
+        std::vector<bool> prevMatched(previous_obstacle_list.size(), false);
+        std::size_t reusedPrevIdCount = 0;
+        std::size_t allocatedNewIdCount = 0;
+        for (auto &obs : obstacle_list)
+        {
+            const bool invalidId = (obs.obstacle_id == 0);
+            const bool duplicateId = (!invalidId && usedObstacleIds.find(obs.obstacle_id) != usedObstacleIds.end());
+            if (invalidId || duplicateId)
+            {
+                std::uint16_t reusedId = 0;
+                double bestDistance = std::numeric_limits<double>::infinity();
+                size_t bestPrevIdx = previous_obstacle_list.size();
+
+                for (size_t prevIdx = 0; prevIdx < previous_obstacle_list.size(); ++prevIdx)
+                {
+                    if (prevMatched[prevIdx])
+                        continue;
+
+                    const auto &prevObs = previous_obstacle_list[prevIdx];
+                    if (prevObs.obstacle_id == 0)
+                        continue;
+                    if (usedObstacleIds.find(prevObs.obstacle_id) != usedObstacleIds.end())
+                        continue;
+                    if (prevObs.obstacle_class != obs.obstacle_class)
+                        continue;
+
+                    const double distance = euclideanDistance(obs, prevObs);
+                    if (distance >= DYNAMIC_OBSTACLE_MATCH_DISTANCE_THRESHOLD)
+                        continue;
+                    if (distance < bestDistance)
+                    {
+                        bestDistance = distance;
+                        reusedId = prevObs.obstacle_id;
+                        bestPrevIdx = prevIdx;
+                    }
+                }
+
+                if (reusedId != 0)
+                {
+                    obs.obstacle_id = reusedId;
+                    prevMatched[bestPrevIdx] = true;
+                    reusedPrevIdCount += 1;
+                }
+                else
+                {
+                    obs.obstacle_id = static_cast<std::uint16_t>(id_manager.allocID());
+                    allocatedNewIdCount += 1;
+                }
+            }
+            usedObstacleIds.insert(obs.obstacle_id);
+        }
         stage2_merge_ms = std::chrono::duration<double, std::milli>(
                               std::chrono::high_resolution_clock::now() - stage2Start)
                               .count();
-        adcm::Log::Info() << prefix << "[KATECH] 장애물 리스트 융합 및 ID 부여 완료";
+        adcm::Log::Info() << prefix << "[KATECH] 장애물 리스트 단일 소스 패스스루 적용 완료 (source="
+                          << selectedSourceName << ", size=" << obstacle_list.size()
+                          << ", reused_prev_ids=" << reusedPrevIdCount
+                          << ", allocated_new_ids=" << allocatedNewIdCount << ")";
+
+        // obstacle_class >= 50인 장애물 제거
+        const auto before_class_filter = obstacle_list.size();
+        obstacle_list.erase(std::remove_if(obstacle_list.begin(), obstacle_list.end(),
+                                           [](const ObstacleData &obs) {
+                                               return obs.obstacle_class >= 50;
+                                           }),
+                            obstacle_list.end());
+        const auto removed_class_count = before_class_filter - obstacle_list.size();
+        if (removed_class_count > 0)
+        {
+            adcm::Log::Info() << prefix << "[KATECH] obstacle_class >= 50 filter removed=" << removed_class_count;
+        }
 
         const auto stage3Start = std::chrono::high_resolution_clock::now();
-        updateStopCount(obstacle_list, previous_obstacle_list, 1.0);
+        // Pass-through mode: keep incoming stop_count as-is.
         stage3_stopcount_ms = std::chrono::duration<double, std::milli>(
                                   std::chrono::high_resolution_clock::now() - stage3Start)
                                   .count();
-        adcm::Log::Info() << prefix << "[KATECH] stop count 변동 완료";
+        adcm::Log::Info() << prefix << "[KATECH] stop count 패스스루 유지";
 
         const auto stage4Start = std::chrono::high_resolution_clock::now();
         previous_obstacle_list = obstacle_list;
-        appendListObstaclesToMergedList(obstacle_list);
+        // Pass-through mode: do not append synthetic list obstacles.
 
         stage4_append_ms = std::chrono::duration<double, std::milli>(
                                  std::chrono::high_resolution_clock::now() - stage4Start)

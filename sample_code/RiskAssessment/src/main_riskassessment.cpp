@@ -839,6 +839,7 @@ void ThreadReceiveEdgeInformation()
                     }
 
                     gInjectScenario8RoadPatternOnce.store(true, std::memory_order_relaxed);
+                    resetScenario7State();
                     resetScenario8State();
                     adcm::Log::Info() << "[Scenario8][MOVE_TRANSITION] one-shot road pattern injection armed";
                 }

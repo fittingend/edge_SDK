@@ -211,6 +211,7 @@ void evaluateScenario7(const std::vector<double>& path_x,
                         const Config& config,
                         adcm::risk_assessment_Objects& riskAssessment,
                         std::uint8_t edge_state);
+void resetScenario7State();
 // 시나리오 8: 경로와 맵 정보 필요
 void evaluateScenario8(const std::vector<double>& path_x,
                         const std::vector<double>& path_y,
