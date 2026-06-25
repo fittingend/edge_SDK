@@ -89,7 +89,6 @@ int gStopValue = 20;
 std::unique_ptr<AutoLabelWriter> labelWriter;
 Config config;
 std::atomic<uint64_t> gRiskLogSeq{0};
-std::atomic<bool> gInjectScenario8RoadPatternOnce{false};
 
 namespace {
 std::string formatObstacleBriefById(std::uint64_t id)
@@ -114,67 +113,6 @@ std::string riskLogPrefix(uint64_t seq)
     std::ostringstream oss;
     oss << "[R" << seq << "] ";
     return oss.str();
-}
-
-void injectScenario8RoadPatternForMoveTransition(
-    std::vector<adcm::map_2dListVector> &map,
-    const std::vector<double> &pathX,
-    const std::vector<double> &pathY)
-{
-    (void)pathX;
-    (void)pathY;
-
-    if (map.empty() || map[0].empty())
-    {
-        adcm::Log::Info() << "[Scenario8][MOVE_TRANSITION] skip road pattern injection: empty map";
-        return;
-    }
-
-    const int width = static_cast<int>(map.size());
-    const int height = static_cast<int>(map[0].size());
-
-    constexpr int ROI_MIN_X = 375;
-    constexpr int ROI_MAX_X = 405;
-    constexpr int ROI_MIN_Y = 490;
-    constexpr int ROI_MAX_Y = 520;
-    constexpr int STEP = 10;
-    constexpr std::uint8_t LOW_Z = static_cast<std::uint8_t>(RoadIndex::LE_NEG_50);
-    constexpr std::uint8_t HIGH_Z = static_cast<std::uint8_t>(RoadIndex::GE_POS_55);
-
-    const int minX = std::max(0, ROI_MIN_X);
-    const int maxX = std::min(width - 1, ROI_MAX_X);
-    const int minY = std::max(0, ROI_MIN_Y);
-    const int maxY = std::min(height - 1, ROI_MAX_Y);
-
-    if (minX > maxX || minY > maxY)
-    {
-        adcm::Log::Info() << "[Scenario8][MOVE_TRANSITION] skip road pattern injection: ROI out of map"
-                          << " map_size=(" << width << ", " << height << ")"
-                          << " configured_roi=[X:" << ROI_MIN_X << "~" << ROI_MAX_X
-                          << ", Y:" << ROI_MIN_Y << "~" << ROI_MAX_Y << "]";
-        return;
-    }
-
-    int changedCells = 0;
-    for (int x = minX; x <= maxX; ++x)
-    {
-        const bool highStripe = ((x / STEP) % 2) != 0;
-        const std::uint8_t z = highStripe ? HIGH_Z : LOW_Z;
-        for (int y = minY; y <= maxY; ++y)
-        {
-            if (map[x][y].road_z != z)
-            {
-                map[x][y].road_z = z;
-                ++changedCells;
-            }
-        }
-    }
-
-    adcm::Log::Info() << "[Scenario8][MOVE_TRANSITION] injected steep road pattern"
-                      << " roi=[X:" << minX << "~" << maxX << ", Y:" << minY << "~" << maxY << "]"
-                      << " low_z=" << static_cast<int>(LOW_Z)
-                      << " high_z=" << static_cast<int>(HIGH_Z)
-                      << " changed_cells=" << changedCells;
 }
 }
 
@@ -539,14 +477,6 @@ void ThreadRASS()
             evaluateScenario4(obstacle_list, ego_vehicle, riskAssessment, edge_state);
             evaluateScenario5(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment, edge_state);
             evaluateScenario6(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment, edge_state);
-            evaluateScenario7(path_x, path_y, map_2d, config, riskAssessment, edge_state);
-
-            if (gInjectScenario8RoadPatternOnce.exchange(false, std::memory_order_relaxed))
-            {
-                injectScenario8RoadPatternForMoveTransition(map_2d, path_x, path_y);
-            }
-
-            evaluateScenario8(path_x, path_y, map_2d, riskAssessment, edge_state);
             evaluateScenario9(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment, edge_state);
             evaluateScenario10(obstacle_list, ego_vehicle, path_x, path_y, riskAssessment, edge_state);
         }
@@ -733,116 +663,6 @@ void ThreadReceiveEdgeInformation()
                 const std::uint8_t new_edge_state = static_cast<std::uint8_t>(data->state);
                 edge_state = new_edge_state;
                 adcm::Log::Info() << "state : " << edge_state;
-
-                constexpr std::uint8_t EDGE_STATE_MOVE = 3;
-                const bool moveTransition = (prev_edge_state != EDGE_STATE_MOVE &&
-                                             new_edge_state == EDGE_STATE_MOVE);
-                if (moveTransition)
-                {
-                    constexpr int kScenario7RoiMinX = 600;
-                    constexpr int kScenario7RoiMaxX = 650;
-                        constexpr int kScenario7RoiMinY = 500;
-                        constexpr int kScenario7RoiMaxY = 560;
-
-                    std::lock_guard<std::mutex> lock(mtx_map);
-                    const int map_width = static_cast<int>(map_2d.size());
-                    const int map_height = map_width ? static_cast<int>(map_2d[0].size()) : 0;
-
-                    if (map_width <= 0 || map_height <= 0)
-                    {
-                        adcm::Log::Info() << "[Scenario7][MOVE_TRANSITION] map_2d empty, skip UNSCANNED override";
-                    }
-                    else
-                    {
-                        const int roi_x_start = std::max(0, kScenario7RoiMinX);
-                        const int roi_x_end = std::min(kScenario7RoiMaxX, map_width - 1);
-                        const int roi_y_start = std::max(0, kScenario7RoiMinY);
-                        const int roi_y_end = std::min(kScenario7RoiMaxY, map_height - 1);
-
-                        if (roi_x_start <= roi_x_end && roi_y_start <= roi_y_end)
-                        {
-                            constexpr int kScenario7ForcedUnscannedMinPercent = 80;
-                            constexpr int kScenario7ForcedUnscannedMaxPercent = 90;
-                            struct CellCoord
-                            {
-                                int x;
-                                int y;
-                            };
-
-                            static thread_local std::mt19937 rng{std::random_device{}()};
-                            std::uniform_int_distribution<int> forcedPercentDist(
-                                kScenario7ForcedUnscannedMinPercent,
-                                kScenario7ForcedUnscannedMaxPercent);
-                            const int target_unscanned_percent = forcedPercentDist(rng);
-
-                            const auto unscanned = static_cast<std::uint8_t>(IndexToValue::UNSCANNED);
-                            const int roi_total_cells =
-                                (roi_x_end - roi_x_start + 1) * (roi_y_end - roi_y_start + 1);
-                            const int target_unscanned_cells =
-                                (roi_total_cells * target_unscanned_percent + 99) / 100;
-
-                            int current_unscanned_cells = 0;
-                            std::vector<CellCoord> scanned_cells;
-                            scanned_cells.reserve(roi_total_cells);
-
-                            for (int x = roi_x_start; x <= roi_x_end; ++x)
-                            {
-                                for (int y = roi_y_start; y <= roi_y_end; ++y)
-                                {
-                                    auto &cell = map_2d[x][y];
-                                    if (cell.road_z == unscanned)
-                                    {
-                                        ++current_unscanned_cells;
-                                    }
-                                    else
-                                    {
-                                        scanned_cells.push_back({x, y});
-                                    }
-                                }
-                            }
-
-                            int changed_cells = 0;
-                            const int cells_to_force = std::min(
-                                std::max(0, target_unscanned_cells - current_unscanned_cells),
-                                static_cast<int>(scanned_cells.size()));
-
-                            for (int i = 0; i < cells_to_force; ++i)
-                            {
-                                const std::size_t idx =
-                                    (static_cast<std::size_t>(i) * scanned_cells.size()) / cells_to_force;
-                                auto &cell = map_2d[scanned_cells[idx].x][scanned_cells[idx].y];
-                                cell.road_z = unscanned;
-                                ++changed_cells;
-                            }
-
-                            const int final_unscanned_cells = current_unscanned_cells + changed_cells;
-                            const double before_ratio = roi_total_cells > 0
-                                                            ? static_cast<double>(current_unscanned_cells) / roi_total_cells
-                                                            : 0.0;
-                            const double after_ratio = roi_total_cells > 0
-                                                           ? static_cast<double>(final_unscanned_cells) / roi_total_cells
-                                                           : 0.0;
-
-                            adcm::Log::Info() << "[Scenario7][MOVE_TRANSITION] ROI partially forced to UNSCANNED"
-                                              << " target_ratio=" << (target_unscanned_percent / 100.0)
-                                              << " before_ratio=" << before_ratio
-                                              << " after_ratio=" << after_ratio
-                                              << " changed_cells=" << changed_cells
-                                              << " roi=[X:" << roi_x_start << "~" << roi_x_end
-                                              << ", Y:" << roi_y_start << "~" << roi_y_end << "]";
-                        }
-                        else
-                        {
-                            adcm::Log::Info() << "[Scenario7][MOVE_TRANSITION] ROI out of map, skip UNSCANNED override"
-                                              << " map_size=(" << map_width << ", " << map_height << ")";
-                        }
-                    }
-
-                    gInjectScenario8RoadPatternOnce.store(true, std::memory_order_relaxed);
-                    resetScenario7State();
-                    resetScenario8State();
-                    adcm::Log::Info() << "[Scenario8][MOVE_TRANSITION] one-shot road pattern injection armed";
-                }
 
                 prev_edge_state = new_edge_state;
             }
