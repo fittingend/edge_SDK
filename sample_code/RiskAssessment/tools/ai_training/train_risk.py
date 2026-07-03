@@ -107,6 +107,11 @@ def evaluate_split(split_name, loader):
     y_prob = torch.sigmoid(torch.cat(split_logits)).numpy()
 
     print(f"{split_name}_loss={split_loss:.4f}")
+    mae_per_label = np.mean(np.abs(y_prob - y_true), axis=0)
+    rmse_per_label = np.sqrt(np.mean((y_prob - y_true) ** 2, axis=0))
+    macro_pr_auc = []
+    macro_roc_auc = []
+
     for i, label in enumerate(label_cols):
         try:
             roc = roc_auc_score(y_true_bin[:, i], y_prob[:, i])
@@ -116,7 +121,23 @@ def evaluate_split(split_name, loader):
             score_ap = average_precision_score(y_true_bin[:, i], y_prob[:, i])
         except ValueError:
             score_ap = float("nan")
-        print(f"  {label}: ROC-AUC={roc:.4f} PR-AUC={score_ap:.4f}")
+        macro_roc_auc.append(roc)
+        macro_pr_auc.append(score_ap)
+        print(
+            f"  {label}: "
+            f"ROC-AUC={roc:.4f} "
+            f"PR-AUC={score_ap:.4f} "
+            f"MAE={mae_per_label[i]:.4f} "
+            f"RMSE={rmse_per_label[i]:.4f}"
+        )
+
+    print(
+        "  macro: "
+        f"ROC-AUC={np.nanmean(macro_roc_auc):.4f} "
+        f"PR-AUC={np.nanmean(macro_pr_auc):.4f} "
+        f"MAE={np.mean(mae_per_label):.4f} "
+        f"RMSE={np.mean(rmse_per_label):.4f}"
+    )
 
     return split_loss
 
