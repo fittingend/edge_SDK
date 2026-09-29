@@ -152,7 +152,6 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
         // (i) 동적 장애물 & 정지 상태
         const bool is_vehicle = (obs.obstacle_class == 20);
         if (!is_vehicle) continue;
-        if (obs.stop_count < gStopValue) continue;
 
         // static/dynamic 구분 불가 환경 대응: 시나리오 1 전용 ROI 강제
         const bool in_s1_roi =
@@ -1030,7 +1029,7 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
 
     constexpr double W_EGO_S6  = 0.8;
     constexpr double W_PAIR_S6 = 0.2;
-    constexpr double CONF_GAIN_S6 = 1.13;
+    constexpr double CONF_GAIN_S6 = 1.35;
     const double base_conf_a = clampValue(W_EGO_S6 * s_ego_a + W_PAIR_S6 * s_pair, 0.0, 1.0);
     const double base_conf_b = clampValue(W_EGO_S6 * s_ego_b + W_PAIR_S6 * s_pair, 0.0, 1.0);
     const double conf_a = clampValue(base_conf_a * CONF_GAIN_S6, 0.0, 1.0);

@@ -1124,15 +1124,15 @@ void filterClass1ByRegion(std::vector<ObstacleData> &mergedList)
     }
 }
 
-// class 1 중 특정 영역(x>=750, y<=300) 후보가 여러 개면
-// 기준점(930,150)에 가장 가까운 1개만 유지한다.
+// class 1 중 특정 영역(x>=750, y<=400) 후보가 여러 개면
+// 기준점(930,200)에 가장 가까운 1개만 유지한다.
 void filterClass1ExcavatorNearestInRegion(std::vector<ObstacleData> &mergedList)
 {
     constexpr std::uint8_t TARGET_CLASS = 1;
     constexpr double MIN_X = 750.0;
-    constexpr double MAX_Y = 300.0;
+    constexpr double MAX_Y = 400.0;
     constexpr double ANCHOR_X = 930.0;
-    constexpr double ANCHOR_Y = 150.0;
+    constexpr double ANCHOR_Y = 200.0;
 
     std::vector<size_t> candidateIndices;
     candidateIndices.reserve(mergedList.size());
@@ -1286,13 +1286,13 @@ void filterClass10SedanNearestInRegion(std::vector<ObstacleData> &mergedList)
     mergedList = std::move(filtered);
 }
 
-// class 1 공사차량 중 lists.ini 정적 관리 영역(x>=800, y>=500)은 센서 입력 단계에서 제거한다.
+// class 1 공사차량 중 lists.ini 정적 관리 영역(x>=800, y>=400)은 센서 입력 단계에서 제거한다.
 // 해당 영역 장애물은 lists.ini로 고정 등록하여 사용하므로 센서 데이터는 드롭한다.
 void filterClass1InStaticListRegion(std::vector<ObstacleData> &obstacleList)
 {
     constexpr std::uint8_t TARGET_CLASS = 1;
     constexpr double MIN_X = 800.0;
-    constexpr double MIN_Y = 500.0;
+    constexpr double MIN_Y = 400.0;
 
     const auto oldSize = obstacleList.size();
     obstacleList.erase(std::remove_if(obstacleList.begin(), obstacleList.end(),
@@ -1346,7 +1346,7 @@ void filterClass20DuringMove(std::vector<ObstacleData> &mergedList)
     }
 }
 
-// work 단계(state==4) 도중에만 class 20 장애물 중 x>900 인 것을 제거
+// work 단계(state==4) 도중에만 class 20 장애물 중 x>870 인 것을 제거
 void filterClass20DuringWork(std::vector<ObstacleData> &mergedList)
 {
     constexpr std::uint8_t EDGE_STATE_WORK = 4;
@@ -1354,7 +1354,7 @@ void filterClass20DuringWork(std::vector<ObstacleData> &mergedList)
         return;
 
     constexpr std::uint8_t TARGET_CLASS = 20;
-    constexpr double MAX_X_EXCLUSIVE = 900.0;
+    constexpr double MAX_X_EXCLUSIVE = 870.0;
 
     const auto oldSize = mergedList.size();
     mergedList.erase(std::remove_if(mergedList.begin(), mergedList.end(),
@@ -1456,7 +1456,7 @@ void filterClass1NearEgoByMainVehicleSize(std::vector<ObstacleData> &mergedList)
         return;
     }
 
-    constexpr double CLASS1_EGO_NEAR_REMOVE_RADIUS_DM = 10.0;
+    constexpr double CLASS1_EGO_NEAR_REMOVE_RADIUS_DM = 50.0;
     const double ego_x = main_vehicle.position_x;
     const double ego_y = main_vehicle.position_y;
     const double near_radius2 = CLASS1_EGO_NEAR_REMOVE_RADIUS_DM * CLASS1_EGO_NEAR_REMOVE_RADIUS_DM;
@@ -2092,10 +2092,6 @@ void processFusionForVehiclePair(
         int j = validatedAssignment[i];
         if (j >= 0)
         {
-            if (presList[j].obstacle_id == 0 && prevList[i].obstacle_id != 0)
-            {
-                presList[j].obstacle_id = prevList[i].obstacle_id;
-            }
             newList.push_back(presList[j]);
         }
     }
@@ -2115,17 +2111,13 @@ void processFusionForVehiclePair(
     {
         if (std::find(validatedAssignment.begin(), validatedAssignment.end(), static_cast<int>(i)) == validatedAssignment.end())
         {
-            auto &currentObstacle = presList[i];
-            if (currentObstacle.obstacle_id == 0)
-            {
-                currentObstacle.obstacle_id = id_manager.allocID();
-            }
-            newList.push_back(currentObstacle);
+            newList.push_back(presList[i]);
         }
     }
 
-    // 같은 obstacle_id 중복이 생기면 품질 우선순위로 1개만 유지
-    presList = dedupeObstacleIdWithQuality(newList, prevList, prefix + "[VEHICLE_FUSION]");
+    // 입력 obstacle_id를 신뢰하지 않으므로 차량간 융합 단계에서는
+    // ID 기반 dedupe를 적용하지 않는다.
+    presList = std::move(newList);
 }
 
 // 프레임 간 융합 처리
@@ -2249,33 +2241,48 @@ std::vector<ObstacleData> mergeAndCompareLists(
     const VehicleData &sub4Vehicle)
 {
     const std::string prefix = framePrefix();
+    std::vector<const std::vector<ObstacleData> *> activeLists;
     std::vector<const std::vector<ObstacleData> *> nonEmptyLists;
     std::vector<ObstacleData> mergedList;
 
     if (worksub1)
     {
-        nonEmptyLists.push_back(&listSub1);
+        activeLists.push_back(&listSub1);
     }
     if (worksub2)
     {
-        nonEmptyLists.push_back(&listSub2);
+        activeLists.push_back(&listSub2);
     }
     if (worksub3)
     {
-        nonEmptyLists.push_back(&listSub3);
+        activeLists.push_back(&listSub3);
     }
     if (worksub4)
     {
-        nonEmptyLists.push_back(&listSub4);
+        activeLists.push_back(&listSub4);
     }
     if (workego)
     {
-        nonEmptyLists.push_back(&listMain);
+        activeLists.push_back(&listMain);
+    }
+
+    // work 플래그가 true여도 obstacle_list는 비어 있을 수 있으므로,
+    // 실제 데이터가 있는 리스트만 병합 대상으로 사용한다.
+    for (const auto *listPtr : activeLists)
+    {
+        if (listPtr != nullptr && !listPtr->empty())
+        {
+            nonEmptyLists.push_back(listPtr);
+        }
     }
 
     // adcm::Log::Info() << "융합: 빈 데이터 제외 완료: " << nonEmptyLists.size() << ", " << nonEmptyVehicles.size();
     // 융합할 리스트 필터링
-    if (nonEmptyLists.size() == 1)
+    if (nonEmptyLists.empty())
+    {
+        mergedList.clear();
+    }
+    else if (nonEmptyLists.size() == 1)
     {
         // 유일한 리스트 하나가 있을 경우 그대로 사용
         mergedList = *nonEmptyLists[0];
@@ -2286,15 +2293,21 @@ std::vector<ObstacleData> mergeAndCompareLists(
         // 둘 이상 리스트가 있을 때 융합 수행
         auto handleFusionForPair = [&](const std::vector<ObstacleData> &listA, const std::vector<ObstacleData> &listB)
         {
-            std::vector<ObstacleData> fusionList = listA;
-            if (!listA.empty() && !listB.empty())
+            if (listA.empty())
             {
-                auto distMatrix = createDistanceMatrix(listB, listA);
-                auto assignment = solveAssignment(distMatrix);
-                // for (int i = 0; i < assignment.size(); i++)
-                //     adcm::Log::Info() << "assignment" << i << ": " << assignment[i];
-                processFusionForVehiclePair(fusionList, listB, assignment);
+                return listB;
             }
+            if (listB.empty())
+            {
+                return listA;
+            }
+
+            std::vector<ObstacleData> fusionList = listA;
+            auto distMatrix = createDistanceMatrix(listB, listA);
+            auto assignment = solveAssignment(distMatrix);
+            // for (int i = 0; i < assignment.size(); i++)
+            //     adcm::Log::Info() << "assignment" << i << ": " << assignment[i];
+            processFusionForVehiclePair(fusionList, listB, assignment);
             return fusionList;
         };
 
