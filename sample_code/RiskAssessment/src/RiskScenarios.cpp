@@ -14,6 +14,8 @@ bool projectPointToPathArcLengthDm(double px,
         return false;
     }
 
+    if (!std::isfinite(px) || !std::isfinite(py)) return false;
+
     constexpr double kEps = 1e-12;
     double min_dist = std::numeric_limits<double>::max();
     bool found = false;
@@ -40,8 +42,8 @@ bool projectPointToPathArcLengthDm(double px,
         const double wx = px - x0;
         const double wy = py - y0;
 
-        double t = (wx * vx + wy * vy) / seg_len_sq;
-        t = clampValue(t, 0.0, 1.0);
+        const double raw_t = (wx * vx + wy * vy) / seg_len_sq;
+        const double t = clampValue(raw_t, 0.0, 1.0);
 
         const double cx = x0 + t * vx;
         const double cy = y0 + t * vy;
@@ -49,7 +51,20 @@ bool projectPointToPathArcLengthDm(double px,
 
         if (std::isfinite(dist) && dist < min_dist) {
             min_dist = dist;
-            out_s_dm = accumulated_len_dm + t * seg_len_dm;
+            // Preserve signed progress beyond the route endpoints. Clamping both
+            // ego and an object to an endpoint would incorrectly make them peers.
+            bool first_segment = true, last_segment = true;
+            for (size_t k = 0; k < i; ++k) {
+                if (std::hypot(path_x[k+1]-path_x[k], path_y[k+1]-path_y[k]) > kEps)
+                    first_segment = false;
+            }
+            for (size_t k = i+1; k+1 < path_x.size(); ++k) {
+                if (std::hypot(path_x[k+1]-path_x[k], path_y[k+1]-path_y[k]) > kEps)
+                    last_segment = false;
+            }
+            const double progress_t = ((first_segment && raw_t < 0.0) ||
+                                       (last_segment && raw_t > 1.0)) ? raw_t : t;
+            out_s_dm = accumulated_len_dm + progress_t * seg_len_dm;
             found = true;
         }
 
@@ -113,6 +128,61 @@ double calculateFrontRearFactor(const adcm::obstacleListStruct& obs,
 #define SCENARIO_LOG_INFO() if (!scenarioLogEnabled()) ; else adcm::Log::Info()
 
 namespace {
+// Retain only IDs that actually produced a result in the previous evaluation.
+// The scope guard also clears history on early return (state change/no candidates).
+class DrivingScenarioHistory {
+public:
+    DrivingScenarioHistory(std::unordered_set<unsigned>& ids,
+                           const adcm::risk_assessment_Objects& result, int scenario)
+        : ids_(ids), result_(result), scenario_(scenario), start_(result.riskAssessmentList.size()) {}
+    bool wasActive(unsigned id) const { return ids_.count(id) != 0; }
+    ~DrivingScenarioHistory() {
+        ids_.clear();
+        for (size_t i = start_; i < result_.riskAssessmentList.size(); ++i) {
+            const auto& risk = result_.riskAssessmentList[i];
+            if (static_cast<int>(risk.hazard_class) == scenario_) ids_.insert(risk.obstacle_id);
+        }
+    }
+private:
+    std::unordered_set<unsigned>& ids_;
+    const adcm::risk_assessment_Objects& result_;
+    int scenario_;
+    size_t start_;
+};
+
+// Coordinate units are dm. Limit candidates by progress along the route as well
+// as lateral distance, so nearby objects on a distant return leg do not qualify.
+bool isDrivingPathCandidate(const adcm::obstacleListStruct& obs,
+                            const adcm::vehicleListStruct& ego,
+                            const std::vector<double>& path_x,
+                            const std::vector<double>& path_y,
+                            double max_ahead_dm, double max_lateral_dm,
+                            int scenario, bool previously_active = false)
+{
+    double ego_s = 0.0, obs_s = 0.0, lateral = 0.0;
+    if (!projectPointToPathArcLengthDm(ego.position_x, ego.position_y, path_x, path_y, ego_s) ||
+        !projectPointToPathArcLengthDm(obs.fused_position_x, obs.fused_position_y, path_x, path_y, obs_s) ||
+        !calculateMinDistanceToPath(obs, path_x, path_y, lateral) || !std::isfinite(lateral)) {
+        SCENARIO_LOG_INFO() << "[path-reject] scenario=" << scenario
+                           << " ID=" << obs.obstacle_id << " invalid path/position";
+        return false;
+    }
+    const double ahead = obs_s - ego_s;
+    // New candidates must be ahead. Existing results remain eligible until the
+    // ego has passed them by 10 m, provided the other scenario conditions hold.
+    const bool behind = previously_active ? ahead <= -100.0 : ahead < 0.0;
+    if (behind || ahead > max_ahead_dm || lateral > max_lateral_dm) {
+        SCENARIO_LOG_INFO() << "[path-reject] scenario=" << scenario
+                           << " ID=" << obs.obstacle_id
+                           << " ahead_m=" << ahead / 10.0
+                           << " lateral_m=" << lateral / 10.0
+                           << " max_ahead_m=" << max_ahead_dm / 10.0
+                           << " max_lateral_m=" << max_lateral_dm / 10.0;
+        return false;
+    }
+    return true;
+}
+
     bool s7_triggered_once = false;
 }
 
@@ -124,6 +194,9 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
                         adcm::risk_assessment_Objects& riskAssessment,
                         std::uint8_t edge_state)
 {
+    static std::unordered_set<unsigned> active_ids;
+    DrivingScenarioHistory path_history(active_ids, riskAssessment, 1);
+
     SCENARIO_LOG_INFO() << "============= KATECH: Scenario 1 START =============";
 
     if (edge_state != 3) {
@@ -136,12 +209,6 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
     constexpr double PASS_RELEASE_DM   = 100.0; // 경로 진행 기준 10m 지나치면 해제
     constexpr double DIST_TO_EGO_MAX_DM  = 300.0; // 장애물 <-> 특장차와 30 m 이내
     constexpr double DIST_TO_PATH_MAX_DM = 150.0; // 장애물 <-> 전역경로와 15 m 이내
-    // 시나리오 1 전용 고정 ROI (dm): 마네킹 검출 편차를 반영해 여유 범위 적용
-    constexpr double S1_ROI_MIN_X_DM = 500.0;
-    constexpr double S1_ROI_MAX_X_DM = 630.0;
-    constexpr double S1_ROI_MIN_Y_DM = 580.0;
-    constexpr double S1_ROI_MAX_Y_DM = 610.0;
-
     // 컨피던스 파라미터 (confidence 0.7 이상 목표)
     constexpr double EGO_THRESH_DM  = 300.0;  // 거리 기준 (변경 없음)
     constexpr double PATH_THRESH_DM = 300.0;  // 거리 기준 (변경 없음)
@@ -157,20 +224,8 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
         const bool is_vehicle = (obs.obstacle_class == 20);
         if (!is_vehicle) continue;
         if (obs.stop_count < gStopValue) continue;
-
-        // static/dynamic 구분 불가 환경 대응: 시나리오 1 전용 ROI 강제
-        const bool in_s1_roi =
-            (obs.fused_position_x >= S1_ROI_MIN_X_DM) &&
-            (obs.fused_position_x <= S1_ROI_MAX_X_DM) &&
-            (obs.fused_position_y >= S1_ROI_MIN_Y_DM) &&
-            (obs.fused_position_y <= S1_ROI_MAX_Y_DM);
-        if (!in_s1_roi) {
-            SCENARIO_LOG_INFO() << "[1-roi 제외] ID=" << obs.obstacle_id
-                                << " | Pos=(" << obs.fused_position_x << ", " << obs.fused_position_y << ")"
-                                << " | ROI X[" << S1_ROI_MIN_X_DM << "~" << S1_ROI_MAX_X_DM
-                                << "], Y[" << S1_ROI_MIN_Y_DM << "~" << S1_ROI_MAX_Y_DM << "]";
-            continue;
-        }
+        if (!isDrivingPathCandidate(obs, ego_vehicle, path_x, path_y,
+                                    DIST_TO_EGO_MAX_DM, DIST_TO_PATH_MAX_DM, 1, path_history.wasActive(obs.obstacle_id))) continue;
 
         SCENARIO_LOG_INFO() << "[1-i] 차량 & 정지 상태: ID=" << obs.obstacle_id
                           << " | class=" << static_cast<int>(obs.obstacle_class)
@@ -188,30 +243,11 @@ void evaluateScenario1(const obstacleListVector& obstacle_list,
         if (d_path_dm > DIST_TO_PATH_MAX_DM) 
         {
             SCENARIO_LOG_INFO() << "[1-iii 제외] ID=" << obs.obstacle_id
-                              << " | 경로거리=" << (d_path_dm/10.0) << " m (>10)";
+                              << " | 경로거리=" << (d_path_dm/10.0) << " m (>15)";
             continue;
         }
         // 세 조건 모두 통과한 경우 후보군에 추가
         candidates.push_back(obs);
-    }
-
-    // ROI 내 복수 검출 시 좌측(작은 x) 1개만 유지: 우측 접근 보행자는 시나리오1 제외
-    if (candidates.size() > 1) {
-        auto left_it = std::min_element(
-            candidates.begin(), candidates.end(),
-            [](const adcm::obstacleListStruct& a, const adcm::obstacleListStruct& b) {
-                return a.fused_position_x < b.fused_position_x;
-            });
-
-        SCENARIO_LOG_INFO() << "[시나리오1] ROI 내 복수 후보(" << candidates.size()
-                            << "개) 검출 → 좌측 1개만 유지, 선택 ID="
-                            << left_it->obstacle_id
-                            << " x=" << left_it->fused_position_x;
-
-        obstacleListVector left_only;
-        left_only.reserve(1);
-        left_only.push_back(*left_it);
-        candidates.swap(left_only);
     }
 
     // === 후보군 로그 출력 ===
@@ -275,6 +311,9 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
                        adcm::risk_assessment_Objects& riskAssessment,
                        std::uint8_t edge_state)
 {
+    static std::unordered_set<unsigned> active_ids;
+    DrivingScenarioHistory path_history(active_ids, riskAssessment, 2);
+
     SCENARIO_LOG_INFO() << "============= KATECH: Scenario 2 START =============";
 
     if (edge_state != 3) {
@@ -287,8 +326,6 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
     constexpr double PASS_RELEASE_DM   = 100.0; // 경로 진행 기준 10m 지나치면 해제
     constexpr double DIST_TO_EGO_MAX_DM  = 400.0; // 특장차와 40 m 이내
     constexpr double DIST_TO_PATH_MAX_DM = 220.0; // 특장차 전역경로에서 22 m 이내
-    constexpr double MIN_TRIGGER_X_DM    = 850.0;
-    constexpr double MIN_TRIGGER_Y_DM    = 450.0;
 
     // 컨피던스 파라미터
     // 트리거 조건은 유지하고, confidence 정규화 범위만 완화해서
@@ -307,18 +344,8 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
         const bool is_target_vehicle_class = (obs.obstacle_class == 1);
 
         if (!is_target_vehicle_class) continue;
-
-        const bool coord_in_range =
-            (obs.fused_position_x >= MIN_TRIGGER_X_DM) &&
-            (obs.fused_position_y >= MIN_TRIGGER_Y_DM);
-        if (!coord_in_range) {
-            SCENARIO_LOG_INFO() << "[2-reject] ID=" << obs.obstacle_id
-                                << " | class=" << static_cast<int>(obs.obstacle_class)
-                                << " | pos=(" << obs.fused_position_x << ", " << obs.fused_position_y << ")"
-                                << " | threshold=(x>=" << MIN_TRIGGER_X_DM
-                                << ", y>=" << MIN_TRIGGER_Y_DM << ")";
-            continue;
-        }
+        if (!isDrivingPathCandidate(obs, ego_vehicle, path_x, path_y,
+                                    DIST_TO_EGO_MAX_DM, DIST_TO_PATH_MAX_DM, 2, path_history.wasActive(obs.obstacle_id))) continue;
 
         SCENARIO_LOG_INFO() << "[2-i] 통과: ID=" << obs.obstacle_id
                   << " | class=" << static_cast<int>(obs.obstacle_class)
@@ -363,26 +390,6 @@ void evaluateScenario2(const obstacleListVector& obstacle_list,
         return;
     }
 
-    if (candidates.size() > 1) {
-        // 정지 판별 노이즈로 복수 차량이 동시에 잡히는 환경에서는
-        // 화면 상단(큰 y) 차량 1대만 시나리오2 대상으로 제한한다.
-        auto upper_it = std::max_element(
-            candidates.begin(), candidates.end(),
-            [](const adcm::obstacleListStruct& a, const adcm::obstacleListStruct& b) {
-                return a.fused_position_y < b.fused_position_y;
-            });
-
-        SCENARIO_LOG_INFO() << "[시나리오2] 복수 후보(" << candidates.size()
-                            << "개) 검출 → 상단 1개만 유지, 선택 ID="
-                            << upper_it->obstacle_id
-                            << " y=" << upper_it->fused_position_y;
-
-        obstacleListVector upper_only;
-        upper_only.reserve(1);
-        upper_only.push_back(*upper_it);
-        candidates.swap(upper_only);
-    }
-
     SCENARIO_LOG_INFO() << "[시나리오2] 최종 후보군 " << candidates.size() << "개";
 
     // === 컨피던스 계산 및 결과 등록 ===
@@ -425,9 +432,21 @@ void evaluateScenario3(const obstacleListVector& obstacle_list,
                        adcm::risk_assessment_Objects& riskAssessment,
                        std::uint8_t edge_state)
 {
+    static std::unordered_set<unsigned> active_ids;
+    DrivingScenarioHistory path_history(active_ids, riskAssessment, 3);
+
     SCENARIO_LOG_INFO() << "============= KATECH: Scenario 3 START =============";
 
+    struct S3State {
+        int near_count = 0, miss_count = 0;
+        double x = 0.0, y = 0.0;
+        std::uint64_t timestamp = 0;
+        bool initialized = false, moving = false;
+    };
+    static std::unordered_map<unsigned, S3State> s3_state;
+
     if (edge_state != 3) {
+        s3_state.clear();
         SCENARIO_LOG_INFO() << "[시나리오3] MOVE 상태 아님(" << static_cast<int>(edge_state) << ") → 종료";
         SCENARIO_LOG_INFO() << "============= KATECH: Scenario 3 DONE =============";
         return;
@@ -435,6 +454,7 @@ void evaluateScenario3(const obstacleListVector& obstacle_list,
 
     // 단위: dm (0.1 m)
     constexpr double PASS_RELEASE_DM   = 100.0; // 경로 진행 기준 10m 지나치면 해제
+    constexpr double DIST_TO_PATH_MAX_DM = 150.0; // simulation initial corridor: 15 m
     constexpr double TRIGGER_DIST_DM   = 250.0; // 25 m 이내 진입 시 즉시 트리거
     constexpr double RELEASE_THRESH_DM = 300.0; // 30 m 이상이면 해제(히스테리시스)
     constexpr int    FRAMES_TO_0P7     = 10;    // 유지 10프레임에서 confidence=0.7
@@ -443,39 +463,55 @@ void evaluateScenario3(const obstacleListVector& obstacle_list,
     constexpr double CONF_START        = 0.40;
     constexpr double CONF_AT_10        = 0.70;
     constexpr double CONF_MAX          = 1.00;
-    constexpr double MIN_TRIGGER_X     = 850.0;
-    constexpr double MIN_TRIGGER_Y     = 400.0;
-    constexpr double MAX_TRIGGER_Y     = 540.0;
 
     // 장애물별 누적 상태 (프레임 간 유지)
-    struct S3State { int near_count = 0; int miss_count = 0; };
-    static std::unordered_map<uint16_t, S3State> s3_state;
+
 
     // 이번 프레임에 관측된 ID 수집 (소멸 장애물 정리용)
-    std::unordered_set<uint16_t> seen_ids;
+    std::unordered_set<unsigned> seen_ids;
+    constexpr double MIN_MOVING_SPEED_MPS = 0.1; // simulation motion threshold
 
     for (const auto& obs : obstacle_list) {
         const bool target_class = (obs.obstacle_class >= 1 && obs.obstacle_class <= 10);
         if (!target_class) continue;
-
-        const bool coord_in_range =
-            (obs.fused_position_x >= MIN_TRIGGER_X) &&
-            (obs.fused_position_y >= MIN_TRIGGER_Y) &&
-            (obs.fused_position_y <= MAX_TRIGGER_Y);
-        if (!coord_in_range) {
-            SCENARIO_LOG_INFO() << "[3-reject] ID=" << obs.obstacle_id
-                                << " | class=" << static_cast<int>(obs.obstacle_class)
-                                << " | pos=(" << obs.fused_position_x << ", " << obs.fused_position_y << ")"
-                                << " | threshold=(x>=" << MIN_TRIGGER_X
-                                << ", y>=" << MIN_TRIGGER_Y
-                                << ", y<=" << MAX_TRIGGER_Y << ")";
+        seen_ids.insert(obs.obstacle_id);
+        auto& st = s3_state[obs.obstacle_id];
+        const std::uint64_t ts = obs.timestamp;
+        if (!std::isfinite(obs.fused_position_x) || !std::isfinite(obs.fused_position_y) || ts == 0) {
+            st = S3State{};
             continue;
         }
-
+        if (!st.initialized || ts < st.timestamp) {
+            st = S3State{};
+            st.x = obs.fused_position_x;
+            st.y = obs.fused_position_y;
+            st.timestamp = ts;
+            st.initialized = true;
+            continue; // one more source observation is needed to measure motion
+        }
+        const bool fresh_observation = ts > st.timestamp;
+        if (fresh_observation) {
+            const double elapsed_s = static_cast<double>(ts - st.timestamp) / 1000.0;
+            const double speed_mps = std::hypot(obs.fused_position_x - st.x,
+                                               obs.fused_position_y - st.y) / 10.0 / elapsed_s;
+            st.moving = speed_mps >= MIN_MOVING_SPEED_MPS;
+            st.x = obs.fused_position_x;
+            st.y = obs.fused_position_y;
+            st.timestamp = ts;
+            if (!st.moving) {
+                SCENARIO_LOG_INFO() << "[3-motion 제외] ID=" << obs.obstacle_id
+                                   << " speed_mps=" << speed_mps;
+            }
+        }
+        if (!st.moving ||
+            !isDrivingPathCandidate(obs, ego_vehicle, path_x, path_y,
+                                    RELEASE_THRESH_DM, DIST_TO_PATH_MAX_DM, 3,
+                                    path_history.wasActive(obs.obstacle_id))) {
+            st.near_count = 0;
+            st.miss_count = 0;
+            continue;
+        }
         const double d_ego_dm = calculateDistance(obs, ego_vehicle);
-        seen_ids.insert(static_cast<uint16_t>(obs.obstacle_id));
-
-        auto& st = s3_state[static_cast<uint16_t>(obs.obstacle_id)];
 
         if (isEgoPassedObstacleByPathDm(ego_vehicle, obs, path_x, path_y, PASS_RELEASE_DM)) {
             if (st.near_count > 0 || st.miss_count > 0) {
@@ -487,38 +523,41 @@ void evaluateScenario3(const obstacleListVector& obstacle_list,
             continue;
         }
 
-        if (d_ego_dm <= TRIGGER_DIST_DM) {
-            // 25 m 이내 유지 프레임 누적
-            st.near_count++;
-            st.miss_count = 0;
-            SCENARIO_LOG_INFO() << "[3] ID=" << obs.obstacle_id
-                                << " | near_count=" << st.near_count
-                                << " | trigger_dist=" << (TRIGGER_DIST_DM / 10.0) << " m"
-                                << " | dist=" << (d_ego_dm / 10.0) << " m";
-        } else if (st.near_count > 0 && d_ego_dm < RELEASE_THRESH_DM) {
-            // 히스테리시스 구간 (25~30 m): miss 프레임 허용
-            st.miss_count++;
-            if (st.miss_count <= MISS_GRACE) {
-                SCENARIO_LOG_INFO() << "[3] ID=" << obs.obstacle_id
-                                    << " | miss grace " << st.miss_count
-                                    << "/" << MISS_GRACE
-                                    << " | dist=" << (d_ego_dm / 10.0) << " m";
-            } else {
-                // grace 초과 → 리셋
-                st.near_count = 0;
+        if (fresh_observation) {
+            if (d_ego_dm <= TRIGGER_DIST_DM) {
+                // 25 m 이내 유지 프레임 누적
+                st.near_count = std::min(st.near_count + 1, FRAMES_TO_MAX);
                 st.miss_count = 0;
                 SCENARIO_LOG_INFO() << "[3] ID=" << obs.obstacle_id
-                                    << " | grace 초과 → 카운터 리셋";
+                                    << " | near_count=" << st.near_count
+                                    << " | trigger_dist=" << (TRIGGER_DIST_DM / 10.0) << " m"
+                                    << " | dist=" << (d_ego_dm / 10.0) << " m";
+            } else if (st.near_count > 0 && d_ego_dm < RELEASE_THRESH_DM) {
+                // 히스테리시스 구간 (25~30 m): miss 프레임 허용
+                st.miss_count++;
+                if (st.miss_count <= MISS_GRACE) {
+                    SCENARIO_LOG_INFO() << "[3] ID=" << obs.obstacle_id
+                                        << " | miss grace " << st.miss_count
+                                        << "/" << MISS_GRACE
+                                        << " | dist=" << (d_ego_dm / 10.0) << " m";
+                } else {
+                    // grace 초과 → 리셋
+                    st.near_count = 0;
+                    st.miss_count = 0;
+                    SCENARIO_LOG_INFO() << "[3] ID=" << obs.obstacle_id
+                                        << " | grace 초과 → 카운터 리셋";
+                }
+            } else {
+                // 30 m 이상 → 완전 해제
+                if (st.near_count > 0 || st.miss_count > 0) {
+                    SCENARIO_LOG_INFO() << "[3] ID=" << obs.obstacle_id
+                                        << " | 해제 거리 초과(" << (d_ego_dm / 10.0) << " m) → 리셋";
+                }
+                st.near_count = 0;
+                st.miss_count = 0;
             }
-        } else {
-            // 30 m 이상 → 완전 해제
-            if (st.near_count > 0 || st.miss_count > 0) {
-                SCENARIO_LOG_INFO() << "[3] ID=" << obs.obstacle_id
-                                    << " | 해제 거리 초과(" << (d_ego_dm / 10.0) << " m) → 리셋";
-            }
-            st.near_count = 0;
-            st.miss_count = 0;
-        }
+
+        } // Do not increase confidence for repeated source timestamps.
 
         // 트리거 판정: 25m 진입 즉시 트리거, 유지 프레임 기반으로 confidence 상승
         if (st.near_count >= 1) {
@@ -753,6 +792,9 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
                        adcm::risk_assessment_Objects& riskAssessment,
                        std::uint8_t edge_state)
 {
+    static std::unordered_set<unsigned> active_ids;
+    DrivingScenarioHistory path_history(active_ids, riskAssessment, 5);
+
     using namespace adcm;
     SCENARIO_LOG_INFO() << "==================== [시나리오5 시작] ====================";
 
@@ -794,10 +836,12 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
         if (static_cast<ObstacleClass>(obs.obstacle_class) != ObstacleClass::PEDESTRIAN) {
             continue;
         }
+        if (!isDrivingPathCandidate(obs, ego_vehicle, path_x, path_y,
+                                    EGO_MAX_DM, DIST_TO_PATH_MAX_DM, 5, path_history.wasActive(obs.obstacle_id))) continue;
         double d_ego_dm = calculateDistance(obs, ego_vehicle);
         if (d_ego_dm < EGO_MIN_DM || d_ego_dm > EGO_MAX_DM) {
             SCENARIO_LOG_INFO() << "  └─[제외] ID=" << obs.obstacle_id
-                       << " | Ego거리=" << (d_ego_dm/10.0) << " m (요구: 5~50 m)";
+                       << " | Ego거리=" << (d_ego_dm/10.0) << " m (요구: 15~50 m)";
             continue;
         }
         double path_dist_dm = 0.0;
@@ -819,7 +863,7 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
     }
 
     if (cand.size() < 2) {
-        SCENARIO_LOG_INFO() << "[시나리오5] 유효 후보 없음 → 종료";
+        SCENARIO_LOG_INFO() << "[시나리오5] 후보 부족(2명 미만) → 종료";
         SCENARIO_LOG_INFO() << "==================== [시나리오5 종료] ====================";
         return;
     }
@@ -850,7 +894,7 @@ void evaluateScenario5(const obstacleListVector& obstacle_list,
     }
 
     if (!triggered) {
-        SCENARIO_LOG_INFO() << "[시나리오5] 현재 프레임: 유효(≤10m) 페어 없음";
+        SCENARIO_LOG_INFO() << "[시나리오5] 현재 프레임: 유효(≤20m) 페어 없음";
         SCENARIO_LOG_INFO() << "==================== [시나리오5 종료] ====================";
         return;
     }
@@ -922,6 +966,9 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
                        adcm::risk_assessment_Objects& riskAssessment,
                        std::uint8_t edge_state)
 {
+    static std::unordered_set<unsigned> active_ids;
+    DrivingScenarioHistory path_history(active_ids, riskAssessment, 6);
+
     using namespace adcm;
     SCENARIO_LOG_INFO() << "==================== [시나리오6 시작] ====================";
 
@@ -936,8 +983,6 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
     constexpr double EGO_MAX_DM          = 500.0;   // 50 m
     constexpr double DIST_TO_PATH_MAX_DM = 220.0;   // 22 m
     constexpr double MAX_PAIR_DIST_DM    = 300.0;   // 30 m
-    constexpr double MIN_TRIGGER_X       = 800.0;
-    constexpr double MIN_TRIGGER_Y       = 400.0;
 
     if (obstacle_list.empty()) {
         SCENARIO_LOG_INFO() << "[시나리오6] 입력 없음 → 종료";
@@ -959,18 +1004,8 @@ void evaluateScenario6(const obstacleListVector& obstacle_list,
     obstacleListVector cand;
     for (auto &obs : obstacle_list) {
         if (obs.obstacle_class < 1 || obs.obstacle_class > 19) continue;
-
-        const bool coord_in_range =
-            (obs.fused_position_x >= MIN_TRIGGER_X) &&
-            (obs.fused_position_y >= MIN_TRIGGER_Y);
-        if (!coord_in_range) {
-            SCENARIO_LOG_INFO() << "[6-reject] ID=" << obs.obstacle_id
-                                << " | class=" << static_cast<int>(obs.obstacle_class)
-                                << " | pos=(" << obs.fused_position_x << ", " << obs.fused_position_y << ")"
-                                << " | threshold=(x>=" << MIN_TRIGGER_X
-                                << ", y>=" << MIN_TRIGGER_Y << ")";
-            continue;
-        }
+        if (!isDrivingPathCandidate(obs, ego_vehicle, path_x, path_y,
+                                    EGO_MAX_DM, DIST_TO_PATH_MAX_DM, 6, path_history.wasActive(obs.obstacle_id))) continue;
 
         double d_ego_dm = calculateDistance(obs, ego_vehicle);
         if (d_ego_dm < EGO_MIN_DM || d_ego_dm > EGO_MAX_DM) continue;
